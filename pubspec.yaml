@@ -1,0 +1,87 @@
+name: ai_financial_coach
+description: >
+  International-first personal money companion (Track / Save / Understand /
+  Global / Coach). Stage 1 / Beta 0: local deterministic money engine.
+publish_to: "none"
+version: 0.1.0+1
+
+# IMPORTANT — read before running `flutter pub get`:
+# These version constraints were written without access to pub.dev (the AI
+# coding sandbox that authored this file has no network route to it — see
+# CLAUDE_FIRST_CODING_PROMPT.md). They reflect versions that were stable
+# and current at the time of writing, chosen conservatively, but they have
+# NOT been resolved against a live pub.dev index. Before relying on this
+# file:
+#   flutter pub get
+#   flutter pub outdated
+# and bump anything pub flags, especially `intl` (its version is tightly
+# coupled to the installed Flutter SDK's own constraint — if `pub get`
+# reports a conflict on intl, remove the explicit constraint below and let
+# the Flutter SDK's own transitive constraint win).
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management (mandated by CLAUDE_PROJECT_INSTRUCTIONS.md).
+  # Beta 0 uses classic (non-code-generated) Riverpod providers rather
+  # than riverpod_generator's @riverpod annotations — this is a
+  # within-Riverpod implementation choice, not a change of framework, and
+  # was made deliberately to keep one fewer code-generation system in
+  # play while this sandbox cannot run build_runner to verify any of it
+  # (see CLAUDE_FIRST_CODING_PROMPT.md). Reasonable to revisit once local
+  # verification is established.
+  flutter_riverpod: ^2.6.1
+
+  # Routing (mandated)
+  go_router: ^14.6.2
+
+  # Local database (mandated)
+  drift: ^2.20.3
+  sqlite3_flutter_libs: ^0.5.24
+  sqlite3: ^2.4.7
+
+  # Database file location
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Client-generated IDs for offline-first writes (transactions.id is a UUID
+  # per docs/03_DATABASE_SCHEMA.md)
+  uuid: ^4.5.1
+
+  # Locale-aware date/number formatting (home/living currency display,
+  # preferred_language/date_format/number_format profile fields).
+  # Currency DECIMAL-DIGIT formatting itself is driven by our own currency
+  # metadata (lib/core/currency), never by intl's built-in per-currency
+  # defaults — see docs/14_DECISION_LOG.md ADR-012.
+  intl: ^0.19.0
+
+  # Safe decimal parsing at the money input boundary — never `double`.
+  # See docs/14_DECISION_LOG.md ADR-017 and lib/core/money/money_parser.dart.
+  decimal: ^3.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Code generation (Drift only — see the flutter_riverpod note above for
+  # why riverpod_generator is not used in Beta 0)
+  build_runner: ^2.4.13
+  drift_dev: ^2.20.3
+
+  # Lints
+  flutter_lints: ^5.0.0
+
+  # NOTE: no mocking library (e.g. mocktail) — every Beta 0 test that
+  # needs a database uses a real in-memory/temp-file Drift instance
+  # (NativeDatabase.memory() / NativeDatabase(File(...))) rather than a
+  # mocked repository layer, which exercises the actual SQL and schema
+  # rather than a hand-written stand-in for it. Add a mocking package
+  # when a test genuinely needs one rather than ahead of time.
+
+flutter:
+  uses-material-design: true

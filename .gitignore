@@ -1,0 +1,60 @@
+# Flutter/Dart build output and tooling
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+*.ipr
+*.iws
+
+# Generated code — regenerated locally via build_runner, not committed.
+# (Beta 0 exception: none — every *.g.dart in this repo is generated.)
+**/*.g.dart
+**/*.freezed.dart
+**/*.gr.dart
+
+# Drift-generated schema version files are regenerated, not hand-edited.
+
+# Android
+android/**/gradle-wrapper.jar
+android/.gradle/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+android/key.properties
+*.jks
+*.keystore
+
+# iOS
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Runner.xcworkspace/xcshareddata/
+**/*.mode1v3
+**/*.mode2v3
+**/*.pbxuser
+**/*.perspectivev3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Secrets / local environment — never commit these
+.env
+.env.*
+*.secrets.yaml
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# Local device/emulator artifacts
+*.log
+coverage/
