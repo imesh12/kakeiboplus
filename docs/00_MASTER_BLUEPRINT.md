@@ -1211,43 +1211,55 @@ API requirements:
 
 # 33. Mobile Folder Structure
 
+**Superseded by ADR-016 (see `14_DECISION_LOG.md`).** The Flutter project
+root is the repository root itself — there is no `mobile/` wrapper
+directory. This repository is a single mobile application, so the extra
+nesting a `mobile/` package would imply (as if this were one app among
+several in the repo) adds no value and was dropped.
+
+The authoritative `lib/` layout is:
+
 ```text
-mobile/
-└── lib/
-    ├── app/
-    ├── core/
-    │   ├── config/
-    │   ├── errors/
-    │   ├── network/
-    │   ├── security/
-    │   ├── storage/
-    │   ├── localization/
-    │   └── utils/
-    │
-    ├── features/
-    │   ├── auth/
-    │   ├── onboarding/
-    │   ├── dashboard/
-    │   ├── transactions/
-    │   ├── receipt_scanner/
-    │   ├── voice_expense/
-    │   ├── budgets/
-    │   ├── goals/
-    │   ├── analytics/
-    │   ├── ai_coach/
-    │   ├── notifications/
-    │   ├── subscriptions/
-    │   ├── reports/
-    │   ├── profile/
-    │   └── settings/
-    │
-    ├── shared/
-    │   ├── widgets/
-    │   ├── theme/
-    │   └── components/
-    │
-    └── main.dart
+lib/
+├── app/                       # MaterialApp bootstrap, theming
+├── core/
+│   ├── database/               # Drift AppDatabase, tables, migrations
+│   ├── finance/                # deterministic finance engine (pure Dart)
+│   ├── money/                  # Money value type, parsing, rounding policy
+│   ├── currency/                # Currency metadata + registry
+│   ├── routing/                 # GoRouter configuration
+│   ├── localization/            # intl setup, supported locales
+│   └── errors/                  # Result/Failure types
+│
+├── features/
+│   ├── onboarding/
+│   ├── accounts/
+│   ├── categories/
+│   ├── transactions/
+│   ├── dashboard/
+│   ├── budgets/                 # reserved — Beta 1
+│   ├── goals/                   # reserved — Beta 1
+│   ├── fx/                      # reserved — Beta 2 (schema-ready only)
+│   ├── receipts/                # reserved — Beta 3
+│   ├── recurring/                # reserved — Beta 1/5
+│   └── settings/
+│
+├── shared/
+│   ├── widgets/
+│   └── theme/
+│
+└── main.dart
 ```
+
+Each `features/<name>/` follows an internal `data/ domain/ presentation/`
+split. Reserved feature directories that have no Beta 0/1 implementation
+yet contain only a short `README.md` stating which roadmap stage builds
+them, rather than empty placeholder folders kept "for appearance."
+
+`core/security/` and `core/sync/` are intentionally *not* created until a
+feature actually needs them (Stage 6 for sync; whenever PIN/biometric/auth
+material first requires secure storage) — see `CLAUDE_PROJECT_INSTRUCTIONS.md`
+("Do not accumulate unused packages") and ADR-016.
 
 ---
 
