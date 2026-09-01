@@ -51,7 +51,28 @@ class _MoneyTextFieldState extends State<MoneyTextField> {
     if (oldWidget.currencyCode != widget.currencyCode) {
       // Currency changed (e.g. account switched) — re-validate the
       // existing text against the new currency's precision rules.
-      _tryParse(_controller.text);
+      //
+      // This must NOT call `_tryParse` (and therefore `widget.onParsed`)
+      // synchronously here. `didUpdateWidget` runs while Flutter is still
+      // building the tree — specifically, it runs as part of the same
+      // build pass as whatever ancestor `setState()` changed
+      // `currencyCode` in the first place (e.g. switching the account
+      // dropdown in `AddTransactionScreen`). `onParsed` calls that
+      // ancestor's own `setState()`, and calling `setState()` while the
+      // framework is mid-build throws "setState() or markNeedsBuild()
+      // called during build." (Beta 0 runtime bug found in Android
+      // manual testing — see `CLAUDE_FIRST_CODING_PROMPT.md`.)
+      //
+      // `addPostFrameCallback` defers the re-validation to run once the
+      // current frame has finished building/laying out/painting — the
+      // framework's own sanctioned point for a widget to react to what
+      // just happened by scheduling further state changes. `mounted` is
+      // re-checked at that point because the field may have been
+      // unmounted (e.g. the user navigated away) before the callback
+      // runs.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _tryParse(_controller.text);
+      });
     }
   }
 

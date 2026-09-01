@@ -37,7 +37,7 @@ class MoneyParser {
     if (decimalValue == null) {
       throw MoneyParseException('"$input" is not a valid amount.');
     }
-    if (decimalValue.isNegative) {
+    if (decimalValue.compareTo(Decimal.zero) < 0) {
       throw MoneyParseException('Amount cannot be negative.');
     }
 

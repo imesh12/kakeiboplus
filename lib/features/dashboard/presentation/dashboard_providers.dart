@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/app_database.dart';
 import '../../../core/finance/finance_engine.dart';
 import '../../../core/finance/ledger_models.dart';
 import '../../onboarding/presentation/profile_providers.dart';

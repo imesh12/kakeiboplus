@@ -43,7 +43,21 @@ import 'currency_mismatch_exception.dart';
 /// `docs/03_DATABASE_SCHEMA.md`), never implicitly.
 @immutable
 class Money implements Comparable<Money> {
-  const Money.fromMinorUnits(this.minorUnits, this.currencyCode);
+  const Money._(this.minorUnits, this.currencyCode);
+
+  /// Creates a [Money] value from an exact count of minor units and an
+  /// ISO 4217 currency code.
+  ///
+  /// [currencyCode] is normalized to upper case here — this factory is
+  /// the single domain-boundary constructor every other Money-producing
+  /// path in the codebase funnels through (arithmetic operators, [zero],
+  /// [MoneyParser], every repository reading a `currency_code` column
+  /// back out of Drift) — so a lowercase or mixed-case code can never
+  /// remain stored inside a [Money], survive into equality/hashCode, or
+  /// be persisted back to the database in a different case than it was
+  /// read in.
+  factory Money.fromMinorUnits(int minorUnits, String currencyCode) =>
+      Money._(minorUnits, currencyCode.toUpperCase());
 
   factory Money.zero(String currencyCode) => Money.fromMinorUnits(0, currencyCode);
 

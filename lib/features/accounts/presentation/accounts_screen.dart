@@ -6,7 +6,6 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
-import '../../onboarding/presentation/profile_providers.dart';
 import 'account_providers.dart';
 
 const MoneyFormatter _formatter = MoneyFormatter();

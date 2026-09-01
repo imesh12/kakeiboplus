@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
-import '../../onboarding/presentation/profile_providers.dart';
 import 'category_providers.dart';
 
 class CategoriesScreen extends ConsumerWidget {

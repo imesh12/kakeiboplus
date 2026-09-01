@@ -64,6 +64,14 @@ dependencies:
   # See docs/14_DECISION_LOG.md ADR-017 and lib/core/money/money_parser.dart.
   decimal: ^3.0.2
 
+  # Imported directly (package:meta/meta.dart) by lib/core/money/money.dart,
+  # lib/core/currency/currency.dart, lib/core/finance/ledger_models.dart, and
+  # lib/features/onboarding/domain/country_registry.dart for @immutable.
+  # Previously relied on the Flutter SDK's own transitive dependency on
+  # `meta`, which works but trips the `depend_on_referenced_packages` lint —
+  # declared explicitly here instead.
+  meta: ^1.15.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

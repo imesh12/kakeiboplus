@@ -24,7 +24,7 @@ class MoneyRounding {
   /// precision — to the nearest whole minor unit, half rounding away
   /// from zero.
   static int roundHalfUpToMinorUnits(Decimal exactMinorUnits) {
-    if (exactMinorUnits.isNegative) {
+    if (exactMinorUnits.compareTo(Decimal.zero) < 0) {
       return -roundHalfUpToMinorUnits(-exactMinorUnits);
     }
     final Decimal floor = exactMinorUnits.floor();

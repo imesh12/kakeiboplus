@@ -9,7 +9,6 @@ import '../../../core/money/money.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
-import '../../onboarding/presentation/profile_providers.dart';
 
 /// Add Expense / Add Income / Transfer — one screen, driven by
 /// [initialType] ('expense' | 'income' | 'transfer'), per
