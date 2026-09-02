@@ -206,4 +206,60 @@ void main() {
       expect(totals[null], Money.fromMinorUnits(-1000, 'USD'));
     });
   });
+
+  group('FinanceEngine.dailySpendingPace', () {
+    test('zero spend yields a zero pace in the same currency, not null or an error', () {
+      final Money pace = FinanceEngine.dailySpendingPace(
+        monthToDateExpense: Money.zero('USD'),
+        daysElapsedInclusive: 15,
+      );
+      expect(pace, Money.zero('USD'));
+      expect(pace.isZero, isTrue);
+    });
+
+    test('divides by the elapsed day count using truncating integer division', () {
+      // 1000 minor units / 3 days = 333.33... -> truncates to 333, not
+      // rounded to 333 or up to 334 -- deterministic floor division,
+      // never floating point.
+      final Money pace = FinanceEngine.dailySpendingPace(
+        monthToDateExpense: Money.fromMinorUnits(1000, 'USD'),
+        daysElapsedInclusive: 3,
+      );
+      expect(pace, Money.fromMinorUnits(333, 'USD'));
+    });
+
+    test('on the 1st of the month, 1 elapsed day means pace equals the full spend so far', () {
+      final Money pace = FinanceEngine.dailySpendingPace(
+        monthToDateExpense: Money.fromMinorUnits(5000, 'USD'),
+        daysElapsedInclusive: 1,
+      );
+      expect(pace, Money.fromMinorUnits(5000, 'USD'));
+    });
+
+    test('works correctly for a zero-decimal currency (JPY)', () {
+      final Money pace = FinanceEngine.dailySpendingPace(
+        monthToDateExpense: Money.fromMinorUnits(100, 'JPY'),
+        daysElapsedInclusive: 4,
+      );
+      expect(pace, Money.fromMinorUnits(25, 'JPY'));
+      expect(pace.toMajorUnitsString(), '25'); // no decimal point for JPY
+    });
+
+    test('rejects daysElapsedInclusive < 1 rather than dividing by zero or going negative', () {
+      expect(
+        () => FinanceEngine.dailySpendingPace(
+          monthToDateExpense: Money.fromMinorUnits(100, 'USD'),
+          daysElapsedInclusive: 0,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => FinanceEngine.dailySpendingPace(
+          monthToDateExpense: Money.fromMinorUnits(100, 'USD'),
+          daysElapsedInclusive: -1,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }

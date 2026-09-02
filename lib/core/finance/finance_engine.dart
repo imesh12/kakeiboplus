@@ -141,6 +141,61 @@ class FinanceEngine {
     return totals;
   }
 
+  /// Deterministic average daily spend for the current calendar month —
+  /// the Beta 1 Home dashboard "daily spending pace" metric.
+  ///
+  /// This function does **not** know what "today" is or query any clock
+  /// itself — [daysElapsedInclusive] is supplied by the caller (see
+  /// `dashboard_providers.dart`) precisely so this stays a pure,
+  /// unit-testable function of its inputs, with no hidden dependency on
+  /// `DateTime.now()`.
+  ///
+  /// Definition (all three points are part of the release gate for this
+  /// metric — see `docs/14_DECISION_LOG.md` and the Beta 1 Task 1 spec):
+  ///
+  /// - **Period:** the calendar month [monthToDateExpense] was already
+  ///   computed over (by [incomeExpenseTotals] with that month's UTC
+  ///   `fromUtc`/`toUtc` bounds) — this function just divides by however
+  ///   many days of it have elapsed.
+  /// - **Today is included.** [daysElapsedInclusive] counts the current
+  ///   day as a full elapsed day, so on the 1st of the month the divisor
+  ///   is 1, never 0 — there is no calendar day on which zero days of
+  ///   its own month have elapsed. Passing `0` or a negative value is a
+  ///   caller bug and throws [ArgumentError] rather than dividing by
+  ///   zero or silently producing a meaningless negative pace.
+  /// - **Zero spending is a real, displayable value.** If
+  ///   [monthToDateExpense] is zero, the result is `Money.zero` in the
+  ///   same currency — not `null` and not an error. "Nothing spent yet"
+  ///   is exactly what a pace of zero communicates.
+  /// - **Rounding:** plain truncating integer division (Dart's `~/`) of
+  ///   [monthToDateExpense]'s minor units by [daysElapsedInclusive].
+  ///   Expense magnitudes are never negative (see [incomeExpenseTotals])
+  ///   and the divisor is always >= 1, so truncation here is exactly
+  ///   floor division — deterministic and reproducible, with no
+  ///   floating point at any step. This is a distinct, simpler rule from
+  ///   the ROUND HALF UP policy in `money_rounding.dart`, which governs
+  ///   FX conversion results specifically, not this metric.
+  ///
+  /// No AI, forecasting, or projection is involved — this is arithmetic
+  /// over transactions that have already happened.
+  static Money dailySpendingPace({
+    required Money monthToDateExpense,
+    required int daysElapsedInclusive,
+  }) {
+    if (daysElapsedInclusive < 1) {
+      throw ArgumentError.value(
+        daysElapsedInclusive,
+        'daysElapsedInclusive',
+        'must be at least 1 -- today always counts as an elapsed day '
+            'within its own month.',
+      );
+    }
+    return Money.fromMinorUnits(
+      monthToDateExpense.minorUnits ~/ daysElapsedInclusive,
+      monthToDateExpense.currencyCode,
+    );
+  }
+
   static Iterable<LedgerTransaction> _relevant(
     List<LedgerTransaction> transactions,
     String currencyCode,
