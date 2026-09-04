@@ -46,6 +46,18 @@ class SettingsScreen extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.categories),
               ),
+              ListTile(
+                leading: const Icon(Icons.savings_outlined),
+                title: const Text('Budgets'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.budgets),
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: const Text('Savings Goals'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.goals),
+              ),
               const Divider(),
               const Padding(
                 padding: EdgeInsets.all(16),

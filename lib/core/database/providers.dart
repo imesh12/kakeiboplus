@@ -2,9 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_database.dart';
 import 'repositories/account_repository.dart';
+import 'repositories/budget_repository.dart';
 import 'repositories/category_repository.dart';
 import 'repositories/currency_repository.dart';
 import 'repositories/profile_repository.dart';
+import 'repositories/savings_goal_contribution_repository.dart';
+import 'repositories/savings_goal_repository.dart';
 import 'repositories/transaction_repository.dart';
 
 /// The single [AppDatabase] instance for the app's lifetime. A plain
@@ -40,5 +43,22 @@ final Provider<TransactionRepository> transactionRepositoryProvider =
   (ref) => TransactionRepository(
     ref.watch(appDatabaseProvider),
     ref.watch(accountRepositoryProvider),
+  ),
+);
+
+final Provider<BudgetRepository> budgetRepositoryProvider = Provider<BudgetRepository>(
+  (ref) => BudgetRepository(ref.watch(appDatabaseProvider)),
+);
+
+final Provider<SavingsGoalRepository> savingsGoalRepositoryProvider =
+    Provider<SavingsGoalRepository>(
+  (ref) => SavingsGoalRepository(ref.watch(appDatabaseProvider)),
+);
+
+final Provider<SavingsGoalContributionRepository> savingsGoalContributionRepositoryProvider =
+    Provider<SavingsGoalContributionRepository>(
+  (ref) => SavingsGoalContributionRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(savingsGoalRepositoryProvider),
   ),
 );

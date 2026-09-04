@@ -7,6 +7,11 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../accounts/presentation/account_providers.dart';
+import '../../budgets/domain/budget_calculation.dart';
+import '../../budgets/domain/budget_status.dart';
+import '../../goals/domain/savings_goal_calculation.dart';
+import '../../goals/domain/savings_goal_status.dart';
+import '../../goals/presentation/savings_goal_providers.dart';
 import '../../onboarding/presentation/profile_providers.dart';
 import 'dashboard_providers.dart';
 
@@ -69,6 +74,8 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
                 const _BudgetCard(),
+                const SizedBox(height: 16),
+                const _SavingsGoalsCard(),
                 const SizedBox(height: 16),
                 const _UpcomingCommitmentsCard(),
                 const SizedBox(height: 28),
@@ -540,15 +547,17 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-/// "Remaining monthly budget" tile. Beta 0/1 has no budgets feature yet
-/// (`lib/features/budgets/README.md`) — [monthlyBudgetSummaryProvider]
-/// always reports "not configured" today, so this always shows the
-/// polished empty state (icon, explanation, and a disabled
-/// "Set a monthly budget" call-to-action) rather than a number. The
-/// button is intentionally `onPressed: null` -- there is no budgets flow
-/// to open yet; wiring it up is Beta 1's budgets task, not this
-/// UI-polish pass. Once that feature exists, the provider starts
-/// returning a real remaining amount and this widget needs no change.
+/// "Remaining monthly budget" tile. Reads [monthlyBudgetSummaryProvider]
+/// (see `dashboard_providers.dart` and Beta 1 Task 2 --
+/// `docs/14_DECISION_LOG.md` ADR-021). Shows the polished empty state
+/// (icon, explanation, "Set a monthly budget" call-to-action -- now
+/// routes to the budgets screen) when no overall budget is configured
+/// for the living currency this month, or the real
+/// budgeted/spent/remaining figures, a progress bar, a deterministic
+/// status label, and the recommended daily spend for the rest of the
+/// month once one is. Never fabricates a number for the empty state --
+/// see the Beta 1 Task 1 spec's ban on fake financial values, which
+/// still applies.
 class _BudgetCard extends ConsumerWidget {
   const _BudgetCard();
 
@@ -557,6 +566,7 @@ class _BudgetCard extends ConsumerWidget {
     final MonthlyBudgetSummary budget = ref.watch(monthlyBudgetSummaryProvider);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final BudgetCalculation? calculation = budget.calculation;
 
     return Card(
       elevation: 0,
@@ -578,28 +588,315 @@ class _BudgetCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (calculation != null)
+                  TextButton(
+                    key: const Key('manageBudgetsButton'),
+                    onPressed: () => context.push(AppRoutes.budgets),
+                    child: const Text('Manage'),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
-            if (budget.remaining == null) ...<Widget>[
+            if (calculation == null) ...<Widget>[
               Text(
                 "You haven't set a monthly budget yet. Set one to see how much you have left to spend.",
                 style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: null,
+                onPressed: () => context.push(AppRoutes.budgets),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Set a monthly budget'),
               ),
             ] else
-              Text(
-                _formatter.format(budget.remaining!),
-                style: text.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-              ),
+              _ConfiguredBudget(calculation: calculation),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The configured (budget-exists) contents of [_BudgetCard]: remaining
+/// vs. budgeted, a progress bar, a deterministic status chip, the
+/// textual percentage used, and (when defined -- see
+/// `BudgetCalculator.evaluate`) the recommended daily spend for the rest
+/// of the month.
+///
+/// Percentage-used rules (see `docs/14_DECISION_LOG.md` ADR-021): the
+/// **text** always shows the true, uncapped ratio -- an overspent budget
+/// reads as e.g. "142% used", never silently hidden behind a false
+/// "100%". Only the progress bar's fill fraction is clamped to 100%,
+/// purely because a progress bar cannot visually render past full; the
+/// over-budget state stays explicit via the status chip and the (still
+/// uncapped) percentage text right next to it.
+class _ConfiguredBudget extends StatelessWidget {
+  const _ConfiguredBudget({required this.calculation});
+
+  final BudgetCalculation calculation;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+
+    final Money remaining = calculation.remaining;
+    final Money budgeted = calculation.budgeted;
+    final Money spent = calculation.spent;
+    final BudgetStatus? status = calculation.status;
+
+    // Presentation-only ratio -- never authoritative Money, never fed
+    // back into any calculation. budgeted is always strictly positive
+    // (BudgetRepository rejects zero/negative amounts before they can
+    // ever be persisted), so this never divides by zero.
+    final double ratio = spent.minorUnits / budgeted.minorUnits;
+    final int percentUsed = (ratio * 100).round();
+
+    final (Color statusColor, String statusLabel) = switch (status) {
+      BudgetStatus.healthy => (colors.primary, 'On track'),
+      BudgetStatus.caution => (colors.tertiary, 'Ahead of pace'),
+      BudgetStatus.overBudget => (colors.error, 'Over budget'),
+      null => (colors.onSurfaceVariant, 'This month'),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // A `Wrap`, not a `Row` -- at narrow widths (see the 320px test in
+        // `test/widget/home_screen_test.dart`) the remaining amount plus
+        // "of <budgeted>" can be wider than the card, and neither figure
+        // may be clipped, ellipsized, or shrunk to stay readable. `Wrap`
+        // renders them on one line whenever they fit (identical to the
+        // previous `Row` on a normal-width phone) and drops "of
+        // <budgeted>" to its own line, still fully legible, only when
+        // they don't.
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 8,
+          runSpacing: 2,
+          children: <Widget>[
+            Text(
+              _formatter.format(remaining),
+              style: text.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: remaining.isNegative ? colors.error : null,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                'of ${_formatter.format(budgeted)}',
+                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LinearProgressIndicator(
+            value: ratio.clamp(0.0, 1.0),
+            minHeight: 8,
+            backgroundColor: colors.surfaceContainerHighest,
+            color: statusColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Container(
+              key: const Key('budgetStatusChip'),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                statusLabel,
+                style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Text(
+              '$percentUsed% used',
+              style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+            ),
+          ],
+        ),
+        if (calculation.dailyRecommendedSpend != null) ...<Widget>[
+          const SizedBox(height: 10),
+          Text(
+            'Recommended: ${_formatter.format(calculation.dailyRecommendedSpend!)} / day '
+            'for the rest of the month',
+            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Savings goals card -- Beta 1 Task 3. Shows the single
+/// highest-priority unfinished goal (see [selectHomeGoalSummary] in
+/// `savings_goal_providers.dart`), an honest empty state before any goal
+/// exists, or an "all goals completed" state when every goal is done.
+/// There is deliberately no "most recently completed goal" fallback --
+/// completion timestamps aren't persisted, so ADR-022 chose an explicit
+/// all-completed state over a guess (`docs/14_DECISION_LOG.md` ADR-022).
+class _SavingsGoalsCard extends ConsumerWidget {
+  const _SavingsGoalsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<GoalHomeSelection> selectionAsync = ref.watch(homeGoalSelectionProvider);
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final GoalHomeSelection? selection = selectionAsync.valueOrNull;
+
+    return Card(
+      elevation: 0,
+      color: colors.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(Icons.flag_outlined, color: colors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Savings Goals',
+                    style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (selection != null && selection.kind != GoalHomeSelectionKind.empty)
+                  TextButton(
+                    key: const Key('viewAllGoalsButton'),
+                    onPressed: () => context.push(AppRoutes.goals),
+                    child: const Text('View all'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            switch (selection?.kind) {
+              null => const SizedBox(
+                  height: 24,
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+              GoalHomeSelectionKind.empty => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      "You haven't set a savings goal yet.",
+                      style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('setSavingsGoalButton'),
+                      onPressed: () => context.push(AppRoutes.goals),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Set a savings goal'),
+                    ),
+                  ],
+                ),
+              GoalHomeSelectionKind.allCompleted => Text(
+                  'All your savings goals are completed.',
+                  style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                ),
+              GoalHomeSelectionKind.priorityGoal => _PriorityGoalSummary(summary: selection!.summary!),
+            },
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The priority-goal contents of [_SavingsGoalsCard] -- one goal's name,
+/// saved-vs-target, a progress bar, and a status chip. Mirrors
+/// `_ConfiguredBudget`'s percentage-display rule: the text percentage
+/// ([SavingsGoalCalculation.wholePercentSaved]) is floor-rounded and
+/// uncapped, never silently reading "100%" before the goal is actually
+/// [SavingsGoalStatus.completed] -- only the progress bar's fill
+/// fraction clamps to 1.0.
+class _PriorityGoalSummary extends StatelessWidget {
+  const _PriorityGoalSummary({required this.summary});
+  final SavingsGoalSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final SavingsGoalCalculation calc = summary.calculation;
+
+    final (Color statusColor, String statusLabel) = switch (calc.status) {
+      SavingsGoalStatus.overdue => (colors.error, 'Overdue'),
+      SavingsGoalStatus.inProgress => (colors.primary, 'In progress'),
+      SavingsGoalStatus.completed => (colors.primary, 'Completed'), // not reached via this card
+    };
+
+    final double ratio =
+        calc.target.minorUnits == 0 ? 0 : calc.saved.minorUnits / calc.target.minorUnits;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(summary.name, style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 8,
+          runSpacing: 2,
+          children: <Widget>[
+            Text(
+              _formatter.format(calc.saved),
+              style: text.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                'of ${_formatter.format(calc.target)}',
+                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LinearProgressIndicator(
+            value: ratio.clamp(0.0, 1.0),
+            minHeight: 8,
+            backgroundColor: colors.surfaceContainerHighest,
+            color: statusColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                statusLabel,
+                style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Text(
+              '${calc.wholePercentSaved}%',
+              style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

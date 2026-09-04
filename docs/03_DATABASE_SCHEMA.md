@@ -165,6 +165,21 @@ Historical snapshots are never replaced just because a newer market rate exists.
 
 ## goals
 
+> **Beta 1 Task 3 divergence:** the section below is the original
+> aspirational "V2 Core" design. What actually shipped in schema version
+> 3 is `savings_goals` (see `lib/core/database/tables.dart` and
+> `docs/14_DECISION_LOG.md` ADR-022): `id`, `profile_id`, `name`,
+> `target_amount_minor_units`, `currency_code` (permanently anchored,
+> never `target_currency` conversion/FX), `target_date` (nullable,
+> calendar-date-only, never a genuine instant), `created_at`,
+> `updated_at`, `deleted_at` (soft delete), `sync_version`/`sync_status`.
+> There is no `goal_type`, `priority`, `contribution_frequency`,
+> `recommended_contribution` (pace is *derived*, never stored —
+> `SavingsGoalCalculation.recommendedDailyContribution`),
+> `motivation_enabled`, or `streak_enabled` column — none of that is in
+> Beta 1's scope. `status` is likewise derived, never a stored column —
+> see `SavingsGoalStatus`.
+
 - id
 - user_id/profile_id
 - name
@@ -185,6 +200,17 @@ The target is anchored to target_currency and must not drift with FX.
 
 ## goal_contributions
 
+> **Beta 1 Task 3 divergence:** what actually shipped is
+> `savings_goal_contributions` (ADR-022): `id`, `goal_id`,
+> `amount_minor_units`, `currency_code` (duplicated from the parent goal
+> at write time, always required to match it -- never a differing
+> contribution currency, so there is no conversion snapshot to preserve),
+> `contributed_at` (a genuine UTC instant), `created_at`, `deleted_at`
+> (soft delete, contribution-level only -- deleting a contribution never
+> cascades from/to its parent goal), `sync_version`/`sync_status`. There
+> is no `account_id` or `note` column, and a contribution never creates a
+> `transactions` row.
+
 - id
 - goal_id
 - account_id nullable
@@ -197,6 +223,10 @@ If the contribution currency differs from the goal currency, preserve a conversi
 
 ## savings_streaks
 
+> **Beta 1 Task 3 divergence:** not built. No streak table or column
+> exists anywhere in schema version 3 -- see ADR-022's "no speculative
+> tables" scope note. This section remains aspirational.
+
 - id
 - goal_id
 - cadence
@@ -205,6 +235,13 @@ If the contribution currency differs from the goal currency, preserve a conversi
 - last_qualified_period
 
 ## savings_milestones
+
+> **Beta 1 Task 3 divergence:** not built as a table. Milestones are
+> derived, never persisted -- `reachedSavingsGoalMilestones` in
+> `lib/features/goals/domain/savings_goal_milestones.dart` recomputes the
+> 25/50/75/100 thresholds reached fresh from `saved`/`target` every time
+> (ADR-022), so there is no `reached_at`/`acknowledged_at` to store or go
+> stale.
 
 - id
 - goal_id

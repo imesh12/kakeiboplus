@@ -262,4 +262,267 @@ void main() {
       );
     });
   });
+
+  group('FinanceEngine.categoryExpenseTotal', () {
+    test('sums only expense transactions in the matching category', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 2000, categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 500, categoryId: 'dining'),
+      ];
+      final Money total = FinanceEngine.categoryExpenseTotal(
+        txs,
+        currencyCode: 'USD',
+        categoryId: 'dining',
+      );
+      expect(total, Money.fromMinorUnits(2500, 'USD'));
+    });
+
+    test('excludes an unrelated category', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 2000, categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 9000, categoryId: 'groceries'),
+      ];
+      final Money total = FinanceEngine.categoryExpenseTotal(
+        txs,
+        currencyCode: 'USD',
+        categoryId: 'dining',
+      );
+      expect(total, Money.fromMinorUnits(2000, 'USD'));
+    });
+
+    test('excludes a transfer even when it happens to carry a matching categoryId', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(
+          id: 't1',
+          accountId: 'a1',
+          destinationAccountId: 'a2',
+          type: TransactionType.transfer,
+          minorUnits: 5000,
+          categoryId: 'dining',
+        ),
+      ];
+      final Money total = FinanceEngine.categoryExpenseTotal(
+        txs,
+        currencyCode: 'USD',
+        categoryId: 'dining',
+      );
+      expect(total, Money.zero('USD'));
+    });
+
+    test('excludes income in the same category', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.income, minorUnits: 5000, categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 1200, categoryId: 'dining'),
+      ];
+      final Money total = FinanceEngine.categoryExpenseTotal(
+        txs,
+        currencyCode: 'USD',
+        categoryId: 'dining',
+      );
+      expect(total, Money.fromMinorUnits(1200, 'USD'));
+    });
+
+    test('exact-category-only matching: a transaction filed under a different id is never included, '
+        'even conceptually related categories', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 700, categoryId: 'dining-fastfood'),
+      ];
+      final Money total = FinanceEngine.categoryExpenseTotal(
+        txs,
+        currencyCode: 'USD',
+        categoryId: 'dining',
+      );
+      expect(total, Money.zero('USD'));
+    });
+
+    test('respects the currency scope, ignoring same-category spend in a different currency', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 3000, currency: 'JPY', categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 1000, currency: 'USD', categoryId: 'dining'),
+      ];
+      final Money total = FinanceEngine.categoryExpenseTotal(
+        txs,
+        currencyCode: 'USD',
+        categoryId: 'dining',
+      );
+      expect(total, Money.fromMinorUnits(1000, 'USD'));
+    });
+  });
+
+  group('FinanceEngine.recommendedDailySpend', () {
+    test('splits a positive remaining evenly across the remaining days, truncating', () {
+      final Money rec = FinanceEngine.recommendedDailySpend(
+        remaining: Money.fromMinorUnits(1000, 'USD'),
+        remainingDaysInclusive: 3,
+      );
+      expect(rec, Money.fromMinorUnits(333, 'USD'));
+    });
+
+    test('zero remaining recommends zero, never a negative or fabricated allowance', () {
+      final Money rec = FinanceEngine.recommendedDailySpend(
+        remaining: Money.zero('USD'),
+        remainingDaysInclusive: 10,
+      );
+      expect(rec, Money.zero('USD'));
+    });
+
+    test('negative remaining (overspent) recommends zero, never a negative daily allowance', () {
+      final Money rec = FinanceEngine.recommendedDailySpend(
+        remaining: Money.fromMinorUnits(-500, 'USD'),
+        remainingDaysInclusive: 10,
+      );
+      expect(rec, Money.zero('USD'));
+    });
+
+    test('on the last day of the month (1 remaining day), the whole remaining amount is recommended', () {
+      final Money rec = FinanceEngine.recommendedDailySpend(
+        remaining: Money.fromMinorUnits(4200, 'USD'),
+        remainingDaysInclusive: 1,
+      );
+      expect(rec, Money.fromMinorUnits(4200, 'USD'));
+    });
+
+    test('rejects remainingDaysInclusive < 1 for a positive remaining rather than dividing by zero', () {
+      expect(
+        () => FinanceEngine.recommendedDailySpend(
+          remaining: Money.fromMinorUnits(100, 'USD'),
+          remainingDaysInclusive: 0,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('a zero-decimal currency (JPY) truncates in whole yen', () {
+      final Money rec = FinanceEngine.recommendedDailySpend(
+        remaining: Money.fromMinorUnits(100, 'JPY'),
+        remainingDaysInclusive: 3,
+      );
+      expect(rec, Money.fromMinorUnits(33, 'JPY'));
+    });
+  });
+
+  group('FinanceEngine.projectedMonthEndSpend', () {
+    test('multiplies before dividing, so a small elapsed-day count does not understate the projection', () {
+      // 100 minor units over 3 of 30 days: (100 ~/ 3) * 30 == 990 would be
+      // wrong; (100 * 30) ~/ 3 == 1000 is correct.
+      final Money projected = FinanceEngine.projectedMonthEndSpend(
+        spent: Money.fromMinorUnits(100, 'USD'),
+        daysElapsedInclusive: 3,
+        totalDaysInMonth: 30,
+      );
+      expect(projected, Money.fromMinorUnits(1000, 'USD'));
+    });
+
+    test('day 1 of the month: projection is spent * totalDays', () {
+      final Money projected = FinanceEngine.projectedMonthEndSpend(
+        spent: Money.fromMinorUnits(50, 'USD'),
+        daysElapsedInclusive: 1,
+        totalDaysInMonth: 31,
+      );
+      expect(projected, Money.fromMinorUnits(1550, 'USD'));
+    });
+
+    test('zero spending projects to zero', () {
+      final Money projected = FinanceEngine.projectedMonthEndSpend(
+        spent: Money.zero('USD'),
+        daysElapsedInclusive: 15,
+        totalDaysInMonth: 30,
+      );
+      expect(projected, Money.zero('USD'));
+    });
+
+    test('a fully elapsed (historical) month projects to exactly the actual spend', () {
+      final Money projected = FinanceEngine.projectedMonthEndSpend(
+        spent: Money.fromMinorUnits(12345, 'USD'),
+        daysElapsedInclusive: 30,
+        totalDaysInMonth: 30,
+      );
+      expect(projected, Money.fromMinorUnits(12345, 'USD'));
+    });
+
+    test('rejects zero elapsed days -- callers must not invoke this for a future month', () {
+      expect(
+        () => FinanceEngine.projectedMonthEndSpend(
+          spent: Money.zero('USD'),
+          daysElapsedInclusive: 0,
+          totalDaysInMonth: 30,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('refuses to silently overflow the signed 64-bit minor-units range', () {
+      expect(
+        () => FinanceEngine.projectedMonthEndSpend(
+          spent: Money.fromMinorUnits(9223372036854775807, 'USD'),
+          daysElapsedInclusive: 1,
+          totalDaysInMonth: 31,
+        ),
+        throwsStateError,
+      );
+    });
+  });
+
+  group('FinanceEngine.recommendedDailyContribution', () {
+    test('ceiling regression case: 100 remaining over 3 days -> 34, not floor\'s 33', () {
+      final Money recommended = FinanceEngine.recommendedDailyContribution(
+        remaining: Money.fromMinorUnits(100, 'USD'),
+        remainingDaysInclusive: 3,
+      );
+      expect(recommended, Money.fromMinorUnits(34, 'USD'));
+      // 33 * 3 == 99 would fall short of 100 -- floor is provably
+      // insufficient for a savings-goal pace; 34 * 3 == 102 >= 100.
+    });
+
+    test('evenly divisible remaining needs no rounding up', () {
+      final Money recommended = FinanceEngine.recommendedDailyContribution(
+        remaining: Money.fromMinorUnits(300, 'USD'),
+        remainingDaysInclusive: 3,
+      );
+      expect(recommended, Money.fromMinorUnits(100, 'USD'));
+    });
+
+    test('1 remaining day recommends the entire remaining amount', () {
+      final Money recommended = FinanceEngine.recommendedDailyContribution(
+        remaining: Money.fromMinorUnits(500, 'USD'),
+        remainingDaysInclusive: 1,
+      );
+      expect(recommended, Money.fromMinorUnits(500, 'USD'));
+    });
+
+    test('zero remaining recommends zero', () {
+      final Money recommended = FinanceEngine.recommendedDailyContribution(
+        remaining: Money.zero('USD'),
+        remainingDaysInclusive: 10,
+      );
+      expect(recommended, Money.zero('USD'));
+    });
+
+    test('negative remaining (defensive -- callers should already clamp) recommends zero, not a negative pace', () {
+      final Money recommended = FinanceEngine.recommendedDailyContribution(
+        remaining: Money.fromMinorUnits(-500, 'USD'),
+        remainingDaysInclusive: 10,
+      );
+      expect(recommended, Money.zero('USD'));
+    });
+
+    test('rejects zero remaining days -- today always counts as at least 1', () {
+      expect(
+        () => FinanceEngine.recommendedDailyContribution(
+          remaining: Money.fromMinorUnits(100, 'USD'),
+          remainingDaysInclusive: 0,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('does not overflow near the signed 64-bit boundary', () {
+      final Money recommended = FinanceEngine.recommendedDailyContribution(
+        remaining: Money.fromMinorUnits(9223372036854775807, 'USD'),
+        remainingDaysInclusive: 2,
+      );
+      // ceil(9223372036854775807 / 2) = 4611686018427387904.
+      expect(recommended, Money.fromMinorUnits(4611686018427387904, 'USD'));
+    });
+  });
 }

@@ -1,13 +1,19 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/budget_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/savings_goal_contribution_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/savings_goal_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
+import 'package:ai_financial_coach/core/routing/app_routes.dart';
+import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
 import 'package:ai_financial_coach/features/dashboard/presentation/home_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 // NOTE: exercises generated Drift code — see CLAUDE_FIRST_CODING_PROMPT.md.
 //
@@ -69,6 +75,35 @@ void main() {
     return UncontrolledProviderScope(
       container: container,
       child: const MaterialApp(home: HomeScreen()),
+    );
+  }
+
+  /// Like [appWithHome], but with a real (minimal) `GoRouter` ancestor so
+  /// a `context.push(AppRoutes.budgets)` call -- the budget card's CTA
+  /// and "Manage" button both do this -- has somewhere to actually
+  /// navigate to, instead of throwing for lack of a `GoRouter` ancestor.
+  /// The budgets route is a recognizable stub, not the real
+  /// `BudgetsScreen` -- these tests are about *HomeScreen* triggering
+  /// navigation, not about what the budgets screen itself renders (that
+  /// belongs to `test/widget/budgets_screen_test.dart`).
+  Widget appWithRouter(ProviderContainer container) {
+    final GoRouter router = GoRouter(
+      initialLocation: '/home',
+      routes: <RouteBase>[
+        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
+        GoRoute(
+          path: AppRoutes.budgets,
+          builder: (context, state) => const Scaffold(body: Text('BUDGETS_SCREEN_STUB')),
+        ),
+        GoRoute(
+          path: AppRoutes.goals,
+          builder: (context, state) => const Scaffold(body: Text('GOALS_SCREEN_STUB')),
+        ),
+      ],
+    );
+    return UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(routerConfig: router),
     );
   }
 
@@ -243,8 +278,8 @@ void main() {
   );
 
   testWidgets(
-    'the budget card shows a polished empty state with a disabled call-to-action when no '
-    'budget is configured yet',
+    'the budget card shows a polished empty state with a working call-to-action when no '
+    'budget is configured yet, and tapping it routes to the budgets screen',
     (tester) async {
       useTallSurface(tester);
       final AppDatabase db = await seededDb(
@@ -257,7 +292,7 @@ void main() {
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
-      await tester.pumpWidget(appWithHome(container));
+      await tester.pumpWidget(appWithRouter(container));
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.savings_outlined), findsOneWidget);
@@ -266,10 +301,85 @@ void main() {
 
       final Finder ctaFinder = find.widgetWithText(OutlinedButton, 'Set a monthly budget');
       expect(ctaFinder, findsOneWidget);
-      // Intentionally disabled -- there is no budgets flow to open yet;
-      // wiring it up is Beta 1's budgets task, not this UI-polish pass.
+      // Now functional (Beta 1 Task 2 wired up the budgets route) --
+      // never disabled once there's somewhere real to send the user.
       final OutlinedButton cta = tester.widget<OutlinedButton>(ctaFinder);
-      expect(cta.onPressed, isNull);
+      expect(cta.onPressed, isNotNull);
+
+      await tester.tap(ctaFinder);
+      await tester.pumpAndSettle();
+      expect(find.text('BUDGETS_SCREEN_STUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a configured living-currency overall budget renders the real remaining amount, a status '
+    'chip, and a percentage-used figure instead of the empty state',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profile!.id,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(120000, 'JPY'), // ¥120,000
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("You haven't set a monthly budget yet"), findsNothing);
+      expect(find.text('of ¥120,000'), findsOneWidget);
+      expect(find.byKey(const Key('budgetStatusChip')), findsOneWidget);
+      expect(find.textContaining('% used'), findsOneWidget);
+      expect(find.byKey(const Key('manageBudgetsButton')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('manageBudgetsButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('BUDGETS_SCREEN_STUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'the richer card content for a configured budget (progress bar, status chip, percentage, '
+    'daily recommendation) lays out without overflow on a narrow (320px-wide) screen',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profile!.id,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(120000, 'JPY'),
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      final Object? overflowException = tester.takeException();
+      if (overflowException != null) {
+        fail('Narrow-screen (320px) configured-budget layout threw an exception:\n\n$overflowException');
+      }
     },
   );
 
@@ -293,6 +403,150 @@ void main() {
       expect(find.byIcon(Icons.event_note_outlined), findsOneWidget);
       expect(find.text('No upcoming commitments yet.'), findsOneWidget);
       expect(find.text('Recurring bills and scheduled payments will appear here.'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'the savings goals card shows a polished empty state with a working call-to-action when '
+    'no goal exists yet, and tapping it routes to the goals screen',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.flag_outlined), findsOneWidget);
+      expect(find.text('Savings Goals'), findsOneWidget);
+      expect(find.textContaining("You haven't set a savings goal yet"), findsOneWidget);
+
+      final Finder ctaFinder = find.widgetWithText(OutlinedButton, 'Set a savings goal');
+      expect(ctaFinder, findsOneWidget);
+      await tester.tap(ctaFinder);
+      await tester.pumpAndSettle();
+      expect(find.text('GOALS_SCREEN_STUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'an unfinished goal renders its real saved/target/percentage instead of the empty state',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+      final String goalId = await goalRepo.createGoal(
+        profileId: profile!.id,
+        name: 'Emergency Fund',
+        targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      await SavingsGoalContributionRepository(db, goalRepo).addContribution(
+        goalId: goalId,
+        amount: Money.fromMinorUnits(30000, 'JPY'),
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("You haven't set a savings goal yet"), findsNothing);
+      expect(find.text('Emergency Fund'), findsOneWidget);
+      expect(find.text('of ¥100,000'), findsOneWidget);
+      expect(find.textContaining('30%'), findsOneWidget);
+      expect(find.byKey(const Key('viewAllGoalsButton')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('viewAllGoalsButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('GOALS_SCREEN_STUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    "shows an 'all goals completed' state, never a fabricated most-recently-completed pick, "
+    'when every goal is done',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+      final String goalId = await goalRepo.createGoal(
+        profileId: profile!.id,
+        name: 'Fully Funded',
+        targetAmount: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      await SavingsGoalContributionRepository(db, goalRepo).addContribution(
+        goalId: goalId,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('All your savings goals are completed.'), findsOneWidget);
+      expect(find.text('Fully Funded'), findsNothing); // no specific goal picked
+    },
+  );
+
+  testWidgets(
+    'the savings goals card lays out without overflow on a narrow (320px-wide) screen with a '
+    'configured goal',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+      final String goalId = await goalRepo.createGoal(
+        profileId: profile!.id,
+        name: 'A rather long savings goal name to stress narrow-width layout',
+        targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      await SavingsGoalContributionRepository(db, goalRepo).addContribution(
+        goalId: goalId,
+        amount: Money.fromMinorUnits(30000, 'JPY'),
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      final Object? overflowException = tester.takeException();
+      if (overflowException != null) {
+        fail('Narrow-screen (320px) savings goals card layout threw an exception:\n\n$overflowException');
+      }
     },
   );
 }

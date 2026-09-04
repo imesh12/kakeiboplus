@@ -18,3 +18,12 @@ final AutoDisposeStreamProviderFamily<List<CategoryRow>, String> categoriesForTy
       .watch(categoryRepositoryProvider)
       .watchAvailableFor(profileId: profile.id, type: type);
 });
+
+/// A single category row by id, for display purposes (e.g. showing a
+/// category budget's category name) where a full
+/// [categoriesForTypeProvider] list isn't otherwise being watched.
+/// `.family` keyed by the category id.
+final AutoDisposeFutureProviderFamily<CategoryRow, String> categoryByIdProvider =
+    FutureProvider.autoDispose.family<CategoryRow, String>((ref, categoryId) {
+  return ref.watch(categoryRepositoryProvider).requireById(categoryId);
+});

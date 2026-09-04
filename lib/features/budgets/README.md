@@ -1,14 +1,41 @@
-# budgets — reserved for Beta 1
+# budgets
 
-Not implemented yet. Beta 0 ("local deterministic money engine") covers
-tracking only — see `docs/19_PRIVATE_BETA_BUILD_PLAN.md`, Beta 0 scope.
+Implemented in Beta 1 Task 2 — see `docs/14_DECISION_LOG.md` ADR-021 for
+the full design rationale (schema, uniqueness strategy, month/timezone
+convention, category matching, status thresholds, projection formula).
 
-Beta 1 ("Daily Use") adds monthly/category budgets on top of the
-transaction ledger this stage builds. The `budgets` and
-`budget_categories` tables from `docs/03_DATABASE_SCHEMA.md` are not part
-of the Beta 0 schema (`lib/core/database/tables.dart`) — see
-`STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §6 for what Beta 0's schema does
-and does not include, and why.
+## What's here
 
-When this feature is built, follow the same `data/ domain/ presentation/`
-structure as `features/transactions/`.
+- `domain/budget_month.dart` — `BudgetMonth`, the structured year/month
+  value type every budget calculation is anchored to (UTC-only, matching
+  the rest of the app's existing convention).
+- `domain/budget_status.dart` — `BudgetStatus` and the deterministic
+  pace-based classification rule.
+- `domain/budget_calculation.dart` — `BudgetCalculation` (the full result
+  of evaluating a budget) and `BudgetCalculator.evaluate`, which handles
+  the current/historical/future month distinction.
+- `presentation/budget_providers.dart` — Riverpod providers wiring the
+  repository, the ledger, and the domain layer together
+  (`livingCurrencyOverallBudgetProvider` is what the Home dashboard's
+  budget card reads).
+- `presentation/budgets_screen.dart` — the budget management UI (create/
+  edit/remove an overall or category budget for the current month),
+  reached from the Profile screen and from the dashboard's budget card.
+
+The `BudgetRepository` (Drift-backed persistence) lives at
+`lib/core/database/repositories/budget_repository.dart`, alongside every
+other repository in this codebase (`Account`/`Category`/`Transaction`/
+`Profile`/`Currency`) — **not** under a `data/` subfolder here. This
+deliberately follows the actual established convention this codebase
+uses everywhere else rather than the `data/ domain/ presentation/`
+structure this README previously (aspirationally, before any of it was
+built) suggested — no other feature, including `transactions`, actually
+uses that structure either.
+
+## What's still out of scope (unchanged from the original Beta 1 spec)
+
+Savings goals, recurring/rollover budgets, envelope budgeting, FX
+conversion across budget currencies, weekly or custom budget periods,
+AI-driven insights, and any cloud/sync behavior beyond the inert
+`sync_version`/`sync_status` columns every table in this schema already
+carries.

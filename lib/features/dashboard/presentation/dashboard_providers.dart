@@ -7,6 +7,8 @@ import '../../../core/finance/finance_engine.dart';
 import '../../../core/finance/ledger_models.dart';
 import '../../../core/money/money.dart';
 import '../../accounts/presentation/account_providers.dart';
+import '../../budgets/domain/budget_calculation.dart';
+import '../../budgets/presentation/budget_providers.dart';
 import '../../onboarding/presentation/profile_providers.dart';
 import '../../transactions/presentation/transaction_providers.dart';
 
@@ -49,23 +51,32 @@ class CurrencyDashboardSummary {
   final Money dailyPace;
 }
 
-/// Placeholder result for the "Remaining monthly budget" dashboard tile.
+/// The "Remaining monthly budget" dashboard tile's data -- a thin
+/// wrapper around [BudgetCalculation] (the budgets feature's domain
+/// result type) so `HomeScreen` can keep reading a small, dashboard-
+/// shaped type without needing to know about the budgets feature's
+/// full domain layer.
 ///
-/// Beta 0's schema has no `budgets` table at all (see
-/// `lib/features/budgets/README.md`) — Beta 1's budgets feature owns
-/// building that. [remaining] is `null` until that feature exists; a
-/// real implementation of [monthlyBudgetSummaryProvider] can start
-/// returning a non-null value later without `HomeScreen` needing to
-/// change, since it already renders both states.
+/// `null` [calculation] means "no budget configured for this month" —
+/// the dashboard must show an explicit "set a budget" empty state
+/// rather than inventing a number (see the Beta 1 Task 1 spec's ban on
+/// fake financial values). Once Beta 1 Task 2's budgets feature finds an
+/// active *overall* budget in the profile's **living currency** for the
+/// current month, [calculation] wraps the real, [FinanceEngine]-derived
+/// result -- a budget configured in a different currency never appears
+/// here (see `docs/14_DECISION_LOG.md` ADR-021).
 @immutable
 class MonthlyBudgetSummary {
-  const MonthlyBudgetSummary.notConfigured() : remaining = null;
+  const MonthlyBudgetSummary(this.calculation);
 
-  /// `null` means "no budget configured for this month" — the dashboard
-  /// must show an explicit "set a budget" empty state rather than
-  /// inventing a number (see the Beta 1 Task 1 spec's ban on fake
-  /// financial values).
-  final Money? remaining;
+  const MonthlyBudgetSummary.notConfigured() : calculation = null;
+
+  final BudgetCalculation? calculation;
+
+  /// Convenience accessor for the one field every caller (including
+  /// pre-Task-2 tests written against the original "remaining-only"
+  /// shape) needs most often.
+  Money? get remaining => calculation?.remaining;
 }
 
 /// One upcoming recurring bill/income the "Upcoming commitments" tile
@@ -86,15 +97,26 @@ class UpcomingCommitmentSummary {
   final Money amount;
 }
 
-/// Always "not configured": Beta 0's schema has no `budgets` table (see
-/// `lib/features/budgets/README.md`), so there is nothing to compute a
-/// remaining amount from. A plain (non-autoDispose) `Provider`, like
-/// every other dashboard provider here, so Beta 1's budgets feature can
-/// later replace this one definition with a real Drift-backed query —
-/// `HomeScreen` only ever reads `.remaining`, so the swap is invisible to
-/// it.
+/// The Home dashboard's overall-budget tile, for the profile's living
+/// currency and the current month — see
+/// [livingCurrencyOverallBudgetProvider] for where the actual budget
+/// lookup and [FinanceEngine] calculation happen; this provider only
+/// adapts that result into the small [MonthlyBudgetSummary] shape
+/// `HomeScreen` reads.
+///
+/// A plain (non-autoDispose, synchronous) `Provider`, matching every
+/// other dashboard provider here and preserving `_BudgetCard`'s existing
+/// synchronous read contract: `.valueOrNull` collapses a momentary
+/// loading state to "not configured" rather than exposing a separate
+/// loading state to the card. This is an intentional, documented
+/// simplification — the rest of the dashboard does not show a
+/// budget-card-specific loading spinner either, and a `null` here is
+/// self-correcting the moment the underlying stream resolves.
 final Provider<MonthlyBudgetSummary> monthlyBudgetSummaryProvider =
-    Provider<MonthlyBudgetSummary>((ref) => const MonthlyBudgetSummary.notConfigured());
+    Provider<MonthlyBudgetSummary>((ref) {
+  final AsyncValue<BudgetCalculation?> budgetAsync = ref.watch(livingCurrencyOverallBudgetProvider);
+  return MonthlyBudgetSummary(budgetAsync.valueOrNull);
+});
 
 /// Always empty: Beta 0's schema has no `recurring_transactions` table
 /// and no `transactions.recurring_transaction_id` column (see

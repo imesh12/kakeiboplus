@@ -146,6 +146,159 @@ class Transactions extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// A monthly budget -- either an overall (whole-currency) budget or a
+/// category budget, discriminated by [categoryId]'s nullability. See
+/// `docs/14_DECISION_LOG.md` ADR-021 and
+/// `lib/features/budgets/domain/budget_month.dart`.
+@DataClassName('BudgetRow')
+class Budgets extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// Null for an overall (whole-currency) monthly budget; set to a
+  /// `Categories.id` for a category budget. A single table serves both
+  /// budget kinds, discriminated by this column's nullability -- the
+  /// same pattern `Transactions.destinationAccountId` already uses to
+  /// distinguish a transfer from every other transaction type.
+  TextColumn get categoryId => text().nullable().references(Categories, #id)();
+
+  TextColumn get currencyCode => text().references(Currencies, #code)();
+
+  /// Structured year/month -- never a floating "current month" concept
+  /// or a parsed `YYYY-MM` string. See
+  /// `lib/features/budgets/domain/budget_month.dart`.
+  IntColumn get year => integer()();
+  IntColumn get month => integer()();
+
+  /// Money, stored as integer minor units — see ADR-017. Always
+  /// strictly positive; `BudgetRepository` rejects a zero or negative
+  /// amount before it ever reaches this table (see ADR-021).
+  IntColumn get amountMinorUnits => integer()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete — same convention as `Accounts`/`Transactions`.
+  /// `BudgetRepository` enforces "at most one active row per
+  /// profile/currency/year/month(/categoryId)" at the application layer,
+  /// not via a DB constraint (see ADR-021, following ADR-019's
+  /// precedent). This column is what "active" means (`deletedAt IS
+  /// NULL`), and is specifically what lets a budget be recreated after
+  /// deletion without conflicting with its own soft-deleted predecessor.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// Forward-compatible per ADR-020's precedent — inert until Stage 6
+  /// (cloud/sync). Beta 1 always writes 0 / "localOnly" and never reads
+  /// these outside of that constant.
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// A savings goal — Beta 1 Task 3. See `docs/14_DECISION_LOG.md` ADR-022
+/// and `lib/features/goals/domain/`.
+///
+/// [currencyCode] is permanently anchored at creation time and is never
+/// changed by `SavingsGoalRepository.updateGoal` — see ADR-022. A goal's
+/// target amount may only ever be updated in the SAME currency it was
+/// created with; there is no FX conversion of a goal's target.
+@DataClassName('SavingsGoalRow')
+class SavingsGoals extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// Trimmed, non-empty — `SavingsGoalRepository` rejects an empty or
+  /// whitespace-only name before it ever reaches this table (ADR-022).
+  TextColumn get name => text()();
+
+  /// Money, stored as integer minor units — see ADR-017. Always
+  /// strictly positive; `SavingsGoalRepository` rejects a zero or
+  /// negative amount before it ever reaches this table.
+  IntColumn get targetAmountMinorUnits => integer()();
+
+  /// Permanently anchored at creation — see ADR-022. Never changed by
+  /// `updateGoal`; a currency change is rejected with
+  /// `CurrencyMismatchException`.
+  TextColumn get currencyCode => text().references(Currencies, #code)();
+
+  /// Optional calendar date (year/month/day only — no meaningful
+  /// time-of-day component), normalized via
+  /// `normalizeCalendarDateToUtc` in
+  /// `lib/features/goals/domain/goal_target_date.dart`. Deliberately
+  /// NOT a genuine instant — see that file's doc comments for why this
+  /// column is never produced via `DateTime.toUtc()`.
+  DateTimeColumn get targetDate => dateTime().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete — same convention as `Accounts`/`Transactions`/
+  /// `Budgets`. Per ADR-022, a soft-deleted goal's contribution rows are
+  /// NOT cascade-deleted (they remain physically present for potential
+  /// future history/export), but `SavingsGoalContributionRepository` and
+  /// the calculation/detail providers refuse to treat a soft-deleted
+  /// goal as active — see `lib/features/goals/domain/` and
+  /// `lib/features/goals/presentation/savings_goal_providers.dart`.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// Forward-compatible per ADR-020's precedent — inert until Stage 6
+  /// (cloud/sync). Beta 1 always writes 0 / "localOnly" and never reads
+  /// these outside of that constant.
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// An explicit, append-only contribution ledger entry toward a
+/// [SavingsGoals] row — Beta 1 Task 3. See `docs/14_DECISION_LOG.md`
+/// ADR-022. Deliberately does NOT create a `Transactions` row — a
+/// contribution has no income/expense/transfer side effect (ADR-022).
+@DataClassName('SavingsGoalContributionRow')
+class SavingsGoalContributions extends Table {
+  TextColumn get id => text()();
+  TextColumn get goalId => text().references(SavingsGoals, #id)();
+
+  /// Money, stored as integer minor units — see ADR-017. Always
+  /// strictly positive; `SavingsGoalContributionRepository` rejects a
+  /// zero or negative amount before it ever reaches this table. There is
+  /// no negative/"withdrawal" contribution in Beta 1 (ADR-022).
+  IntColumn get amountMinorUnits => integer()();
+
+  /// Duplicated from the parent goal's `currencyCode` at write time
+  /// (rather than derived via a join) — see ADR-022 for the tradeoff
+  /// rationale. `SavingsGoalContributionRepository` enforces this must
+  /// match the parent goal's currency, and that the parent goal is
+  /// active (not soft-deleted), before insert.
+  TextColumn get currencyCode => text().references(Currencies, #code)();
+
+  /// A genuine instant, always stored as a UTC `DateTime` — see
+  /// `SavingsGoalContributionRepository.addContribution`'s
+  /// `contributedAt` parameter. Unlike `SavingsGoals.targetDate` (a
+  /// calendar-only date), this column IS produced via `.toUtc()`,
+  /// because a contribution really did happen at a specific instant.
+  DateTimeColumn get contributedAt => dateTime()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Soft delete — same convention as `Accounts`/`Transactions`/
+  /// `Budgets`/`SavingsGoals`. Beta 1 supports deleting a contribution
+  /// but not editing one (ADR-022).
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// Forward-compatible per ADR-020's precedent — inert until Stage 6
+  /// (cloud/sync). Beta 1 always writes 0 / "localOnly" and never reads
+  /// these outside of that constant.
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// Reserved per ADR-020 / ADR-009 — the historical-FX-snapshot invariant
 /// depends on this table's shape existing, but Beta 0 never writes to it
 /// (no FX provider integration, live conversion, or rate fetching is
