@@ -1,10 +1,15 @@
-# recurring — reserved for Beta 1 / Stage 5
+# recurring — Beta 1 Task 4A foundation implemented; reminders are Task 4B
 
-Not implemented yet — no recurring bills/income, upcoming-commitment
-tracking, or reminders. See `docs/19_PRIVATE_BETA_BUILD_PLAN.md` Beta 1
-(basic recurring bills) and Stage 5 (full recurring + motivation).
+Beta 1 Task 4A implemented the deterministic recurring-money foundation:
+`RecurringRules` (schedule/template only) and `RecurringOccurrences`
+(handled scheduled dates only) — schema version 4, see
+`docs/14_DECISION_LOG.md` ADR-023. A rule never affects a balance,
+income/expense total, budget, or goal until one of its occurrences is
+explicitly posted (creating a real transaction via the existing
+transaction repository paths) or skipped.
 
-The `recurring_transactions` table from `docs/03_DATABASE_SCHEMA.md` is
-not part of the Beta 0 schema, and `transactions.recurring_transaction_id`
-does not exist in Beta 0 either (Decision 8 — no speculative foreign keys
-to tables that don't exist yet).
+Not implemented yet: OS/local notifications or reminders for due
+occurrences (Task 4B, once this deterministic engine has been verified
+in production use), automatic/background posting (occurrences are always
+posted or skipped explicitly by the user), FX-aware recurring rules
+(same-currency only), and cross-currency recurring transfers.

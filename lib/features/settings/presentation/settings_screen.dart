@@ -58,6 +58,12 @@ class SettingsScreen extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.goals),
               ),
+              ListTile(
+                leading: const Icon(Icons.repeat_outlined),
+                title: const Text('Recurring'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.recurring),
+              ),
               const Divider(),
               const Padding(
                 padding: EdgeInsets.all(16),

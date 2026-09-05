@@ -6,6 +6,8 @@ import 'repositories/budget_repository.dart';
 import 'repositories/category_repository.dart';
 import 'repositories/currency_repository.dart';
 import 'repositories/profile_repository.dart';
+import 'repositories/recurring_occurrence_repository.dart';
+import 'repositories/recurring_rule_repository.dart';
 import 'repositories/savings_goal_contribution_repository.dart';
 import 'repositories/savings_goal_repository.dart';
 import 'repositories/transaction_repository.dart';
@@ -60,5 +62,22 @@ final Provider<SavingsGoalContributionRepository> savingsGoalContributionReposit
   (ref) => SavingsGoalContributionRepository(
     ref.watch(appDatabaseProvider),
     ref.watch(savingsGoalRepositoryProvider),
+  ),
+);
+
+final Provider<RecurringRuleRepository> recurringRuleRepositoryProvider =
+    Provider<RecurringRuleRepository>(
+  (ref) => RecurringRuleRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(accountRepositoryProvider),
+  ),
+);
+
+final Provider<RecurringOccurrenceRepository> recurringOccurrenceRepositoryProvider =
+    Provider<RecurringOccurrenceRepository>(
+  (ref) => RecurringOccurrenceRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(recurringRuleRepositoryProvider),
+    ref.watch(transactionRepositoryProvider),
   ),
 );

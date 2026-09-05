@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/money/money.dart';
@@ -13,6 +14,8 @@ import '../../goals/domain/savings_goal_calculation.dart';
 import '../../goals/domain/savings_goal_status.dart';
 import '../../goals/presentation/savings_goal_providers.dart';
 import '../../onboarding/presentation/profile_providers.dart';
+import '../../recurring/domain/recurring_rule_kind.dart';
+import '../../recurring/presentation/recurring_providers.dart';
 import 'dashboard_providers.dart';
 
 const MoneyFormatter _formatter = MoneyFormatter();
@@ -901,20 +904,24 @@ class _PriorityGoalSummary extends StatelessWidget {
   }
 }
 
-/// "Upcoming commitments" tile. Beta 0/1 has no recurring-transactions
-/// feature yet (`lib/features/recurring/README.md`) —
-/// [upcomingCommitmentsProvider] always reports an empty list today, so
-/// this always shows the polished empty state. Once that feature
-/// exists, this widget renders whatever it returns without needing to
-/// change.
+/// "Recurring" tile -- Beta 1 Task 4A. Shows the single
+/// highest-priority pending item (overdue first, then due today, then
+/// nearest upcoming) from [homeRecurringSelectionProvider], never a
+/// summed total: recurring rules can span multiple currencies and
+/// `Money.operator+` throws on a currency mismatch by design (ADR-017),
+/// so this card deliberately never adds amounts together -- exactly the
+/// same single-item, no-fabricated-total rule [_SavingsGoalsCard]
+/// already follows for goals (see `docs/14_DECISION_LOG.md` ADR-023).
 class _UpcomingCommitmentsCard extends ConsumerWidget {
   const _UpcomingCommitmentsCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final List<UpcomingCommitmentSummary> commitments = ref.watch(upcomingCommitmentsProvider);
+    final AsyncValue<RecurringHomeSelection> selectionAsync =
+        ref.watch(homeRecurringSelectionProvider);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final RecurringHomeSelection? selection = selectionAsync.valueOrNull;
 
     return Card(
       elevation: 0,
@@ -931,38 +938,125 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Upcoming commitments',
+                    'Recurring',
                     style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (selection != null && selection.kind != RecurringHomeSelectionKind.empty)
+                  TextButton(
+                    key: const Key('viewAllRecurringButton'),
+                    onPressed: () => context.push(AppRoutes.recurring),
+                    child: const Text('View all'),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
-            if (commitments.isEmpty) ...<Widget>[
-              Text('No upcoming commitments yet.', style: text.bodyMedium),
-              const SizedBox(height: 4),
-              Text(
-                'Recurring bills and scheduled payments will appear here.',
-                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-              ),
-            ] else
-              for (final UpcomingCommitmentSummary commitment in commitments)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Flexible(
-                        child: Text(commitment.label, overflow: TextOverflow.ellipsis),
-                      ),
-                      Text(_formatter.format(commitment.amount)),
-                    ],
-                  ),
+            switch (selection?.kind) {
+              null => const SizedBox(
+                  height: 24,
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                 ),
+              RecurringHomeSelectionKind.empty => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'No recurring bills or income set up yet.',
+                      style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('setRecurringRuleButton'),
+                      onPressed: () => context.push(AppRoutes.recurring),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Set up recurring'),
+                    ),
+                  ],
+                ),
+              RecurringHomeSelectionKind.item => _RecurringItemSummary(item: selection!.item!),
+            },
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The single-item contents of [_UpcomingCommitmentsCard] -- the rule's
+/// name, its urgency (Overdue/Due today/Upcoming), the scheduled date,
+/// and the amount in the rule's own currency. Never any cross-currency
+/// arithmetic -- [RecurringPendingItem.rule] carries its own
+/// [RecurringRuleRow.currencyCode], formatted on its own.
+class _RecurringItemSummary extends StatelessWidget {
+  const _RecurringItemSummary({required this.item});
+  final RecurringPendingItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final RecurringRuleRow rule = item.rule;
+
+    final (Color urgencyColor, String urgencyLabel) = switch (item.urgency) {
+      RecurringItemUrgency.overdue => (colors.error, 'Overdue'),
+      RecurringItemUrgency.dueToday => (colors.primary, 'Due today'),
+      RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, 'Upcoming'),
+    };
+    final IconData kindIcon = switch (RecurringRuleKind.values.byName(rule.kind)) {
+      RecurringRuleKind.expense => Icons.arrow_upward_rounded,
+      RecurringRuleKind.income => Icons.arrow_downward_rounded,
+      RecurringRuleKind.transfer => Icons.swap_horiz_rounded,
+    };
+    final Money amount = Money.fromMinorUnits(rule.amountMinorUnits, rule.currencyCode);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Icon(kindIcon, size: 18, color: colors.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                rule.name,
+                style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 8,
+          runSpacing: 2,
+          children: <Widget>[
+            Text(
+              _formatter.format(amount),
+              style: text.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                DateFormat.yMMMd().format(item.scheduledDateUtc),
+                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: urgencyColor.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            urgencyLabel,
+            style: text.labelSmall?.copyWith(color: urgencyColor, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     );
   }
 }

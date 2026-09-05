@@ -186,19 +186,11 @@ void main() {
     });
   });
 
-  group('Forward-compatible Beta 1 placeholders (no budgets/recurring schema yet)', () {
+  group('Forward-compatible Beta 1 placeholders (no budgets schema yet)', () {
     test('monthlyBudgetSummaryProvider reports "not configured" (empty budget state)', () async {
       await seedProfile(living: 'JPY', home: 'LKR');
       final MonthlyBudgetSummary budget = container.read(monthlyBudgetSummaryProvider);
       expect(budget.remaining, isNull);
-    });
-
-    test('upcomingCommitmentsProvider reports no items (empty upcoming-commitments state)',
-        () async {
-      await seedProfile(living: 'JPY', home: 'LKR');
-      final List<UpcomingCommitmentSummary> commitments =
-          container.read(upcomingCommitmentsProvider);
-      expect(commitments, isEmpty);
     });
   });
 }

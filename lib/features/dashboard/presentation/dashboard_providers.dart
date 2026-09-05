@@ -79,23 +79,7 @@ class MonthlyBudgetSummary {
   Money? get remaining => calculation?.remaining;
 }
 
-/// One upcoming recurring bill/income the "Upcoming commitments" tile
-/// would show. Nothing constructs this yet — see
-/// [upcomingCommitmentsProvider] — but the shape exists so the recurring
-/// feature has a target to populate rather than needing to invent one
-/// alongside its first UI change.
-@immutable
-class UpcomingCommitmentSummary {
-  const UpcomingCommitmentSummary({
-    required this.label,
-    required this.dueDateUtc,
-    required this.amount,
-  });
 
-  final String label;
-  final DateTime dueDateUtc;
-  final Money amount;
-}
 
 /// The Home dashboard's overall-budget tile, for the profile's living
 /// currency and the current month — see
@@ -117,14 +101,6 @@ final Provider<MonthlyBudgetSummary> monthlyBudgetSummaryProvider =
   final AsyncValue<BudgetCalculation?> budgetAsync = ref.watch(livingCurrencyOverallBudgetProvider);
   return MonthlyBudgetSummary(budgetAsync.valueOrNull);
 });
-
-/// Always empty: Beta 0's schema has no `recurring_transactions` table
-/// and no `transactions.recurring_transaction_id` column (see
-/// `lib/features/recurring/README.md`), so there is no data source for
-/// "upcoming commitments" yet. Same forward-compatibility reasoning as
-/// [monthlyBudgetSummaryProvider].
-final Provider<List<UpcomingCommitmentSummary>> upcomingCommitmentsProvider =
-    Provider<List<UpcomingCommitmentSummary>>((ref) => const <UpcomingCommitmentSummary>[]);
 
 /// The Home dashboard's core financial summary: one
 /// [CurrencyDashboardSummary] per currency the profile actually holds

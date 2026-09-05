@@ -569,3 +569,155 @@ a future change to this area must not repeat.
     `/goals/:id` are the only two new routes.
 
 Status: Approved 2026-09-03 (Beta 1 Task 3).
+
+## ADR-023 — Beta 1 Task 4A recurring money foundation: schedule-only rules, anchor-based recurrence, and explicit posting
+
+Decision: Beta 1's recurring money foundation (schema version 4) is
+built on the following deliberate choices, following the same
+schedule/template-vs-real-transaction separation the task's own
+specification required.
+
+1. **Two new tables, `recurring_rules` and `recurring_occurrences`,
+   added via `onUpgrade`, not `onCreate`.** No existing table changes
+   shape and no historical row is touched. A rule is a schedule/template
+   only — `RecurringRuleRepository.createRule`/`updateRule` never write
+   to `transactions` and never affect an account balance, income/expense
+   total, budget, or savings goal; only
+   `RecurringOccurrenceRepository.postOccurrence` does that, and only
+   when explicitly called (never automatically, in this task).
+   `recurring_rules.kind` is permanently fixed at creation — see point 5.
+   `recurring_rules` carries the same `deleted_at`/`sync_version`/
+   `sync_status` soft-delete convention every other table has carried
+   since ADR-020; `recurring_occurrences` deliberately does NOT — it is
+   append-only (see point 4), so there is nothing on it to soft-delete.
+   A migration test (`test/core/database/recurring_migration_test.dart`)
+   builds a v3 database by hand (raw SQL, cross-checked column-for-column
+   against `tables.dart`, plus `PRAGMA user_version = 3`), seeds a
+   profile/accounts/categories/transactions/budgets/savings-goals/
+   contributions, opens it with the real (v4) `AppDatabase`, and asserts
+   the new tables exist and are usable and that every v3 row's LOGICAL
+   data survives unchanged.
+
+2. **Recurrence is computed anchor-based, never by cascading from the
+   previously clamped occurrence.** `RecurringSchedule._occurrenceAt(k)`
+   (`lib/features/recurring/domain/recurring_schedule.dart`) always
+   derives occurrence `k` directly from the rule's own `startDate` —
+   for daily/weekly it's `startDate + k * interval` days/weeks; for
+   monthly/yearly it computes the target year/month `k * interval` units
+   ahead of the anchor and clamps `startDate`'s day-of-month
+   independently against *that* target month's own last day (via
+   `_lastDayOfMonth`), never against a previous occurrence's already-
+   clamped day. This is what makes a Jan-31 monthly schedule correctly
+   produce Jan 31 → Feb 28/29 → Mar 31 → Apr 30 → May 31 forever, instead
+   of drifting permanently to the 28th after the first clamp — the
+   specific bug anchor-based computation exists to prevent.
+   `occurrenceOnOrAfter`/`nextOccurrenceAfter` binary-search the `k`
+   index rather than iterating one occurrence at a time, so even a rule
+   anchored years in the past resolves "next due date" in
+   O(log distance), not O(elapsed occurrences). `occurrencesInRange` is
+   the only bulk accessor and always takes an explicit
+   `fromUtc`/`toUtc` bound — there is no unbounded "all occurrences"
+   function anywhere in this feature, in either the domain layer or the
+   providers built on it (point 6).
+
+3. **Calendar-date and instant normalization follow the exact same
+   split ADR-022 point 3 established for savings goals, reused verbatim
+   for this feature.** `normalizeRecurringDate` (mirroring
+   `normalizeCalendarDateToUtc`) never calls `.toUtc()`/`.toLocal()` — it
+   reads `.year`/`.month`/`.day` directly and re-wraps them as UTC
+   midnight. `startDate`, `endDate`, and every `scheduledDate` are
+   calendar dates and always go through it, at every write boundary
+   (`RecurringRuleRepository.createRule`/`updateRule`,
+   `RecurringOccurrenceRepository.postOccurrence`/`skipOccurrence`).
+   `createdAt`/`updatedAt`/`deletedAt`/`handledAt` are genuine instants
+   and use `.toUtc()` instead, same as every other table in this schema.
+
+4. **Handled-occurrence uniqueness is an application-layer invariant,
+   not a database-enforced one — the same precedent
+   `BudgetRepository`/`SavingsGoalRepository` already established.** At
+   most one `recurring_occurrences` row exists per (`ruleId`,
+   `scheduledDate`) pair, regardless of status. Both `postOccurrence` and
+   `skipOccurrence` check for ANY existing row for that pair before
+   writing, and re-check inside the `AppDatabase.transaction` block
+   immediately before the insert (defensive against a write landing
+   between the two checks) — throwing
+   `RecurringOccurrenceAlreadyHandledException` rather than creating a
+   second row. Posting an already-posted OR already-skipped occurrence
+   is rejected; skipping an already-posted OR already-skipped occurrence
+   is rejected. There is no "overwrite" path. Occurrences are never
+   pre-generated in bulk — `recurring_occurrences` only ever gains a row
+   when a specific scheduled date is explicitly posted or skipped;
+   "pending" (overdue/due-today/upcoming) items are always derived
+   on-the-fly from the rule's schedule plus whichever dates already have
+   a handled row (point 6), never materialized ahead of time.
+
+5. **Posting reuses the existing transaction-layer paths exactly — no
+   parallel calculation engine.** `RecurringOccurrenceRepository.postOccurrence`
+   creates the real ledger row via `TransactionRepository.recordExpense`/
+   `recordIncome`/`recordTransfer`, so every existing invariant
+   (same-currency transfer enforcement per ADR-019, transfers excluded
+   from income/spending totals per `FinanceEngine.incomeExpenseTotals`)
+   applies completely unchanged. The occurrence write and the
+   transaction write happen inside one `AppDatabase.transaction` block —
+   if either fails, both roll back together, so a failed post can never
+   leave a `transactions` row with no matching occurrence, or vice
+   versa. `recurring_rules.kind` is permanently fixed at creation
+   (`RecurringRuleRepository.updateRule` has no `kind` parameter) because
+   the account/currency shape expense/income (one account) and transfer
+   (source + destination, same currency, source != destination) require
+   is different enough that "editing" a rule's kind would really mean
+   replacing it with a different rule — this repository doesn't attempt
+   to support that implicitly. Editing a rule's schedule/amount/accounts
+   affects only future schedule calculations — it never rewrites an
+   already-written `recurring_occurrences` or `transactions` row, both
+   of which are immutable-once-created, keyed by their own id/
+   `scheduledDate`, never re-derived from the rule after the fact.
+
+6. **Pending items are always bounded, never scanned unboundedly.**
+   `recurringPendingItemsProvider` derives every overdue/due-today item
+   per rule via `RecurringSchedule.occurrencesInRange(fromUtc: rule.startDate,
+   toUtc: todayUtc)` (bounded by the schedule's own range accessor, not a
+   manual loop) minus whichever scheduled dates already have a handled
+   row, plus exactly one `nextOccurrenceAfter(todayUtc)` lookup for the
+   single nearest upcoming item — never a scan of the future. Handled
+   occurrences across a profile's active rules are derived the same
+   `asyncExpand`-off-the-active-rule-stream way ADR-022 point 9
+   established for savings-goal contributions (no SQL join, no rxdart),
+   re-subscribing automatically whenever the active rule set changes.
+
+7. **A soft-deleted rule is unavailable below the UI layer, the same
+   discipline ADR-022 point 8 established for savings goals.**
+   `RecurringRuleRepository.watchActiveRules`/`watchById`/
+   `requireActiveRule` all exclude a soft-deleted row; `postOccurrence`/
+   `skipOccurrence` both resolve the rule via `requireActiveRule`, so
+   neither can act on a deleted rule, independent of whatever the UI
+   already checks. A deleted rule's already-posted `transactions` rows
+   and already-handled `recurring_occurrences` rows are never
+   cascade-deleted or otherwise touched — they remain exactly as they
+   were, satisfying the task's "historical records preserved after rule
+   delete" requirement.
+
+8. **Home's recurring summary shows exactly one item, in its own
+   currency, and structurally cannot sum across currencies.**
+   `RecurringHomeSelection` carries an optional single
+   `RecurringPendingItem` (never a `Money` total field), selected by
+   `selectHomeRecurringItem` — a small, pure, non-Riverpod function
+   (same precedent as `selectHomeGoalSummary`) that simply takes the
+   first entry of `recurringPendingItemsProvider`'s own
+   overdue-then-today-then-nearest-upcoming ordering. Because the type
+   has no numeric total field at all, there is no code path that could
+   accidentally add two different currencies' amounts together — the
+   task's "must not sum mixed currencies... do not fabricate a converted
+   combined total" requirement is enforced by the shape of the data, not
+   by a runtime check that could be bypassed later.
+
+9. **No new bottom-nav item; no OS notifications yet.** `/recurring` is
+   the only new route, reached from the Profile screen's new "Recurring"
+   entry and the Home dashboard's new recurring summary card (empty /
+   single-item states), exactly mirroring how Budgets and Savings Goals
+   were integrated in Tasks 2 and 3. Reminder/notification scheduling is
+   explicitly out of scope for this task (Task 4B, once the deterministic
+   engine here is verified) — nothing in this feature registers a local
+   notification or background job.
+
+Status: Approved 2026-09-04 (Beta 1 Task 4A).

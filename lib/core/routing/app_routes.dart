@@ -4,7 +4,9 @@
 /// `budgets` was added in Beta 1 Task 2, once the budgets feature had a
 /// real screen to route to (see ADR-021); `goals`/`goalDetailPath` were
 /// added in Beta 1 Task 3 for the same reason, once the savings goals
-/// feature had real screens (see ADR-022). `fx`/`receipts` remain
+/// feature had real screens (see ADR-022). `recurring` was added in
+/// Beta 1 Task 4A for the same reason, once the recurring money feature
+/// had a real screen (see ADR-023). `fx`/`receipts` remain
 /// unrouted -- still no screens.
 abstract class AppRoutes {
   static const String onboarding = '/onboarding';
@@ -28,4 +30,8 @@ abstract class AppRoutes {
 
   /// The path for one goal's detail screen.
   static String goalDetail(String id) => '/goals/$id';
+
+  /// The recurring rules list -- Beta 1 Task 4A. See
+  /// `docs/14_DECISION_LOG.md` ADR-023.
+  static const String recurring = '/recurring';
 }

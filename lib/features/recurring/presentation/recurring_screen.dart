@@ -1,0 +1,721 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../../../core/database/app_database.dart';
+import '../../../core/database/providers.dart';
+import '../../../core/database/repositories/recurring_rule_repository.dart'
+    show
+        InvalidRecurringRuleAmountException,
+        InvalidRecurringRuleNameException,
+        RecurringRuleNotFoundException;
+import '../../../core/money/currency_mismatch_exception.dart';
+import '../../../core/money/money.dart';
+import '../../../core/money/money_formatter.dart';
+import '../../../shared/widgets/money_text_field.dart';
+import '../../accounts/presentation/account_providers.dart';
+import '../../categories/presentation/category_providers.dart';
+import '../domain/recurrence_frequency.dart';
+import '../domain/recurring_rule_kind.dart';
+import 'recurring_providers.dart';
+
+const MoneyFormatter _formatter = MoneyFormatter();
+
+/// The Beta 1 Task 4A recurring screen: every pending item (overdue, due
+/// today, or upcoming) derived from the profile's active
+/// [RecurringRuleRow]s, plus creating, editing, and deleting rules. See
+/// `docs/14_DECISION_LOG.md` ADR-023. Reached from the Profile screen's
+/// "Recurring" entry and the Home dashboard's recurring summary card --
+/// no new bottom-nav item, same precedent Budgets/Savings Goals set.
+class RecurringScreen extends ConsumerWidget {
+  const RecurringScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<List<RecurringPendingItem>> itemsAsync =
+        ref.watch(recurringPendingItemsProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Recurring')),
+      body: itemsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (Object e, StackTrace st) => Center(child: Text('Could not load recurring rules: $e')),
+        data: (List<RecurringPendingItem> items) {
+          if (items.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'No recurring rules yet. Tap + to add one.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+          final List<RecurringPendingItem> overdue =
+              items.where((i) => i.urgency == RecurringItemUrgency.overdue).toList();
+          final List<RecurringPendingItem> dueToday =
+              items.where((i) => i.urgency == RecurringItemUrgency.dueToday).toList();
+          final List<RecurringPendingItem> upcoming =
+              items.where((i) => i.urgency == RecurringItemUrgency.upcoming).toList();
+
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: <Widget>[
+              if (overdue.isNotEmpty) ...<Widget>[
+                const _SectionHeader(key: Key('sectionOverdue'), title: 'Overdue'),
+                for (final RecurringPendingItem item in overdue) _PendingItemTile(item: item),
+              ],
+              if (dueToday.isNotEmpty) ...<Widget>[
+                const _SectionHeader(key: Key('sectionDueToday'), title: 'Due today'),
+                for (final RecurringPendingItem item in dueToday) _PendingItemTile(item: item),
+              ],
+              if (upcoming.isNotEmpty) ...<Widget>[
+                const _SectionHeader(key: Key('sectionUpcoming'), title: 'Upcoming'),
+                for (final RecurringPendingItem item in upcoming) _PendingItemTile(item: item),
+              ],
+            ],
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        key: const Key('addRecurringRuleFab'),
+        onPressed: () => showDialog<void>(context: context, builder: (_) => const _RuleDialog()),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, super.key});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+/// One pending item: the underlying rule's summary plus urgency-specific
+/// styling, edit/delete for the rule, and post/skip for this specific
+/// scheduled date.
+class _PendingItemTile extends ConsumerStatefulWidget {
+  const _PendingItemTile({required this.item});
+  final RecurringPendingItem item;
+
+  @override
+  ConsumerState<_PendingItemTile> createState() => _PendingItemTileState();
+}
+
+class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
+  bool _isBusy = false;
+
+  String get _dateKey => widget.item.scheduledDateUtc.toIso8601String();
+
+  Future<void> _handle(Future<void> Function() action) async {
+    setState(() => _isBusy = true);
+    try {
+      await action();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Delete this recurring rule?'),
+        content: const Text(
+          'Its posted transactions and handled occurrence history are kept, but the rule '
+          'itself will no longer be active.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _handle(() => ref.read(recurringRuleRepositoryProvider).softDelete(widget.item.rule.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final RecurringRuleRow rule = widget.item.rule;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final Money amount = Money.fromMinorUnits(rule.amountMinorUnits, rule.currencyCode);
+
+    final (Color urgencyColor, String urgencyLabel) = switch (widget.item.urgency) {
+      RecurringItemUrgency.overdue => (colors.error, 'Overdue'),
+      RecurringItemUrgency.dueToday => (colors.primary, 'Due today'),
+      RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, 'Upcoming'),
+    };
+    final IconData kindIcon = switch (RecurringRuleKind.values.byName(rule.kind)) {
+      RecurringRuleKind.expense => Icons.trending_down_rounded,
+      RecurringRuleKind.income => Icons.trending_up_rounded,
+      RecurringRuleKind.transfer => Icons.swap_horiz_rounded,
+    };
+
+    return Card(
+      key: Key('pendingItem_${rule.id}_$_dateKey'),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(kindIcon, color: colors.onSurfaceVariant, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    rule.name,
+                    style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: urgencyColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    urgencyLabel,
+                    style: text.labelSmall?.copyWith(color: urgencyColor, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${_formatter.format(amount)} · ${DateFormat.yMMMd().format(widget.item.scheduledDateUtc)}',
+              style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 4,
+              children: <Widget>[
+                IconButton(
+                  key: Key('editRule_${rule.id}'),
+                  tooltip: 'Edit',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: _isBusy
+                      ? null
+                      : () => showDialog<void>(
+                            context: context,
+                            builder: (_) => _RuleDialog(existingRule: rule),
+                          ),
+                ),
+                IconButton(
+                  key: Key('deleteRule_${rule.id}'),
+                  tooltip: 'Delete',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: _isBusy ? null : _confirmDelete,
+                ),
+                OutlinedButton(
+                  key: Key('skipOccurrence_${rule.id}_$_dateKey'),
+                  onPressed: _isBusy
+                      ? null
+                      : () => _handle(
+                            () => ref.read(recurringOccurrenceRepositoryProvider).skipOccurrence(
+                                  ruleId: rule.id,
+                                  scheduledDateUtc: widget.item.scheduledDateUtc,
+                                ),
+                          ),
+                  child: const Text('Skip'),
+                ),
+                FilledButton(
+                  key: Key('postOccurrence_${rule.id}_$_dateKey'),
+                  onPressed: _isBusy
+                      ? null
+                      : () => _handle(
+                            () => ref.read(recurringOccurrenceRepositoryProvider).postOccurrence(
+                                  ruleId: rule.id,
+                                  scheduledDateUtc: widget.item.scheduledDateUtc,
+                                ),
+                          ),
+                  child: const Text('Post'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Create (no [existingRule]) or edit (an active [existingRule]) a
+/// recurring rule. [RecurringRuleKind] is chosen only when creating --
+/// see `RecurringRuleRepository.updateRule`'s doc comment for why it's
+/// permanently fixed afterward.
+class _RuleDialog extends ConsumerStatefulWidget {
+  const _RuleDialog({this.existingRule});
+  final RecurringRuleRow? existingRule;
+
+  @override
+  ConsumerState<_RuleDialog> createState() => _RuleDialogState();
+}
+
+class _RuleDialogState extends ConsumerState<_RuleDialog> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _intervalController;
+  late final TextEditingController _noteController;
+  late RecurringRuleKind _kind;
+  late RecurrenceFrequency _frequency;
+  String? _accountId;
+  String? _destinationAccountId;
+  String? _categoryId;
+  Money? _parsedAmount;
+  DateTime? _startDate;
+  DateTime? _endDate;
+  bool _isSaving = false;
+  String? _errorMessage;
+
+  bool get _isEditing => widget.existingRule != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final RecurringRuleRow? existing = widget.existingRule;
+    _nameController = TextEditingController(text: existing?.name ?? '');
+    _intervalController = TextEditingController(text: '${existing?.interval ?? 1}');
+    _noteController = TextEditingController(text: existing?.note ?? '');
+    _kind = existing == null ? RecurringRuleKind.expense : RecurringRuleKind.values.byName(existing.kind);
+    _frequency = existing == null
+        ? RecurrenceFrequency.monthly
+        : RecurrenceFrequency.values.byName(existing.frequency);
+    _accountId = existing?.accountId;
+    _destinationAccountId = existing?.destinationAccountId;
+    _categoryId = existing?.categoryId;
+    _startDate = existing?.startDate ?? DateTime.now().toUtc();
+    _endDate = existing?.endDate;
+    // `MoneyTextField` only calls `onParsed` in response to the user
+    // typing (see its `onChanged: _tryParse`) or a currency change via
+    // `didUpdateWidget` -- it never parses its own `initialValue` on
+    // first build. Without seeding `_parsedAmount` here, editing an
+    // existing rule without touching the amount field left it `null`,
+    // which made `_submit` silently return at its
+    // `if (amount == null || ...) return;` guard -- Save appeared to do
+    // nothing and the dialog never closed.
+    _parsedAmount =
+        existing == null ? null : Money.fromMinorUnits(existing.amountMinorUnits, existing.currencyCode);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _intervalController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final DateTime now = DateTime.now();
+    final DateTime initial = (isStart ? _startDate : _endDate) ?? now;
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 50),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _startDate = picked;
+        } else {
+          _endDate = picked;
+        }
+      });
+    }
+  }
+
+  /// Destination accounts eligible for a transfer FROM
+  /// [sourceAccountId]: not the source account itself, and the same
+  /// currency -- Beta 1 Task 4A does not support FX/cross-currency
+  /// recurring transfers (see
+  /// `RecurringRuleRepository._validateAccounts`, which enforces this
+  /// independently of this filter and remains the authoritative check;
+  /// this is convenience-only, same precedent as
+  /// `_DestinationAccountDropdown` in `add_transaction_screen.dart`
+  /// (ADR-019)). [accounts] is already profile-scoped, active-only
+  /// via `accountsProvider`, so no further eligibility filtering is
+  /// needed here.
+  List<AccountRow> _eligibleDestinationAccounts(List<AccountRow> accounts, String? sourceAccountId) {
+    AccountRow? source;
+    for (final AccountRow candidate in accounts) {
+      if (candidate.id == sourceAccountId) {
+        source = candidate;
+        break;
+      }
+    }
+    // Copied to a non-nullable local before the closure below -- Dart
+    // does not carry null-promotion of a captured variable into a
+    // closure.
+    final AccountRow? sourceAccount = source;
+    if (sourceAccount == null) return const <AccountRow>[];
+    return accounts
+        .where((a) => a.id != sourceAccount.id && a.currencyCode == sourceAccount.currencyCode)
+        .toList(growable: false);
+  }
+
+  Future<void> _submit(List<AccountRow> accounts) async {
+    setState(() => _errorMessage = null);
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final Money? amount = _parsedAmount;
+    final String? accountId = _accountId;
+    final DateTime? startDate = _startDate;
+    if (amount == null || accountId == null || startDate == null) return;
+    if (_kind == RecurringRuleKind.transfer && _destinationAccountId == null) {
+      setState(() => _errorMessage = 'Choose a destination account.');
+      return;
+    }
+    final int? interval = int.tryParse(_intervalController.text.trim());
+    if (interval == null) return;
+
+    setState(() => _isSaving = true);
+    try {
+      final String note = _noteController.text.trim();
+      if (_isEditing) {
+        await ref.read(recurringRuleRepositoryProvider).updateRule(
+              id: widget.existingRule!.id,
+              name: _nameController.text,
+              amount: amount,
+              accountId: accountId,
+              destinationAccountId: _kind == RecurringRuleKind.transfer
+                  ? Value<String?>(_destinationAccountId)
+                  : const Value<String?>.absent(),
+              categoryId: _kind == RecurringRuleKind.transfer
+                  ? const Value<String?>(null)
+                  : Value<String?>(_categoryId),
+              note: Value<String?>(note.isEmpty ? null : note),
+              frequency: _frequency,
+              interval: interval,
+              startDate: startDate,
+              endDate: Value<DateTime?>(_endDate),
+            );
+      } else {
+        final ProfileRow? profile = await ref.read(profileRepositoryProvider).getProfile();
+        if (profile == null) return;
+        await ref.read(recurringRuleRepositoryProvider).createRule(
+              profileId: profile.id,
+              kind: _kind,
+              name: _nameController.text,
+              amount: amount,
+              accountId: accountId,
+              destinationAccountId: _kind == RecurringRuleKind.transfer ? _destinationAccountId : null,
+              categoryId: _kind == RecurringRuleKind.transfer ? null : _categoryId,
+              note: note.isEmpty ? null : note,
+              frequency: _frequency,
+              interval: interval,
+              startDate: startDate,
+              endDate: _endDate,
+            );
+      }
+      if (mounted) Navigator.of(context).pop();
+    } on CurrencyMismatchException catch (e) {
+      // Belt-and-braces: the destination dropdown already only offers
+      // same-currency accounts (see `_eligibleDestinationAccounts`
+      // above), but the repository enforces this independently -- see
+      // `RecurringRuleRepository._validateAccounts` -- so surface its
+      // rejection cleanly rather than letting it crash the dialog. This
+      // is exactly the bug manual Android testing found: Save appeared
+      // unresponsive because this exception was previously unhandled.
+      setState(() {
+        _errorMessage = "Transfers between different currencies aren't supported yet "
+            '(${e.currencyCodeA} → ${e.currencyCodeB}).';
+      });
+    } on InvalidRecurringRuleAmountException catch (e) {
+      setState(() => _errorMessage = e.toString());
+    } on InvalidRecurringRuleNameException catch (e) {
+      setState(() => _errorMessage = e.toString());
+    } on RecurringRuleNotFoundException catch (e) {
+      setState(() => _errorMessage = e.toString());
+    } on ArgumentError catch (e) {
+      // Covers the repository's own input-validation checks that use
+      // `ArgumentError` (interval, end date, same source/destination
+      // account, unsupported currency) -- see
+      // `RecurringRuleRepository._validateAccounts`/`_validateInterval`/
+      // `_validateDateRange`. Deliberately NOT a bare `catch` -- an
+      // unexpected error (a real bug) should still surface as an
+      // unhandled exception rather than being swallowed here.
+      setState(() => _errorMessage = (e.message ?? 'Invalid value.').toString());
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+    final List<AccountRow> accounts = accountsAsync.valueOrNull ?? const <AccountRow>[];
+    final AccountRow? selectedAccount =
+        accounts.where((a) => a.id == _accountId).cast<AccountRow?>().firstWhere(
+              (a) => true,
+              orElse: () => accounts.isEmpty ? null : accounts.first,
+            );
+    final String amountCurrency = selectedAccount?.currencyCode ?? 'JPY';
+    final String categoryType = _kind == RecurringRuleKind.income ? 'income' : 'expense';
+    final AsyncValue<List<CategoryRow>> categoriesAsync =
+        ref.watch(categoriesForTypeProvider(categoryType));
+    final List<AccountRow> eligibleDestinationAccounts = _kind == RecurringRuleKind.transfer
+        ? _eligibleDestinationAccounts(accounts, _accountId)
+        : const <AccountRow>[];
+    // Only meaningful once a source account is actually chosen -- before
+    // that, the source dropdown's own "Choose an account." validator is
+    // what blocks Save, not this.
+    final bool noEligibleDestination =
+        _kind == RecurringRuleKind.transfer && _accountId != null && eligibleDestinationAccounts.isEmpty;
+    final Widget? destinationField = _kind != RecurringRuleKind.transfer || _accountId == null
+        ? null
+        : eligibleDestinationAccounts.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'No same-currency destination accounts available.',
+                  key: const Key('noEligibleDestinationMessage'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              )
+            : DropdownButtonFormField<String>(
+                key: const Key('recurringDestinationAccountDropdown'),
+                initialValue: eligibleDestinationAccounts.any((a) => a.id == _destinationAccountId)
+                    ? _destinationAccountId
+                    : null,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Destination account'),
+                items: <DropdownMenuItem<String>>[
+                  for (final AccountRow account in eligibleDestinationAccounts)
+                    DropdownMenuItem<String>(
+                      value: account.id,
+                      child: Text(
+                        '${account.name} (${account.currencyCode})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (String? v) => setState(() => _destinationAccountId = v),
+                validator: (String? v) => v == null ? 'Choose a destination account.' : null,
+              );
+
+    return AlertDialog(
+      title: Text(_isEditing ? 'Edit recurring rule' : 'New recurring rule'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              if (!_isEditing)
+                DropdownButtonFormField<RecurringRuleKind>(
+                  key: const Key('recurringKindDropdown'),
+                  initialValue: _kind,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Type'),
+                  items: <DropdownMenuItem<RecurringRuleKind>>[
+                    for (final RecurringRuleKind kind in RecurringRuleKind.values)
+                      DropdownMenuItem<RecurringRuleKind>(
+                        value: kind,
+                        child: Text(kind.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (RecurringRuleKind? v) => setState(() {
+                    _kind = v ?? _kind;
+                    _categoryId = null;
+                    _destinationAccountId = null;
+                  }),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('Type: ${_kind.name}', style: Theme.of(context).textTheme.bodyMedium),
+                ),
+              TextFormField(
+                key: const Key('recurringNameField'),
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+                validator: (String? v) =>
+                    (v == null || v.trim().isEmpty) ? 'Enter a name for this rule.' : null,
+              ),
+              DropdownButtonFormField<String>(
+                key: const Key('recurringAccountDropdown'),
+                initialValue: accounts.any((a) => a.id == _accountId) ? _accountId : null,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: _kind == RecurringRuleKind.transfer ? 'Source account' : 'Account',
+                ),
+                items: <DropdownMenuItem<String>>[
+                  for (final AccountRow account in accounts)
+                    DropdownMenuItem<String>(
+                      value: account.id,
+                      child: Text(
+                        '${account.name} (${account.currencyCode})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (String? v) => setState(() {
+                  _accountId = v;
+                  // Requirement 2: if the previously selected destination
+                  // is no longer eligible under the new source account
+                  // (different account, different currency), clear it --
+                  // never leave a stale, now-invalid destination selected
+                  // just because the dropdown itself re-renders without
+                  // it as an option.
+                  final List<AccountRow> stillEligible = _eligibleDestinationAccounts(accounts, v);
+                  if (_destinationAccountId != null &&
+                      !stillEligible.any((a) => a.id == _destinationAccountId)) {
+                    _destinationAccountId = null;
+                  }
+                }),
+                validator: (String? v) => v == null ? 'Choose an account.' : null,
+              ),
+              if (destinationField != null) destinationField,
+              if (_kind != RecurringRuleKind.transfer)
+                categoriesAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (Object e, StackTrace st) => const SizedBox.shrink(),
+                  data: (List<CategoryRow> categories) => DropdownButtonFormField<String?>(
+                    key: const Key('recurringCategoryDropdown'),
+                    initialValue: categories.any((c) => c.id == _categoryId) ? _categoryId : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Category (optional)'),
+                    items: <DropdownMenuItem<String?>>[
+                      const DropdownMenuItem<String?>(value: null, child: Text('None')),
+                      for (final CategoryRow category in categories)
+                        DropdownMenuItem<String?>(
+                          value: category.id,
+                          child: Text(category.name, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: (String? v) => setState(() => _categoryId = v),
+                  ),
+                ),
+              MoneyTextField(
+                key: const Key('recurringAmountField'),
+                currencyCode: amountCurrency,
+                label: 'Amount',
+                initialValue: widget.existingRule == null
+                    ? null
+                    : Money.fromMinorUnits(widget.existingRule!.amountMinorUnits, amountCurrency)
+                        .toMajorUnitsString(),
+                onParsed: (Money? m) => _parsedAmount = m,
+              ),
+              DropdownButtonFormField<RecurrenceFrequency>(
+                key: const Key('recurringFrequencyDropdown'),
+                initialValue: _frequency,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Frequency'),
+                items: <DropdownMenuItem<RecurrenceFrequency>>[
+                  for (final RecurrenceFrequency freq in RecurrenceFrequency.values)
+                    DropdownMenuItem<RecurrenceFrequency>(
+                      value: freq,
+                      child: Text(freq.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (RecurrenceFrequency? v) => setState(() => _frequency = v ?? _frequency),
+              ),
+              TextFormField(
+                key: const Key('recurringIntervalField'),
+                controller: _intervalController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Every N (interval)'),
+                validator: (String? v) {
+                  final int? parsed = int.tryParse((v ?? '').trim());
+                  if (parsed == null || parsed < 1) return 'Enter a whole number of 1 or more.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                key: const Key('pickRecurringStartDate'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  _startDate == null
+                      ? 'Choose a start date'
+                      : 'Start date: ${DateFormat.yMMMd().format(_startDate!)}',
+                ),
+                trailing: const Icon(Icons.calendar_today_outlined),
+                onTap: () => _pickDate(isStart: true),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  _endDate == null
+                      ? 'No end date'
+                      : 'End date: ${DateFormat.yMMMd().format(_endDate!)}',
+                ),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: <Widget>[
+                    TextButton(
+                      key: const Key('pickRecurringEndDate'),
+                      onPressed: () => _pickDate(isStart: false),
+                      child: const Text('Choose'),
+                    ),
+                    if (_endDate != null)
+                      IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Clear end date',
+                        onPressed: () => setState(() => _endDate = null),
+                      ),
+                  ],
+                ),
+              ),
+              TextFormField(
+                controller: _noteController,
+                decoration: const InputDecoration(labelText: 'Note (optional)'),
+              ),
+              if (_errorMessage != null) ...<Widget>[
+                const SizedBox(height: 12),
+                Text(
+                  _errorMessage!,
+                  key: const Key('recurringFormErrorMessage'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('saveRecurringRule'),
+          onPressed: (_isSaving || noEligibleDestination) ? null : () => _submit(accounts),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}

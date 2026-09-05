@@ -3,12 +3,16 @@ import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/budget_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_contribution_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
 import 'package:ai_financial_coach/features/dashboard/presentation/home_screen.dart';
+import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequency.dart';
+import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,6 +102,10 @@ void main() {
         GoRoute(
           path: AppRoutes.goals,
           builder: (context, state) => const Scaffold(body: Text('GOALS_SCREEN_STUB')),
+        ),
+        GoRoute(
+          path: AppRoutes.recurring,
+          builder: (context, state) => const Scaffold(body: Text('RECURRING_SCREEN_STUB')),
         ),
       ],
     );
@@ -384,7 +392,8 @@ void main() {
   );
 
   testWidgets(
-    'the upcoming commitments card shows a polished empty state',
+    'the recurring card shows a polished empty state with a working call-to-action when no '
+    'rule exists yet, and tapping it routes to the recurring screen',
     (tester) async {
       useTallSurface(tester);
       final AppDatabase db = await seededDb(
@@ -397,12 +406,132 @@ void main() {
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
-      await tester.pumpWidget(appWithHome(container));
+      await tester.pumpWidget(appWithRouter(container));
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.event_note_outlined), findsOneWidget);
-      expect(find.text('No upcoming commitments yet.'), findsOneWidget);
-      expect(find.text('Recurring bills and scheduled payments will appear here.'), findsOneWidget);
+      expect(find.text('Recurring'), findsOneWidget);
+      expect(find.text('No recurring bills or income set up yet.'), findsOneWidget);
+
+      final Finder ctaFinder = find.widgetWithText(OutlinedButton, 'Set up recurring');
+      expect(ctaFinder, findsOneWidget);
+      await tester.tap(ctaFinder);
+      await tester.pumpAndSettle();
+      expect(find.text('RECURRING_SCREEN_STUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a due-today recurring rule renders as the single Home summary item -- never a summed '
+    'total -- and "View all" routes to the recurring screen',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      // Deterministic one-shot lookup instead of a reactive .watch()
+      // stream -- AccountRepository.watchActiveForProfile(...).first
+      // hangs when used as pre-widget test setup under testWidgets'
+      // FakeAsync test zone. Same predicate shape as
+      // watchActiveForProfile, built with .get() instead of .watch() so
+      // no QueryStream is ever registered during test setup.
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow account = (await accountQuery.get()).first;
+      final DateTime todayUtc = DateTime.now().toUtc();
+      await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        // `!` still required here: the null-check on `profile` used to
+        // build accountQuery's predicate lives inside a `where((tbl) =>
+        // ...)` closure, and Dart's flow-analysis promotion does not
+        // escape a closure back to the enclosing method body.
+        profileId: profile!.id,
+        kind: RecurringRuleKind.expense,
+        name: 'Rent',
+        amount: Money.fromMinorUnits(80000, 'JPY'), // ¥80,000
+        accountId: account.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No recurring bills or income set up yet.'), findsNothing);
+      expect(find.text('Rent'), findsOneWidget);
+      expect(find.text('¥80,000'), findsOneWidget);
+      expect(find.text('Due today'), findsOneWidget);
+      expect(find.byKey(const Key('viewAllRecurringButton')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('viewAllRecurringButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('RECURRING_SCREEN_STUB'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'the recurring card lays out without overflow on a narrow (320px-wide) screen with a '
+    'due-today item shown',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      // Deterministic one-shot lookup -- see the same fix in the
+      // due-today test above for why watchActiveForProfile(...).first
+      // was replaced here too.
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow account = (await accountQuery.get()).first;
+      final DateTime todayUtc = DateTime.now().toUtc();
+      await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        // Same reason as the due-today test above: the closure-scoped
+        // null-check doesn't promote `profile` in this outer scope.
+        profileId: profile!.id,
+        kind: RecurringRuleKind.expense,
+        name: 'A rather long recurring rule name to stress narrow-width layout',
+        amount: Money.fromMinorUnits(80000, 'JPY'),
+        accountId: account.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      final Object? overflowException = tester.takeException();
+      if (overflowException != null) {
+        fail('Narrow-screen (320px) recurring card layout threw an exception:\n\n$overflowException');
+      }
     },
   );
 

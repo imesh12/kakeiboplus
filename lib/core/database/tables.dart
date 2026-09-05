@@ -299,6 +299,135 @@ class SavingsGoalContributions extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// A recurring schedule/template -- Beta 1 Task 4A. See
+/// `docs/14_DECISION_LOG.md` ADR-023 and
+/// `lib/features/recurring/domain/`. This table is a schedule only: it
+/// never affects account balances, income/expense totals, budgets,
+/// goals, or dashboard totals by itself -- only an explicitly posted
+/// [RecurringOccurrences] row (which creates a real [Transactions] row)
+/// does that. Nothing auto-posts a transaction from this table.
+@DataClassName('RecurringRuleRow')
+class RecurringRules extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// 'expense' | 'income' | 'transfer' -- see
+  /// `lib/features/recurring/domain/recurring_rule_kind.dart`.
+  TextColumn get kind => text()();
+
+  /// Trimmed, non-empty label -- e.g. "Rent", "Salary".
+  TextColumn get name => text()();
+
+  /// Money, stored as integer minor units -- see ADR-017. Always
+  /// strictly positive; `RecurringRuleRepository` rejects a zero or
+  /// negative amount before it ever reaches this table.
+  IntColumn get amountMinorUnits => integer()();
+  TextColumn get currencyCode => text().references(Currencies, #code)();
+
+  /// The one account for 'expense'/'income'; the SOURCE account for a
+  /// 'transfer'. `RecurringRuleRepository` enforces this account's
+  /// currency matches [currencyCode].
+  TextColumn get accountId => text().references(Accounts, #id)();
+
+  /// Set only for `kind == 'transfer'` -- the destination account.
+  /// `RecurringRuleRepository` enforces it differs from [accountId] and
+  /// shares its currency (and [currencyCode]) -- cross-currency
+  /// recurring transfers are rejected, same as
+  /// `TransactionRepository.recordTransfer` (ADR-019).
+  TextColumn get destinationAccountId => text().nullable().references(Accounts, #id)();
+
+  /// Never set for a transfer (transfers are never categorized -- same
+  /// convention as `Transactions.categoryId`).
+  TextColumn get categoryId => text().nullable().references(Categories, #id)();
+  TextColumn get note => text().nullable()();
+
+  /// 'daily' | 'weekly' | 'monthly' | 'yearly' -- see
+  /// `lib/features/recurring/domain/recurrence_frequency.dart`.
+  TextColumn get frequency => text()();
+
+  /// Repeat every [interval] units of [frequency] -- e.g. `frequency:
+  /// 'weekly', interval: 2` is "every 2 weeks". Always `>= 1`.
+  IntColumn get interval => integer().withDefault(const Constant(1))();
+
+  /// Calendar date only (year/month/day -- no meaningful time-of-day
+  /// component), normalized via
+  /// `lib/features/recurring/domain/recurring_schedule.dart`'s
+  /// `normalizeRecurringDate` -- same "never `.toUtc()` a picked local
+  /// date" reasoning as `SavingsGoals.targetDate`. Inclusive -- always
+  /// the schedule's first occurrence.
+  DateTimeColumn get startDate => dateTime()();
+
+  /// Calendar date only, same normalization as [startDate]. Inclusive,
+  /// if set -- the last calendar date an occurrence may fall on. `null`
+  /// means the schedule never ends.
+  DateTimeColumn get endDate => dateTime().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete -- same convention as `Accounts`/`Transactions`/
+  /// `Budgets`/`SavingsGoals`. A deleted rule is excluded from every
+  /// active/upcoming provider and can never post a new occurrence again
+  /// (`RecurringOccurrenceRepository.postOccurrence` requires an active
+  /// rule); its already-posted `Transactions` rows and already-handled
+  /// `RecurringOccurrences` rows are untouched.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// Forward-compatible per ADR-020's precedent -- inert until Stage 6
+  /// (cloud/sync). Beta 1 always writes 0 / "localOnly" and never reads
+  /// these outside of that constant.
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// One [RecurringRules] scheduled date that has actually been handled --
+/// Beta 1 Task 4A. A *pending/due* occurrence is never a row here: it is
+/// derived on the fly from a rule's schedule (see
+/// `lib/features/recurring/presentation/recurring_providers.dart`). A
+/// row only ever exists once the user posted or explicitly skipped that
+/// scheduled date -- see `docs/14_DECISION_LOG.md` ADR-023.
+///
+/// `RecurringOccurrenceRepository` enforces, at the application layer
+/// (same precedent as `BudgetRepository`'s one-active-row-per-key rule),
+/// that at most one row exists per (`ruleId`, `scheduledDate`) pair --
+/// posting or skipping an already-handled occurrence (in either status)
+/// is rejected rather than creating a second row or silently
+/// overwriting the first.
+@DataClassName('RecurringOccurrenceRow')
+class RecurringOccurrences extends Table {
+  TextColumn get id => text()();
+  TextColumn get ruleId => text().references(RecurringRules, #id)();
+
+  /// The calendar date (year/month/day only) this occurrence is
+  /// scheduled for -- normalized the same way as
+  /// `RecurringRules.startDate`. Never rewritten after insert.
+  DateTimeColumn get scheduledDate => dateTime()();
+
+  /// 'posted' | 'skipped' -- see
+  /// `lib/features/recurring/domain/recurring_occurrence_status.dart`.
+  TextColumn get status => text()();
+
+  /// Set if and only if [status] is 'posted' -- the real `Transactions`
+  /// row this occurrence created via
+  /// `RecurringOccurrenceRepository.postOccurrence`. Always `null` for a
+  /// 'skipped' occurrence.
+  TextColumn get transactionId => text().nullable().references(Transactions, #id)();
+
+  DateTimeColumn get handledAt => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Forward-compatible per ADR-020's precedent -- inert until Stage 6
+  /// (cloud/sync).
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 /// Reserved per ADR-020 / ADR-009 — the historical-FX-snapshot invariant
 /// depends on this table's shape existing, but Beta 0 never writes to it
 /// (no FX provider integration, live conversion, or rate fetching is
