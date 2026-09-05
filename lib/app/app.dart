@@ -6,19 +6,66 @@ import 'package:go_router/go_router.dart';
 
 import '../core/database/providers.dart';
 import '../core/routing/app_router.dart';
+import '../features/recurring/presentation/recurring_notification_providers.dart';
 import '../shared/theme/app_theme.dart';
 
-/// App root: wires up `MaterialApp.router` with the Beta 0 [GoRouter]
-/// and seeds system categories once the database is available.
-class AiFinancialCoachApp extends ConsumerWidget {
+/// App root: wires up `MaterialApp.router` with the Beta 0 [GoRouter],
+/// seeds system categories once the database is available, and (Beta 1
+/// Task 4B) reconciles recurring reminder notifications.
+///
+/// A [ConsumerStatefulWidget] rather than the simpler [ConsumerWidget]
+/// specifically so it can be a [WidgetsBindingObserver] -- Task 4B
+/// correction 2 requires reconciling on app foreground/resume (in
+/// addition to cold start and rule/occurrence data changes, which
+/// [recurringNotificationReconcilerProvider] already reacts to on its
+/// own via Riverpod), and `didChangeAppLifecycleState` is the standard
+/// Flutter hook for that without a background worker/isolate -- Beta 1
+/// deliberately has neither (same correction). No other behavior here
+/// changes; this is the minimal shape needed for that one hook.
+class AiFinancialCoachApp extends ConsumerStatefulWidget {
   const AiFinancialCoachApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AiFinancialCoachApp> createState() => _AiFinancialCoachAppState();
+}
+
+class _AiFinancialCoachAppState extends ConsumerState<AiFinancialCoachApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Invalidating forces recurringNotificationReconcilerProvider's
+      // body to re-run against a fresh `DateTime.now()` even when
+      // nothing about the rules/occurrences themselves changed while
+      // backgrounded -- see that provider's doc comment.
+      ref.invalidate(recurringNotificationReconcilerProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Fire-and-forget: idempotent (insertOrIgnore — see
     // CategoryRepository.seedSystemCategoriesIfNeeded), safe to call on
     // every app start.
     unawaited(ref.watch(categoryRepositoryProvider).seedSystemCategoriesIfNeeded());
+
+    // Instantiates (once) and keeps alive the Beta 1 Task 4B recurring
+    // reminder reconciler -- see that provider's doc comment for why a
+    // single `ref.watch` here is enough for it to keep reacting to
+    // rule/occurrence changes for the rest of the app's lifetime.
+    ref.watch(recurringNotificationReconcilerProvider);
 
     final GoRouter router = ref.watch(routerProvider);
 

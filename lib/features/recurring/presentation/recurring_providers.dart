@@ -55,7 +55,12 @@ final StreamProvider<List<RecurringRuleRow>> activeRecurringRulesProvider =
 });
 
 /// Every handled occurrence across every one of the current profile's
-/// currently-active rules, reactively.
+/// currently-active rules, reactively. Public (not `_`-prefixed) since
+/// Beta 1 Task 4B's notification reconciliation
+/// (`recurring_notification_providers.dart`) also watches this --
+/// posting or skipping an occurrence must cancel its exact pending
+/// reminder, so that layer needs the same handled-occurrence data this
+/// screen's pending-items computation already does.
 ///
 /// Watches [activeRecurringRulesProvider]'s VALUE (not its `.stream`) so
 /// that Riverpod's own dependency graph re-subscribes to
@@ -71,7 +76,7 @@ final StreamProvider<List<RecurringRuleRow>> activeRecurringRulesProvider =
 /// -- a rule created afterward was silently never added to `ruleIds`.
 /// See the "MANUAL TASK4A BUG FOUND" investigation for the full runtime
 /// evidence that diagnosed this.
-final StreamProvider<List<RecurringOccurrenceRow>> _handledOccurrencesProvider =
+final StreamProvider<List<RecurringOccurrenceRow>> handledOccurrencesProvider =
     StreamProvider<List<RecurringOccurrenceRow>>((ref) {
   final List<RecurringRuleRow> rules =
       ref.watch(activeRecurringRulesProvider).valueOrNull ?? const <RecurringRuleRow>[];
@@ -165,7 +170,7 @@ int _urgencyRank(RecurringItemUrgency urgency) => switch (urgency) {
 final Provider<AsyncValue<List<RecurringPendingItem>>> recurringPendingItemsProvider =
     Provider<AsyncValue<List<RecurringPendingItem>>>((ref) {
   final AsyncValue<List<RecurringRuleRow>> rulesAsync = ref.watch(activeRecurringRulesProvider);
-  final AsyncValue<List<RecurringOccurrenceRow>> handledAsync = ref.watch(_handledOccurrencesProvider);
+  final AsyncValue<List<RecurringOccurrenceRow>> handledAsync = ref.watch(handledOccurrencesProvider);
 
   if (rulesAsync.isLoading || handledAsync.isLoading) {
     return const AsyncValue<List<RecurringPendingItem>>.loading();

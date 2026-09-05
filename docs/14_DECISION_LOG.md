@@ -721,3 +721,172 @@ specification required.
    notification or background job.
 
 Status: Approved 2026-09-04 (Beta 1 Task 4A).
+
+## ADR-024 — Beta 1 Task 4B recurring local reminders: opt-in notifications, a scheduler abstraction, and reconciliation-not-a-worker
+
+Decision: local (never remote/push) reminder notifications for recurring
+rules are added on top of Task 4A's schedule engine without changing its
+math, and without ever letting a notification post a transaction itself.
+
+1. **Schema version 5 adds exactly one column —
+   `recurring_rules.notifications_enabled` (bool, default `false`) — via
+   `onUpgrade`, not `onCreate`.** Every pre-existing row backfills to
+   `false`: nobody is retroactively opted in just because the column now
+   exists. `recurring_occurrences` gains nothing — a notification is a
+   property of the RULE's preference, not of any one occurrence, and
+   Task 4B never needed to record per-occurrence notification state (see
+   point 4). `RecurringRuleRepository.createRule`/`updateRule` both grow
+   this field additively (`createRule`'s new parameter defaults to
+   `false`; `updateRule`'s is a `Value<bool>` sentinel, "leave unchanged"
+   when omitted) — every existing call site keeps compiling unchanged. A
+   migration test (`test/core/database/
+   recurring_notifications_migration_test.dart`) builds a v4 database by
+   hand, seeds a rule, opens it with the real (v5) `AppDatabase`, and
+   asserts the pre-existing rule reads back with `notificationsEnabled
+   == false` and a newly-created rule can set it to `true`.
+
+2. **A `NotificationScheduler` abstraction is the ONLY thing any
+   recurring provider/repository/domain file depends on —
+   `flutter_local_notifications`/`timezone`/`flutter_timezone` are
+   imported by exactly one file, `lib/core/notifications/
+   local_notification_scheduler.dart`.**
+   `lib/core/notifications/notification_scheduler.dart` declares the
+   interface (`schedule`/`cancel`/`pendingIds`/`permissionStatus`/
+   `requestPermission`) plus the `ScheduledReminder` value type it
+   operates on. `ScheduledReminder` deliberately carries a calendar date
+   (`scheduledDateUtc`), never a precise instant or a `TZDateTime` —
+   converting "this UTC calendar date" into "09:00 in the device's
+   current local timezone, DST-safe" happens entirely inside
+   `LocalNotificationScheduler.schedule` via
+   `tz.TZDateTime(location, year, month, day, 9)`, whose constructor
+   resolves that correctly across a DST transition on its own. This is
+   what keeps the pure recurring reminder planner (point 3) and the
+   Riverpod reconciliation layer (point 4) free of any timezone-package
+   dependency, not just the plugin itself. `notification_providers.dart`
+   exposes it as a plain (non-`autoDispose`) `Provider`, overridable with
+   an in-memory fake in every test (`test/support/
+   fake_notification_scheduler.dart`) — no test in this feature needs a
+   real device.
+
+3. **A pure `recurring_reminder_planner.dart` decides WHICH dates want a
+   reminder; it has no I/O, no plugin awareness, and no platform-id
+   concept.** `planDesiredReminders` takes active rules (as a small
+   `RecurringReminderRuleInput` — deliberately not a `RecurringRuleRow`,
+   same Drift-independence `RecurringSchedule` itself already has),
+   already-handled occurrence keys, "now", and a horizon, and returns
+   every `DesiredReminder` (rule + calendar date + plain content fields).
+   For each rule with `notificationsEnabled == true`, it includes every
+   occurrence from today (inclusive) through a **fixed 14-day horizon**
+   — long enough that even a monthly/yearly rule's reminder is always
+   scheduled well before it's due, short enough that reconciling on
+   lifecycle events (point 4) rather than a background worker never
+   meaningfully falls behind, bounding the OS-level pending-notification
+   count to `activeRules.length * 14`. It deliberately EXCLUDES anything
+   strictly before today ("overdue") — that backlog is already surfaced
+   in-app by `recurringPendingItemsProvider`; a local reminder is for
+   something not yet due, not a second nag about something the Overdue
+   list already shows. Both **posted and skipped** occurrences remove a
+   date from the desired set equally (`HandledOccurrenceKey` carries no
+   status) — the user has dealt with it either way, so neither should
+   still ring.
+
+4. **Notification-id collisions are resolved explicitly, never trusted
+   to a bare hash.** `NotificationIdAllocator`
+   (`lib/core/notifications/notification_id_allocator.dart`) computes an
+   FNV-1a-based base id per `(ruleId, scheduledDateUtc)`, but a single
+   `allocate()` call first sorts every key (so the outcome never depends
+   on caller iteration order — the same desired set always allocates the
+   same ids) and then, walking that sorted order, linearly probes
+   forward past any id already claimed earlier in the same pass. Every
+   key handed to one `allocate()` call is therefore GUARANTEED a distinct
+   id, not merely "usually" one. Kept as its own class, entirely outside
+   `RecurringSchedule` and the planner — id allocation is a
+   notification-scheduling/platform-boundary concern, never recurrence
+   mathematics. Its base-id function is injectable specifically so a
+   test (`test/core/notifications/notification_id_allocator_test.dart`)
+   can force real collisions deterministically rather than hoping to
+   find two strings that happen to hash the same.
+
+5. **Reconciliation is one algorithm, re-run in full on four triggers,
+   never a background worker.** `reconcileRecurringReminders`
+   (`lib/features/recurring/presentation/
+   recurring_notification_providers.dart`) computes the full desired set
+   (point 3), allocates ids (point 4), calls `scheduler.schedule` for
+   EVERY desired reminder unconditionally, then cancels every currently-
+   pending id `scheduler.pendingIds()` reports that is no longer
+   desired. Re-scheduling the full set every pass — rather than diffing
+   content itself — is what makes every one of the following fall out of
+   ONE algorithm rather than needing separate cases: editing a rule's
+   schedule (stale dates drop out of the desired set and get cancelled;
+   new dates get scheduled), editing only name/amount (the id is
+   unchanged, so re-scheduling it just replaces its content in place, no
+   duplicate), posting/skipping an occurrence (that date leaves the
+   desired set on the very next pass), soft-deleting a rule (it leaves
+   `activeRules` entirely, so none of its dates are ever desired again),
+   and repeated reconciliation with nothing changed (the same desired
+   set always allocates the same ids, and re-scheduling an unchanged
+   reminder under its existing id is a no-op at the OS level — never a
+   duplicate). `recurringNotificationReconcilerProvider` triggers this on
+   THREE of the task's four required triggers purely through Riverpod's
+   own dependency graph (cold start; `activeRecurringRulesProvider`
+   changes; `handledOccurrencesProvider` changes — the latter renamed
+   from `_handledOccurrencesProvider`, made public, specifically so this
+   file could watch it without re-implementing the same Drift query).
+   The fourth — app foreground/resume — cannot come from a data change
+   (the 14-day horizon advances with wall-clock time alone), so
+   `AiFinancialCoachApp` (now a `ConsumerStatefulWidget` +
+   `WidgetsBindingObserver`, the minimal shape change needed for this one
+   hook) calls `ref.invalidate(recurringNotificationReconcilerProvider)`
+   on `AppLifecycleState.resumed`, forcing a fresh pass against a new
+   `DateTime.now()`. No background worker/isolate exists anywhere in this
+   feature — Beta 1 deliberately scopes that out; these four triggers are
+   judged sufficient to never meaningfully fall behind.
+
+6. **Notification permission is requested ONLY as the direct,
+   synchronous result of the user enabling one rule's "Remind me"
+   toggle — never at startup, during reconciliation, or from an
+   unrelated rebuild.** `_RuleDialog`'s new `SwitchListTile` calls
+   `NotificationScheduler.requestPermission()` from its `onChanged`
+   handler when (and only when) the user turns it ON; turning it off
+   never touches permission at all.
+   `reconcileRecurringReminders`/`recurringNotificationReconcilerProvider`
+   never call `requestPermission` — only `schedule`/`cancel`/
+   `pendingIds` — so opening the Recurring screen, an unrelated Riverpod
+   rebuild, or cold start can never trigger an OS prompt. If permission
+   isn't granted, the toggle reverts to `false` (persisted state should
+   reflect actually-usable behavior, not a wish) and a concise one-line
+   `SnackBar` explains it — no crash, no repeated automatic prompt (the
+   handler only asks again if the user taps the switch again
+   themselves), and every other recurring/financial function keeps
+   working normally regardless of the answer.
+
+7. **Notification content is concise, per-rule, and never fabricates a
+   total or a conversion.** `buildRecurringReminderContent`
+   (`lib/core/notifications/recurring_reminder_content.dart`) renders
+   exactly one `DesiredReminder`'s own rule name, income/expense/transfer
+   label, and `MoneyFormatter`-rendered amount in ITS OWN currency —
+   never a `double`, never a sum across rules, never a cross-currency
+   figure. Pure and plugin-free, directly unit-tested
+   (`test/core/notifications/recurring_reminder_content_test.dart`)
+   without a device.
+
+8. **Package choice and native configuration were deliberately kept out
+   of this task's Beta 1 code where they could not be verified.**
+   `flutter_local_notifications` (+ `timezone`, + the minimal
+   `flutter_timezone` purely for the device's IANA name, per this task's
+   own scope) were chosen after inspecting the existing `pubspec.yaml`/
+   `pubspec.lock` and looking up each package's current pub.dev listing
+   — no `permission_handler` (this task needs no permission this plugin
+   doesn't already expose). `LocalNotificationScheduler` is written
+   against those packages' documented public API as fetched at
+   implementation time, with an explicit doc-comment warning to verify
+   it against whatever version `flutter pub get` actually resolves
+   locally, since no Flutter toolchain was available to compile-check it
+   directly. Android manifest/Gradle changes and any iOS `AppDelegate`
+   changes are deliberately NOT made in this pass — they are the next,
+   separate step once the developer has actually run `flutter pub get`
+   locally and can inspect the real installed version's real
+   requirements, rather than copying setup instructions from memory or
+   from a version that may not be what gets resolved.
+
+Status: Approved 2026-09-05 (Beta 1 Task 4B).

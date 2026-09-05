@@ -373,6 +373,19 @@ class RecurringRules extends Table {
   /// `RecurringOccurrences` rows are untouched.
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
+  /// Opt-in local reminder notifications for this rule -- Beta 1 Task
+  /// 4B. Default `false` (schema v5 migration backfills existing rows
+  /// to `false`, never retroactively opts anyone in). Purely a user
+  /// preference: it never changes recurrence math, never auto-creates
+  /// a `Transactions`/`RecurringOccurrences` row, and is read only by
+  /// the notification-scheduling layer (see
+  /// `lib/features/recurring/domain/recurring_reminder_planner.dart`
+  /// and `lib/core/notifications/`) -- never by `RecurringSchedule` or
+  /// any posting/skipping logic. See `docs/14_DECISION_LOG.md`
+  /// ADR-024.
+  BoolColumn get notificationsEnabled =>
+      boolean().withDefault(const Constant(false))();
+
   /// Forward-compatible per ADR-020's precedent -- inert until Stage 6
   /// (cloud/sync). Beta 1 always writes 0 / "localOnly" and never reads
   /// these outside of that constant.

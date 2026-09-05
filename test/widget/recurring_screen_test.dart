@@ -4,6 +4,8 @@ import 'package:ai_financial_coach/core/database/repositories/account_repository
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
+import 'package:ai_financial_coach/core/notifications/notification_providers.dart';
+import 'package:ai_financial_coach/core/notifications/notification_scheduler.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequency.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_schedule.dart';
@@ -13,6 +15,8 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/fake_notification_scheduler.dart';
 
 // NOTE: exercises generated Drift code — see CLAUDE_FIRST_CODING_PROMPT.md.
 //
@@ -657,6 +661,102 @@ void main() {
       if (overflowException != null) {
         fail('Narrow-screen (320px) recurring list layout threw an exception:\n\n$overflowException');
       }
+    },
+  );
+
+  // Beta 1 Task 4B: the "Remind me" toggle and its permission flow.
+  // `appDatabaseProvider` is overridden as usual; `notificationSchedulerProvider`
+  // is additionally overridden with an in-memory fake -- no test here
+  // needs a real device or the `flutter_local_notifications` plugin.
+  testWidgets(
+    'enabling "Remind me" with permission granted saves the rule with notificationsEnabled=true',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+      final FakeNotificationScheduler fakeScheduler =
+          FakeNotificationScheduler(permission: NotificationPermissionStatus.granted);
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          notificationSchedulerProvider.overrideWithValue(fakeScheduler),
+        ],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('recurringNameField')), 'Rent');
+      await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('recurringAmountField')), '80000');
+
+      expect(fakeScheduler.requestPermissionCallCount, 0); // not yet -- toggle untouched
+      await tester.tap(find.byKey(const Key('recurringNotificationsToggle')));
+      await tester.pumpAndSettle();
+      expect(fakeScheduler.requestPermissionCallCount, 1);
+      expect(
+        tester.widget<SwitchListTile>(find.byKey(const Key('recurringNotificationsToggle'))).value,
+        isTrue,
+      );
+
+      await tester.tap(find.byKey(const Key('saveRecurringRule')));
+      await tester.pumpAndSettle();
+
+      final RecurringRuleRow saved = await db.select(db.recurringRules).getSingle();
+      expect(saved.notificationsEnabled, isTrue);
+    },
+  );
+
+  testWidgets(
+    'enabling "Remind me" when permission is denied reverts the toggle to off and shows feedback',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+      final FakeNotificationScheduler fakeScheduler =
+          FakeNotificationScheduler(permission: NotificationPermissionStatus.denied);
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          notificationSchedulerProvider.overrideWithValue(fakeScheduler),
+        ],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('recurringNameField')), 'Rent');
+      await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('recurringAmountField')), '80000');
+
+      await tester.tap(find.byKey(const Key('recurringNotificationsToggle')));
+      await tester.pumpAndSettle();
+
+      // Reverted to off -- persisted state should reflect actually-usable
+      // behavior (correction 3) -- and the dialog is still open/usable,
+      // never crashed or blocked.
+      expect(
+        tester.widget<SwitchListTile>(find.byKey(const Key('recurringNotificationsToggle'))).value,
+        isFalse,
+      );
+      expect(find.textContaining("wasn't granted"), findsOneWidget);
+      expect(find.text('New recurring rule'), findsOneWidget); // dialog still open
+
+      // Recurring functionality itself is unaffected -- Save still works.
+      await tester.tap(find.byKey(const Key('saveRecurringRule')));
+      await tester.pumpAndSettle();
+      final RecurringRuleRow saved = await db.select(db.recurringRules).getSingle();
+      expect(saved.notificationsEnabled, isFalse);
     },
   );
 }

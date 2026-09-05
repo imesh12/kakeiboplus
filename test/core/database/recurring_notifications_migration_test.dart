@@ -1,0 +1,233 @@
+import 'dart:io';
+
+import 'package:ai_financial_coach/core/database/app_database.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
+
+// NOTE: this file exercises generated Drift code (AppDatabase,
+// RecurringRulesCompanion, etc. from app_database.g.dart) that could not
+// be generated inside the sandbox that wrote it -- run
+// `dart run build_runner build --delete-conflicting-outputs` locally
+// before running this test. See CLAUDE_FIRST_CODING_PROMPT.md.
+//
+// This test proves the v4 -> v5 schema migration (Beta 1 Task 4B,
+// `docs/14_DECISION_LOG.md` ADR-024): a database file left at schema v4
+// (Beta 1 Task 4A -- before `recurring_rules.notifications_enabled`
+// existed) opens cleanly under the current (v5) `AppDatabase`, the
+// `onUpgrade` `from < 5` branch adds the new column, every pre-existing
+// v4 recurring rule reads back with `notificationsEnabled == false`
+// (nobody is retroactively opted in), and a fresh row can still be
+// written with the new field.
+//
+// Deliberately a MINIMAL fixture (just the tables this migration step
+// actually touches or that `recurring_rules`/`recurring_occurrences`
+// reference) rather than every table -- unlike
+// `recurring_migration_test.dart`'s v3 -> v4 test (which had to prove
+// every OTHER table's data survives a migration that created brand-new
+// tables), this migration only ever adds one column to one already
+// -existing table; drift does not validate the rest of the file's
+// schema shape on open, so there is nothing else this test needs to
+// assert against.
+void main() {
+  test(
+    'v4 -> v5 upgrade adds recurring_rules.notifications_enabled, defaulting existing rows to false',
+    () async {
+      final Directory tempDir = Directory.systemTemp.createTempSync('afc_v4_to_v5_migration_test_');
+      final File dbFile = File('${tempDir.path}/v4_fixture.sqlite');
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
+
+      final DateTime ruleCreatedAt = DateTime.utc(2026, 8, 1, 9, 0);
+
+      final sqlite3.Database fixture = sqlite3.sqlite3.open(dbFile.path);
+      try {
+        fixture.execute('''
+          CREATE TABLE currencies (
+            code TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            minor_units INTEGER NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (code)
+          );
+
+          CREATE TABLE profiles (
+            id TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            home_country TEXT NOT NULL,
+            current_country TEXT NOT NULL,
+            home_currency TEXT NOT NULL REFERENCES currencies (code),
+            living_currency TEXT NOT NULL REFERENCES currencies (code),
+            preferred_language TEXT NOT NULL,
+            timezone TEXT NOT NULL,
+            date_format TEXT NOT NULL,
+            number_format TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE accounts (
+            id TEXT NOT NULL,
+            profile_id TEXT NOT NULL REFERENCES profiles (id),
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            currency_code TEXT NOT NULL REFERENCES currencies (code),
+            opening_balance_minor_units INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE recurring_rules (
+            id TEXT NOT NULL,
+            profile_id TEXT NOT NULL REFERENCES profiles (id),
+            kind TEXT NOT NULL,
+            name TEXT NOT NULL,
+            amount_minor_units INTEGER NOT NULL,
+            currency_code TEXT NOT NULL REFERENCES currencies (code),
+            account_id TEXT NOT NULL REFERENCES accounts (id),
+            destination_account_id TEXT REFERENCES accounts (id),
+            category_id TEXT,
+            note TEXT,
+            frequency TEXT NOT NULL,
+            interval INTEGER NOT NULL DEFAULT 1,
+            start_date INTEGER NOT NULL,
+            end_date INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_status TEXT NOT NULL DEFAULT 'localOnly',
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE recurring_occurrences (
+            id TEXT NOT NULL,
+            rule_id TEXT NOT NULL REFERENCES recurring_rules (id),
+            scheduled_date INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            transaction_id TEXT,
+            handled_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_status TEXT NOT NULL DEFAULT 'localOnly',
+            PRIMARY KEY (id)
+          );
+        ''');
+
+        fixture.execute('PRAGMA user_version = 4;');
+
+        fixture.execute(
+          'INSERT INTO currencies (code, display_name, symbol, minor_units, is_active) '
+          'VALUES (?, ?, ?, ?, ?);',
+          <Object?>['JPY', 'Japanese Yen', '¥', 0, 1],
+        );
+        fixture.execute(
+          'INSERT INTO profiles (id, display_name, home_country, current_country, home_currency, '
+          'living_currency, preferred_language, timezone, date_format, number_format, created_at, '
+          'updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+          <Object?>[
+            'profile-v4-fixture',
+            'Migration Test User',
+            'JP',
+            'JP',
+            'JPY',
+            'JPY',
+            'en',
+            'Asia/Tokyo',
+            'yyyy-MM-dd',
+            '#,##0.##',
+            _epochSeconds(ruleCreatedAt),
+            _epochSeconds(ruleCreatedAt),
+          ],
+        );
+        fixture.execute(
+          'INSERT INTO accounts (id, profile_id, name, type, currency_code, '
+          'opening_balance_minor_units, is_active, created_at, updated_at, deleted_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+          <Object?>[
+            'account-v4-fixture',
+            'profile-v4-fixture',
+            'Wallet',
+            'cash',
+            'JPY',
+            500000,
+            1,
+            _epochSeconds(ruleCreatedAt),
+            _epochSeconds(ruleCreatedAt),
+            null,
+          ],
+        );
+        fixture.execute(
+          'INSERT INTO recurring_rules (id, profile_id, kind, name, amount_minor_units, '
+          'currency_code, account_id, frequency, interval, start_date, created_at, updated_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+          <Object?>[
+            'rule-v4-fixture',
+            'profile-v4-fixture',
+            'expense',
+            'Rent',
+            80000,
+            'JPY',
+            'account-v4-fixture',
+            'monthly',
+            1,
+            _epochSeconds(DateTime.utc(2026, 1, 1)),
+            _epochSeconds(ruleCreatedAt),
+            _epochSeconds(ruleCreatedAt),
+          ],
+        );
+      } finally {
+        fixture.dispose();
+      }
+
+      // --- "App upgrade": open the same file through the REAL, current
+      // (v5) AppDatabase. This must run the `onUpgrade` `from < 5`
+      // branch, since the file's `user_version` is 4. ---
+      final AppDatabase db = AppDatabase.forTesting(NativeDatabase(dbFile));
+      addTearDown(() async => db.close());
+
+      // The pre-existing v4 rule survives, and the new column defaults
+      // to false -- nobody is retroactively opted in to notifications
+      // just because this column now exists.
+      final RecurringRuleRow existingRule = await db.select(db.recurringRules).getSingle();
+      expect(existingRule.id, 'rule-v4-fixture');
+      expect(existingRule.name, 'Rent');
+      expect(existingRule.notificationsEnabled, isFalse);
+
+      // A newly-created rule can set the new column explicitly.
+      await db.into(db.recurringRules).insert(
+            RecurringRulesCompanion.insert(
+              id: 'rule-after-migration',
+              profileId: 'profile-v4-fixture',
+              kind: 'income',
+              name: 'Salary',
+              amountMinorUnits: 300000,
+              currencyCode: 'JPY',
+              accountId: 'account-v4-fixture',
+              frequency: 'monthly',
+              startDate: DateTime.utc(2026, 9, 1),
+              createdAt: DateTime.utc(2026, 9, 3),
+              updatedAt: DateTime.utc(2026, 9, 3),
+              notificationsEnabled: const Value<bool>(true),
+            ),
+          );
+      final List<RecurringRuleRow> allRules = await db.select(db.recurringRules).get();
+      expect(allRules.length, 2);
+      final RecurringRuleRow newRule =
+          allRules.singleWhere((RecurringRuleRow r) => r.id == 'rule-after-migration');
+      expect(newRule.notificationsEnabled, isTrue);
+    },
+  );
+}
+
+/// Encodes [dateTime] the way drift ^2.20.3's default (non-text)
+/// `DateTime` column storage does for a `NativeDatabase` -- unix seconds
+/// since the epoch, truncating anything below one second.
+int _epochSeconds(DateTime dateTime) => dateTime.toUtc().millisecondsSinceEpoch ~/ 1000;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,8 @@ import '../../../core/database/repositories/recurring_rule_repository.dart'
 import '../../../core/money/currency_mismatch_exception.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
+import '../../../core/notifications/notification_providers.dart';
+import '../../../core/notifications/notification_scheduler.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
@@ -295,6 +299,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
   Money? _parsedAmount;
   DateTime? _startDate;
   DateTime? _endDate;
+  bool _notificationsEnabled = false;
   bool _isSaving = false;
   String? _errorMessage;
 
@@ -316,6 +321,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
     _categoryId = existing?.categoryId;
     _startDate = existing?.startDate ?? DateTime.now().toUtc();
     _endDate = existing?.endDate;
+    _notificationsEnabled = existing?.notificationsEnabled ?? false;
     // `MoneyTextField` only calls `onParsed` in response to the user
     // typing (see its `onChanged: _tryParse`) or a currency change via
     // `didUpdateWidget` -- it never parses its own `initialValue` on
@@ -353,6 +359,39 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
           _endDate = picked;
         }
       });
+    }
+  }
+
+  /// Handles the "Remind me" switch. Per Beta 1 Task 4B correction 3:
+  /// notification permission is requested ONLY here -- the direct,
+  /// synchronous result of the user turning this toggle on -- never at
+  /// app startup, during reconciliation, or merely because this dialog
+  /// opened (`initState` above only READS the persisted value, it never
+  /// calls this). Turning the toggle off never needs permission at all.
+  ///
+  /// If permission isn't granted, reverts to off (per the user's stated
+  /// preference: persisted state should reflect actually-usable
+  /// behavior) and shows a concise, one-time message -- no crash, no
+  /// repeated automatic prompt (the OS itself won't re-prompt once
+  /// denied; this handler only ever asks again if the user taps the
+  /// switch on again themselves).
+  Future<void> _onNotificationsToggled(bool wantsEnabled) async {
+    if (!wantsEnabled) {
+      setState(() => _notificationsEnabled = false);
+      return;
+    }
+    final NotificationScheduler scheduler = ref.read(notificationSchedulerProvider);
+    final NotificationPermissionStatus status = await scheduler.requestPermission();
+    if (!mounted) return;
+    if (status == NotificationPermissionStatus.granted) {
+      setState(() => _notificationsEnabled = true);
+    } else {
+      setState(() => _notificationsEnabled = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Notifications permission wasn't granted -- reminders stay off."),
+        ),
+      );
     }
   }
 
@@ -419,6 +458,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
               interval: interval,
               startDate: startDate,
               endDate: Value<DateTime?>(_endDate),
+              notificationsEnabled: Value<bool>(_notificationsEnabled),
             );
       } else {
         final ProfileRow? profile = await ref.read(profileRepositoryProvider).getProfile();
@@ -436,6 +476,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
               interval: interval,
               startDate: startDate,
               endDate: _endDate,
+              notificationsEnabled: _notificationsEnabled,
             );
       }
       if (mounted) Navigator.of(context).pop();
@@ -652,6 +693,14 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                   if (parsed == null || parsed < 1) return 'Enter a whole number of 1 or more.';
                   return null;
                 },
+              ),
+              SwitchListTile(
+                key: const Key('recurringNotificationsToggle'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Remind me'),
+                subtitle: const Text('Local notification when this is due -- never posts automatically.'),
+                value: _notificationsEnabled,
+                onChanged: (bool v) => unawaited(_onNotificationsToggled(v)),
               ),
               const SizedBox(height: 8),
               ListTile(

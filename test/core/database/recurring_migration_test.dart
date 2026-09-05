@@ -11,13 +11,22 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // `dart run build_runner build --delete-conflicting-outputs` locally
 // before running this test. See CLAUDE_FIRST_CODING_PROMPT.md.
 //
-// This test proves the v3 -> v4 schema migration (`docs/14_DECISION_LOG.md`
-// ADR-023): a database file left at schema v3 (Beta 1 Task 3, before
+// This test proves the v3 -> current (v5) schema migration: a database
+// file left at schema v3 (Beta 1 Task 3, before
 // `recurring_rules`/`recurring_occurrences` existed) opens cleanly under
-// the current (v4) `AppDatabase`, the `onUpgrade` `from < 4` branch
-// creates both new tables, and every pre-existing v3 row -- across every
-// table Beta 0/1 defined by that point -- is still present with its data
-// intact.
+// the CURRENT `AppDatabase` (schema v5, Beta 1 Task 4B --
+// `docs/14_DECISION_LOG.md` ADR-023/ADR-024), the `onUpgrade` `from < 4`
+// branch creates both new tables using the current v5 table definition
+// (which already includes `recurring_rules.notifications_enabled`), and
+// every pre-existing v3 row -- across every table Beta 0/1 defined by
+// that point -- is still present with its data intact.
+//
+// This is also a direct regression test for the "duplicate column name:
+// notifications_enabled" bug: since `createTable(recurringRules)` here
+// already produces the current (v5) shape, the `onUpgrade` `from == 4`
+// branch that separately adds that column must NOT also run for a
+// database that started below v4 -- see the `notificationsEnabled`
+// assertion below and `AppDatabase.migration`'s comments.
 //
 // Per `docs/14_DECISION_LOG.md` ADR-022/ADR-023, this test does NOT
 // assert "byte-for-byte unchanged". It asserts that existing v3 LOGICAL
@@ -52,7 +61,9 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // standard convention.
 void main() {
   test(
-    'v3 -> v4 upgrade creates recurring_rules/recurring_occurrences and leaves existing v3 data intact',
+    'v3 -> current (v5) upgrade creates recurring_rules/recurring_occurrences '
+    '(with notifications_enabled already present, no duplicate-column crash) '
+    'and leaves existing v3 data intact',
     () async {
       final Directory tempDir = Directory.systemTemp.createTempSync('afc_v3_to_v4_migration_test_');
       final File dbFile = File('${tempDir.path}/v3_fixture.sqlite');
@@ -374,6 +385,13 @@ void main() {
           );
       final RecurringRuleRow storedRule = await db.select(db.recurringRules).getSingle();
       expect(storedRule.name, 'Rent');
+      // Regression coverage for the "duplicate column name:
+      // notifications_enabled" bug: this v3-origin database's
+      // recurring_rules table was created above using the CURRENT (v5)
+      // table definition, which already includes notifications_enabled.
+      // A row written without specifying it defaults to false, exactly
+      // as it would on a fresh v5-native install.
+      expect(storedRule.notificationsEnabled, isFalse);
       final RecurringOccurrenceRow storedOccurrence =
           await db.select(db.recurringOccurrences).getSingle();
       expect(storedOccurrence.status, 'skipped');

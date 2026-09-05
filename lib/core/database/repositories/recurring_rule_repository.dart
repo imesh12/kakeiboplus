@@ -183,6 +183,7 @@ class RecurringRuleRepository {
     required int interval,
     required DateTime startDate,
     DateTime? endDate,
+    bool notificationsEnabled = false,
   }) async {
     final String trimmedName = _validateName(name);
     _validateAmount(amount);
@@ -220,6 +221,7 @@ class RecurringRuleRepository {
             interval: Value<int>(interval),
             startDate: normalizedStart,
             endDate: Value<DateTime?>(normalizedEnd),
+            notificationsEnabled: Value<bool>(notificationsEnabled),
             createdAt: now,
             updatedAt: now,
           ),
@@ -258,6 +260,7 @@ class RecurringRuleRepository {
     int? interval,
     DateTime? startDate,
     Value<DateTime?> endDate = const Value<DateTime?>.absent(),
+    Value<bool> notificationsEnabled = const Value<bool>.absent(),
   }) async {
     final RecurringRuleRow existing = await requireActiveRule(id);
 
@@ -313,6 +316,7 @@ class RecurringRuleRepository {
         startDate:
             startDate == null ? const Value<DateTime>.absent() : Value<DateTime>(effectiveStart),
         endDate: endDate.present ? Value<DateTime?>(effectiveEnd) : const Value<DateTime?>.absent(),
+        notificationsEnabled: notificationsEnabled,
         updatedAt: Value<DateTime>(now),
       ),
     );

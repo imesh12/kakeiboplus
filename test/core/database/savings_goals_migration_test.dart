@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:ai_financial_coach/core/database/app_database.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
@@ -11,12 +12,24 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // `dart run build_runner build --delete-conflicting-outputs` locally
 // before running this test. See CLAUDE_FIRST_CODING_PROMPT.md.
 //
-// This test proves the v2 -> v3 schema migration (`docs/14_DECISION_LOG.md`
-// ADR-022): a database file that was left at schema v2 (Beta 1 Task 2,
-// before `savings_goals`/`savings_goal_contributions` existed) opens
-// cleanly under the current (v3) `AppDatabase`, the `onUpgrade` `from < 3`
-// branch creates both new tables, and every pre-existing v2 row is still
-// present with its data intact.
+// This test proves the v2 -> current (v5) schema migration: a database
+// file that was left at schema v2 (Beta 1 Task 2, before
+// `savings_goals`/`savings_goal_contributions` existed) opens cleanly
+// under the CURRENT `AppDatabase` (schema v5, Beta 1 Task 4B --
+// `docs/14_DECISION_LOG.md` ADR-022/ADR-024), the `onUpgrade` `from < 3`
+// branch creates the savings-goal tables, the `from < 4` branch creates
+// `recurring_rules`/`recurring_occurrences` using the current v5 table
+// definition (which already includes
+// `recurring_rules.notifications_enabled`), and every pre-existing v2
+// row is still present with its data intact.
+//
+// This is also a direct regression test for the "duplicate column name:
+// notifications_enabled" bug: since `createTable(recurringRules)` here
+// already produces the current (v5) shape, the `onUpgrade` `from == 4`
+// branch that separately adds that column must NOT also run for a
+// database that started below v4 -- see the `notificationsEnabled`
+// assertions near the end of the test and `AppDatabase.migration`'s
+// comments.
 //
 // Per `docs/14_DECISION_LOG.md` ADR-022, this test does NOT assert
 // "byte-for-byte unchanged" (that would require comparing serialized
@@ -50,8 +63,9 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 //      convention.
 void main() {
   test(
-    'v2 -> v3 upgrade creates savings_goals/savings_goal_contributions '
-    'and leaves existing v2 data intact',
+    'v2 -> current (v5) upgrade creates savings_goals/savings_goal_contributions '
+    'and recurring_rules (with notifications_enabled already present, no '
+    'duplicate-column crash), and leaves existing v2 data intact',
     () async {
       final Directory tempDir = Directory.systemTemp.createTempSync('afc_v2_to_v3_migration_test_');
       final File dbFile = File('${tempDir.path}/v2_fixture.sqlite');
@@ -305,6 +319,50 @@ void main() {
       // See the `.toUtc()` note above `profile.createdAt`/`updatedAt`.
       expect(budget.createdAt.toUtc(), budgetCreatedAt);
       expect(budget.updatedAt.toUtc(), budgetUpdatedAt);
+
+      // Regression coverage for the "duplicate column name:
+      // notifications_enabled" bug: recurring_rules is a brand-new
+      // table for this v2-origin database (created above by the
+      // `from < 4` branch using the CURRENT (v5) table definition, which
+      // already includes notifications_enabled). Writing to it here
+      // must not throw, a row written without specifying the column
+      // defaults to false, and one can also set it explicitly.
+      await db.into(db.accounts).insert(
+            AccountsCompanion.insert(
+              id: 'account-after-migration',
+              profileId: 'profile-v2-fixture',
+              name: 'Wallet',
+              type: 'cash',
+              currencyCode: 'JPY',
+              createdAt: DateTime.utc(2026, 9, 3),
+              updatedAt: DateTime.utc(2026, 9, 3),
+            ),
+          );
+      await db.into(db.recurringRules).insert(
+            RecurringRulesCompanion.insert(
+              id: 'rule-after-migration',
+              profileId: 'profile-v2-fixture',
+              kind: 'expense',
+              name: 'Rent',
+              amountMinorUnits: 80000,
+              currencyCode: 'JPY',
+              accountId: 'account-after-migration',
+              frequency: 'monthly',
+              startDate: DateTime.utc(2026, 9, 1),
+              createdAt: DateTime.utc(2026, 9, 3),
+              updatedAt: DateTime.utc(2026, 9, 3),
+            ),
+          );
+      final RecurringRuleRow ruleDefaultingNotifications =
+          await db.select(db.recurringRules).getSingle();
+      expect(ruleDefaultingNotifications.notificationsEnabled, isFalse);
+
+      await (db.update(db.recurringRules)
+            ..where((tbl) => tbl.id.equals('rule-after-migration')))
+          .write(const RecurringRulesCompanion(notificationsEnabled: Value<bool>(true)));
+      final RecurringRuleRow ruleWithNotificationsEnabled =
+          await db.select(db.recurringRules).getSingle();
+      expect(ruleWithNotificationsEnabled.notificationsEnabled, isTrue);
     },
   );
 }

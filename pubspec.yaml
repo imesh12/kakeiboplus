@@ -21,7 +21,12 @@ version: 0.1.0+1
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
-  flutter: ">=3.24.0"
+  # Bumped from >=3.24.0 for Beta 1 Task 4B: flutter_local_notifications
+  # 22.3.0's own pub.dev page states it requires Flutter SDK 3.38.1 at a
+  # minimum (looked up via web search, not `pub get` -- see the
+  # dependency's own comment below). The project's target toolchain
+  # (Flutter 3.47.2 per the developer) comfortably satisfies this.
+  flutter: ">=3.38.1"
 
 dependencies:
   flutter:
@@ -71,6 +76,23 @@ dependencies:
   # `meta`, which works but trips the `depend_on_referenced_packages` lint —
   # declared explicitly here instead.
   meta: ^1.15.0
+
+  # Beta 1 Task 4B: local recurring reminder notifications. Every one of
+  # these three is imported ONLY by lib/core/notifications/
+  # local_notification_scheduler.dart (see that file's own doc comment) —
+  # no other file in the app depends on them directly, per ADR-024's
+  # notification-scheduling abstraction. Version constraints below were
+  # looked up via web search against pub.dev at the time of writing (this
+  # sandbox has no direct network route to pub.dev itself — same
+  # limitation the note at the top of this file already documents for
+  # every other dependency), NOT resolved with `flutter pub get` — run
+  # that yourself and `flutter pub outdated` before trusting these, and
+  # inspect each package's own current setup instructions (especially
+  # flutter_local_notifications' Android/iOS configuration) rather than
+  # anything hardcoded elsewhere in this repo.
+  flutter_local_notifications: ^22.3.0
+  timezone: ^0.11.1
+  flutter_timezone: ^5.1.0
 
 dev_dependencies:
   flutter_test:

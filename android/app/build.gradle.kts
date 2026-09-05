@@ -12,6 +12,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Beta 1 Task 4B: flutter_local_notifications 22.3.0 requires desugaring to
+        // support scheduled notifications with backwards compatibility -- confirmed
+        // against the installed package's own README/example app. See
+        // docs/14_DECISION_LOG.md ADR-024.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -27,6 +32,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Beta 1 Task 4B: required alongside desugaring, per
+        // flutter_local_notifications' own setup instructions.
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -42,6 +50,14 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // Beta 1 Task 4B: version confirmed against the installed
+    // flutter_local_notifications 22.3.0 package's own example app
+    // (example/android/app/build.gradle) -- see docs/14_DECISION_LOG.md
+    // ADR-024.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

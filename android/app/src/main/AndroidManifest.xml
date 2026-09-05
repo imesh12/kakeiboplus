@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Beta 1 Task 4B: required so flutter_local_notifications can reschedule
+         local reminders after a device reboot (ScheduledNotificationBootReceiver
+         below); AlarmManager alarms are otherwise cleared on reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="ai_financial_coach"
         android:name="${applicationName}"
@@ -30,6 +34,19 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Beta 1 Task 4B: flutter_local_notifications' own receivers for showing a
+             scheduled notification when its alarm fires, and for rescheduling every
+             still-pending one after a reboot/app-update; see
+             docs/14_DECISION_LOG.md ADR-024. -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
