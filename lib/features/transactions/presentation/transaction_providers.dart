@@ -32,3 +32,12 @@ final StreamProvider<List<Transaction>> activeTransactionsProvider =
   }
   yield* ref.watch(transactionRepositoryProvider).watchActiveForProfile(profile.id);
 });
+
+/// One transaction by id, reactively -- `null` once it's soft-deleted or
+/// if it never existed, the same "unavailable below the UI layer"
+/// convention `goalSummaryProvider` uses for goals. What the transaction
+/// detail and edit screens watch.
+final AutoDisposeStreamProviderFamily<Transaction?, String> transactionByIdProvider =
+    StreamProvider.autoDispose.family<Transaction?, String>((ref, id) {
+  return ref.watch(transactionRepositoryProvider).watchById(id);
+});

@@ -20,6 +20,22 @@ abstract class AppRoutes {
   /// Query parameter `type` = `expense` | `income` | `transfer`.
   static const String addTransaction = '/transactions/add';
 
+  /// Path template for [GoRoute] registration -- see [transactionDetail]
+  /// for building an actual navigable path for a specific transaction
+  /// id. Beta 1 Transaction UX (`docs/14_DECISION_LOG.md` ADR-025).
+  static const String transactionDetailPath = '/transactions/:id';
+
+  /// The path for one transaction's read-only detail screen.
+  static String transactionDetail(String id) => '/transactions/$id';
+
+  /// Path template for [GoRoute] registration -- see [editTransaction]
+  /// for building an actual navigable path. Editing may not change a
+  /// transaction's type -- see ADR-025.
+  static const String editTransactionPath = '/transactions/:id/edit';
+
+  /// The path for one transaction's edit screen.
+  static String editTransaction(String id) => '/transactions/$id/edit';
+
   /// The savings goals list -- Beta 1 Task 3. See
   /// `docs/14_DECISION_LOG.md` ADR-022.
   static const String goals = '/goals';

@@ -1,7 +1,9 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/category_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/add_transaction_screen.dart';
 import 'package:ai_financial_coach/shared/widgets/money_text_field.dart';
@@ -249,5 +251,409 @@ void main() {
     // didUpdateWidget's deferred re-validation never ran, lastParsed
     // would still be the stale JPY-denominated value.
     expect(lastParsed, Money.fromMinorUnits(1000, 'LKR'));
+  });
+
+  // -- Edit mode (Beta 1 Transaction UX, `docs/14_DECISION_LOG.md`
+  // ADR-025, Phase A) -- AddTransactionScreen(existingTransaction: ...)
+  // reuses every widget/validation path above; these tests cover what's
+  // specific to editing: prefill, the three approved corrections
+  // (currency re-derivation, transfer categoryId, and the
+  // TransactionNotFoundException race), and time-of-day preservation on
+  // a date change.
+
+  group('edit mode', () {
+    Future<(AppDatabase, String profileId, String jpyAccountId, String lkrAccountId)>
+        seededEditDb() async {
+      final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
+      final ProfileRepository profileRepo = ProfileRepository(db);
+      final AccountRepository accountRepo = AccountRepository(db);
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final String profileId = await profileRepo.createProfile(
+        displayName: 'Test User',
+        homeCountry: 'LK',
+        currentCountry: 'JP',
+        homeCurrency: 'LKR',
+        livingCurrency: 'JPY',
+        preferredLanguage: 'en',
+        timezone: 'Asia/Tokyo',
+        dateFormat: 'yyyy-MM-dd',
+        numberFormat: '#,##0.##',
+      );
+      final String jpyAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'JPY Wallet',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final String lkrAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'LKR Wallet',
+        type: 'cash',
+        currencyCode: 'LKR',
+      );
+      return (db, profileId, jpyAccountId, lkrAccountId);
+    }
+
+    Future<Transaction> transactionRow(AppDatabase db, String id) {
+      return (db.select(db.transactions)..where((tbl) => tbl.id.equals(id))).getSingle();
+    }
+
+    testWidgets(
+        'editing an existing expense prefills account, category, amount, note, and date, '
+        'and saving persists the edited values', (tester) async {
+      final (AppDatabase db, String profileId, String jpyAccountId, String lkrAccountId) =
+          await seededEditDb();
+      final TransactionRepository txRepo =
+          TransactionRepository(db, AccountRepository(db));
+      final DateTime originalOccurredAtUtc = DateTime.utc(2026, 3, 15, 8, 0);
+      final String txId = await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: jpyAccountId,
+        amount: Money.fromMinorUnits(1200, 'JPY'),
+        categoryId: 'sys-dining',
+        note: 'Lunch',
+        occurredAtUtc: originalOccurredAtUtc,
+      );
+      final Transaction existing = await transactionRow(db, txId);
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit expense'), findsOneWidget);
+      expect(find.text('JPY Wallet (JPY)'), findsOneWidget);
+      expect(find.text('Dining Out'), findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(find.byType(TextFormField).first).controller!.text,
+        '1200',
+      );
+      expect(
+        tester.widget<TextFormField>(find.byType(TextFormField).last).initialValue,
+        'Lunch',
+      );
+      final DateTime expectedLocal = originalOccurredAtUtc.toLocal();
+      expect(
+        find.text(
+          '${expectedLocal.year}-${expectedLocal.month.toString().padLeft(2, '0')}-'
+          '${expectedLocal.day.toString().padLeft(2, '0')}',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.enterText(find.byType(TextFormField).first, '1500');
+      await tester.enterText(find.byType(TextFormField).last, 'Lunch with client');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      // One extra settle cycle: Riverpod's autoDispose scheduler defers
+      // disposing `categoriesForTypeProvider` (watched by this
+      // expense/income form's `_CategoryDropdown`) to a later frame than
+      // the one that completes this Save+pop, and that deferred dispose
+      // is what drives Drift's `StreamQueryStore.markAsClosed` to
+      // schedule its zero-duration `Timer` -- one settle can land right
+      // on that boundary, so a second is needed to fully drain it before
+      // `disposeInOrder` forces an unmount.
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsOneWidget); // popped back
+      final Transaction updated = await transactionRow(db, txId);
+      expect(updated.amountMinorUnits, 1500);
+      expect(updated.note, 'Lunch with client');
+      expect(updated.type, 'expense'); // unchanged -- ADR-025
+      expect(updated.id, txId); // same id preserved
+    });
+
+    testWidgets(
+        "changing a transaction's date preserves its existing local time-of-day rather than "
+        'collapsing it to midnight (Decision 3, ADR-025)', (tester) async {
+      final (AppDatabase db, String profileId, String jpyAccountId, String _) =
+          await seededEditDb();
+      final TransactionRepository txRepo =
+          TransactionRepository(db, AccountRepository(db));
+      final DateTime originalOccurredAtUtc = DateTime.utc(2026, 3, 15, 8, 0);
+      final String txId = await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: jpyAccountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: originalOccurredAtUtc,
+      );
+      final Transaction existing = await transactionRow(db, txId);
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Opens the Material date picker, already on the transaction's own
+      // month/year (`initialDate: _occurredAt`) -- pick a different day
+      // in the same month so no month/year navigation is needed.
+      await tester.tap(find.byIcon(Icons.calendar_today_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('20'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      // One extra settle cycle: same Riverpod autoDispose ->
+      // Drift StreamQueryStore.markAsClosed timer-drain gap as the
+      // currency-switch case above -- this is also an expense-type
+      // Save+pop with `categoriesForTypeProvider` actively watched.
+      await tester.pumpAndSettle();
+
+      final Transaction updated = await transactionRow(db, txId);
+
+      // Convert both the ORIGINAL persisted row and the EDITED row to
+      // local using the same runtime timezone conversion the app itself
+      // uses (`.toLocal()`) -- no hard-coded offset, so this holds
+      // regardless of what timezone the test happens to run in.
+      final DateTime originalLocal = existing.occurredAt.toLocal();
+      final DateTime updatedLocal = updated.occurredAt.toLocal();
+
+      // The calendar date changed as intended...
+      expect(updatedLocal.year, originalLocal.year);
+      expect(updatedLocal.month, originalLocal.month);
+      expect(updatedLocal.day, 20);
+      expect(updatedLocal.day, isNot(originalLocal.day));
+
+      // ...while the local time-of-day was preserved exactly, on plain
+      // integer fields -- immune to any DateTime tag/precision issue
+      // (Decision 3, ADR-025).
+      expect(updatedLocal.hour, originalLocal.hour);
+      expect(updatedLocal.minute, originalLocal.minute);
+      expect(updatedLocal.second, originalLocal.second);
+
+      // Separately, since the exact resulting INSTANT is knowable (new
+      // calendar date + old local time-of-day, converted by the same
+      // runtime's own local<->UTC rule), confirm it with
+      // `isAtSameMomentAs` -- the tag-agnostic comparison, unlike `==`,
+      // which distinguishes UTC-tagged from local-tagged DateTimes even
+      // when they denote the same moment (see
+      // `docs/14_DECISION_LOG.md` ADR-025 Phase A RCA).
+      final DateTime expectedInstant = DateTime(
+        originalLocal.year,
+        originalLocal.month,
+        20,
+        originalLocal.hour,
+        originalLocal.minute,
+        originalLocal.second,
+      ).toUtc();
+      expect(updated.occurredAt.isAtSameMomentAs(expectedInstant), isTrue);
+    });
+
+    testWidgets(
+        'switching to a different-currency account while editing an expense re-parses the '
+        'typed amount under the new currency rather than carrying over the old minor units '
+        '(Correction 1, ADR-025)', (tester) async {
+      final (AppDatabase db, String profileId, String jpyAccountId, String lkrAccountId) =
+          await seededEditDb();
+      final TransactionRepository txRepo =
+          TransactionRepository(db, AccountRepository(db));
+      final String txId = await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: jpyAccountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      final Transaction existing = await transactionRow(db, txId);
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'JPY Wallet (JPY)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('LKR Wallet (LKR)').last);
+      await tester.pumpAndSettle(); // lets MoneyTextField's post-frame re-parse run
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      // One extra settle cycle: combining the currency-switch's
+      // deferred `addPostFrameCallback` re-parse (see
+      // money_text_field.dart's `didUpdateWidget`) with a real
+      // Drift/Riverpod-backed screen and a completed Save+pop needs a
+      // beat longer than the simpler cases in this file to fully drain
+      // before `disposeInOrder` forces an unmount.
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsOneWidget); // popped -- no error surfaced
+      final Transaction updated = await transactionRow(db, txId);
+      expect(updated.accountId, lkrAccountId);
+      expect(updated.currencyCode, 'LKR');
+      // '500' re-parsed under LKR's 2 decimal digits is 500.00 LKR (50000
+      // minor units) -- NOT the old JPY minor-unit value (500) merely
+      // relabeled as LKR, which is exactly the bug Correction 1 forbids.
+      expect(updated.amountMinorUnits, 50000);
+    });
+
+    testWidgets(
+        "editing a transfer's source account to a currency that no longer matches its "
+        'destination surfaces a clear currency-mismatch error rather than silently '
+        'transferring across currencies', (tester) async {
+      final (AppDatabase db, String profileId, String jpyAccountId, String lkrAccountId) =
+          await seededEditDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String jpySecondAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'JPY Savings',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+      final String txId = await txRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: jpyAccountId,
+        destinationAccountId: jpySecondAccountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      final Transaction existing = await transactionRow(db, txId);
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit transfer'), findsOneWidget);
+
+      // Switch the source ("From account") to the LKR account. The
+      // destination dropdown only ever *offers* same-currency accounts
+      // (ADR-019), but this doesn't retroactively clear an
+      // already-selected destination that's now a currency mismatch --
+      // the repository's independent check is what actually protects
+      // the invariant here, which is exactly what this test proves.
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'JPY Wallet (JPY)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('LKR Wallet (LKR)').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsNothing); // did NOT pop -- save was rejected
+      expect(find.textContaining("doesn't match the selected account"), findsOneWidget);
+      final Transaction unchanged = await transactionRow(db, txId);
+      expect(unchanged.accountId, jpyAccountId); // nothing was persisted
+      expect(unchanged.currencyCode, 'JPY');
+    });
+
+    testWidgets(
+        'editing a transaction that was soft-deleted elsewhere in the meantime surfaces a '
+        "clear 'no longer available' error rather than silently succeeding "
+        '(TransactionNotFoundException, Correction 3)', (tester) async {
+      final (AppDatabase db, String profileId, String jpyAccountId, String _) =
+          await seededEditDb();
+      final TransactionRepository txRepo =
+          TransactionRepository(db, AccountRepository(db));
+      final String txId = await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: jpyAccountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      final Transaction existing = await transactionRow(db, txId);
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Simulates the row disappearing out from under this open edit
+      // screen -- e.g. deleted from the transaction detail screen in
+      // another tab/window -- between opening the form and saving it.
+      await txRepo.softDelete(txId);
+
+      await tester.enterText(find.byType(TextFormField).first, '600');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsNothing); // did NOT pop
+      expect(find.textContaining('no longer available'), findsOneWidget);
+    });
+
+    testWidgets(
+        'editing an existing transfer updates its amount and destination while keeping '
+        'categoryId null and its type fixed to transfer', (tester) async {
+      final (AppDatabase db, String profileId, String jpyAccountId, String _) =
+          await seededEditDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String jpySecondAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'JPY Savings',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final String jpyThirdAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'JPY Emergency',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+      final String txId = await txRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: jpyAccountId,
+        destinationAccountId: jpySecondAccountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      final Transaction existing = await transactionRow(db, txId);
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'JPY Savings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('JPY Emergency').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).first, '750');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsOneWidget); // popped -- saved successfully
+      final Transaction updated = await transactionRow(db, txId);
+      expect(updated.type, 'transfer');
+      expect(updated.destinationAccountId, jpyThirdAccountId);
+      expect(updated.amountMinorUnits, 750);
+      expect(updated.categoryId, isNull);
+    });
   });
 }

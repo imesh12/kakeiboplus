@@ -13,6 +13,8 @@ import '../../features/recurring/presentation/recurring_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/transactions/presentation/activity_screen.dart';
 import '../../features/transactions/presentation/add_transaction_screen.dart';
+import '../../features/transactions/presentation/edit_transaction_screen.dart';
+import '../../features/transactions/presentation/transaction_detail_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 import 'app_routes.dart';
 import 'go_router_refresh_stream.dart';
@@ -55,6 +57,21 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => AddTransactionScreen(
           initialType: state.uri.queryParameters['type'],
         ),
+      ),
+      // Registered AFTER `AppRoutes.addTransaction` above -- both are
+      // 2-segment `/transactions/...` paths and GoRouter matches routes
+      // in list order, so the literal `/transactions/add` must be tried
+      // before the parameterized `/transactions/:id` or the latter
+      // would swallow it.
+      GoRoute(
+        path: AppRoutes.transactionDetailPath,
+        builder: (context, state) =>
+            TransactionDetailScreen(transactionId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: AppRoutes.editTransactionPath,
+        builder: (context, state) =>
+            EditTransactionScreen(transactionId: state.pathParameters['id']!),
       ),
       GoRoute(path: AppRoutes.accounts, builder: (context, state) => const AccountsScreen()),
       GoRoute(path: AppRoutes.categories, builder: (context, state) => const CategoriesScreen()),

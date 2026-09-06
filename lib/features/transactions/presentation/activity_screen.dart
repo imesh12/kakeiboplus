@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
+import '../../../core/routing/app_routes.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import 'transaction_providers.dart';
@@ -104,6 +106,7 @@ class _TransactionTile extends StatelessWidget {
     };
 
     return ListTile(
+      onTap: () => context.push(AppRoutes.transactionDetail(tx.id)),
       leading: Icon(isTransfer ? Icons.swap_horiz : (isIncome ? Icons.add : Icons.remove)),
       title: Text(title),
       subtitle: Text(subtitle),
