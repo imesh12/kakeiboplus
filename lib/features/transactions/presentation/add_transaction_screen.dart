@@ -10,10 +10,19 @@ import '../../../core/money/money.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
+import 'transaction_icon_badge.dart';
 
 /// Add Expense / Add Income / Transfer, OR edit an existing one of
 /// those — one screen either way, per `docs/02_SCREEN_CATALOG.md` items
 /// 9-11 and `docs/14_DECISION_LOG.md` ADR-025 (Beta 1 Transaction UX).
+///
+/// Beta 1 Transaction UX Phase B, Checkpoint 5 modernizes this form's
+/// visual presentation only -- a fixed-type header (reusing
+/// [TransactionIconBadge]), tighter field grouping, a From -> To
+/// affordance for transfers, and a clearer Save CTA. Every field,
+/// provider/repository call, and validation path is unchanged from
+/// before this checkpoint; see `_submit`, `_pickDate`, and the two
+/// dropdown classes below, none of which changed behavior.
 ///
 /// Add mode is driven by [initialType] ('expense' | 'income' |
 /// 'transfer'); edit mode is driven by [existingTransaction] instead,
@@ -24,6 +33,10 @@ import '../../categories/presentation/category_providers.dart';
 /// add mode re-opens the Add sheet rather than mutating the form in
 /// place, which keeps the form state simple and matches how the sheet in
 /// `add_transaction_sheet.dart` presents the three as distinct choices.
+/// The Checkpoint 5 header renders this fixed type as plain,
+/// non-interactive content (no dropdown, no tap target) in both add and
+/// edit mode, so it reads as fixed/non-editable without needing a
+/// separate "locked" indicator.
 class AddTransactionScreen extends ConsumerStatefulWidget {
   const AddTransactionScreen({super.key, this.initialType, this.existingTransaction});
 
@@ -60,6 +73,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   bool get _isTransfer => _type == 'transfer';
   bool get _isEditing => widget.existingTransaction != null;
 
+  /// The plain type word shown in the Checkpoint 5 header -- distinct
+  /// from [_titleFor], which produces the AppBar's "Add expense"/"Edit
+  /// income"/etc. title text.
+  String get _typeLabel => switch (_type) {
+        'income' => 'Income',
+        'transfer' => 'Transfer',
+        _ => 'Expense',
+      };
+
   // Plain-decimal seed text for `MoneyTextField` in edit mode --
   // `Money.toMajorUnitsString()`, NOT `MoneyFormatter.format()`, because
   // the latter includes a currency symbol/grouping and won't round-trip
@@ -86,108 +108,227 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    // ColorScheme-driven per type -- matches the convention Activity and
+    // Transaction Detail (Checkpoints 2/4) already established, so the
+    // same transaction type reads consistently everywhere in the app.
+    final Color typeColor = switch (_type) {
+      'income' => colors.primary,
+      'transfer' => colors.onSurfaceVariant,
+      _ => colors.error,
+    };
     final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(_titleFor(_type))),
-      body: accountsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) => Center(child: Text('Could not load accounts: $e')),
-        data: (List<AccountRow> accounts) {
-          if (accounts.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('Add an account first (Profile → Accounts) before recording money.'),
+      body: SafeArea(
+        child: accountsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (Object e, StackTrace st) => Center(child: Text('Could not load accounts: $e')),
+          data: (List<AccountRow> accounts) {
+            if (accounts.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('Add an account first (Profile → Accounts) before recording money.'),
+                ),
+              );
+            }
+            _accountId ??= accounts.first.id;
+            final AccountRow? selectedAccount = _findAccount(accounts, _accountId);
+
+            return Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                children: <Widget>[
+                  // A. Transaction header -- the fixed type is obvious
+                  // (icon + color + label), and, since nothing here is
+                  // tappable, it reads as fixed/non-editable in edit
+                  // mode without a separate "locked" affordance.
+                  // TransactionIconBadge is reused unmodified; the
+                  // header always passes a null category icon since it
+                  // represents the transaction TYPE, not whichever
+                  // category happens to be selected at any given moment.
+                  Center(
+                    child: Column(
+                      children: <Widget>[
+                        Semantics(
+                          label: _typeLabel,
+                          child: TransactionIconBadge(type: _type, color: typeColor),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _typeLabel,
+                          style: text.titleMedium?.copyWith(
+                            color: typeColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // C. Account/category grouping -- the exact same
+                  // account DropdownButtonFormField (and the unmodified
+                  // `_DestinationAccountDropdown`/`_CategoryDropdown`
+                  // widgets below), same labels/validators/wiring/order,
+                  // just visually grouped in one bordered section.
+                  // D. Transfer From -> To: a small decorative arrow
+                  // between the two dropdowns communicates direction --
+                  // no new selector, no duplicated account picker, no
+                  // logic of its own.
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: colors.outlineVariant),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: <Widget>[
+                          DropdownButtonFormField<String>(
+                            initialValue: _accountId,
+                            decoration: InputDecoration(
+                              labelText: _isTransfer ? 'From account' : 'Account',
+                            ),
+                            items: <DropdownMenuItem<String>>[
+                              for (final AccountRow account in accounts)
+                                DropdownMenuItem<String>(
+                                  value: account.id,
+                                  child: Text(
+                                    '${account.name} (${account.currencyCode})',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (String? id) => setState(() {
+                              _accountId = id;
+                              if (_destinationAccountId == _accountId) _destinationAccountId = null;
+                            }),
+                          ),
+                          if (_isTransfer) ...<Widget>[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Icon(
+                                Icons.arrow_downward,
+                                size: 18,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                            _DestinationAccountDropdown(
+                              accounts: accounts,
+                              sourceAccountId: _accountId,
+                              value: _destinationAccountId,
+                              onChanged: (String? id) => setState(() => _destinationAccountId = id),
+                            ),
+                          ],
+                          if (!_isTransfer) ...<Widget>[
+                            const SizedBox(height: 12),
+                            _CategoryDropdown(
+                              type: _type,
+                              value: _categoryId,
+                              onChanged: (String? id) => setState(() => _categoryId = id),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // B. Amount emphasis -- the exact same MoneyTextField
+                  // widget, callbacks, and position relative to the
+                  // other fields; a subtly tinted rounded backdrop and
+                  // generous surrounding spacing are what make it read
+                  // as the primary input, not a change to the field
+                  // itself.
+                  if (selectedAccount != null)
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: MoneyTextField(
+                        currencyCode: selectedAccount.currencyCode,
+                        initialValue: _initialAmountText,
+                        onParsed: (Money? amount) => setState(() => _amount = amount),
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+
+                  // E. Note/date -- the exact same TextFormField/ListTile
+                  // widgets and wiring, grouped into one bordered
+                  // section for hierarchy. The calendar icon and
+                  // `_pickDate` wiring are unchanged.
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: colors.outlineVariant),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Column(
+                        children: <Widget>[
+                          TextFormField(
+                            initialValue: _note,
+                            decoration: const InputDecoration(
+                              labelText: 'Note (optional)',
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (String value) => _note = value,
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Date'),
+                            subtitle: Text(
+                              '${_occurredAt.year}-${_occurredAt.month.toString().padLeft(2, '0')}-'
+                              '${_occurredAt.day.toString().padLeft(2, '0')}',
+                            ),
+                            trailing: const Icon(Icons.calendar_today_outlined),
+                            onTap: _pickDate,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  if (_errorMessage != null) ...<Widget>[
+                    Text(
+                      _errorMessage!,
+                      style: TextStyle(color: colors.error),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // F. Save CTA -- same FilledButton/"Save"/loading-
+                  // spinner swap and the same `_submit` call.
+                  // `minimumSize` gives it a strong floor height without
+                  // a hard cap, so it still grows correctly at large
+                  // text scales instead of clipping.
+                  FilledButton(
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                    onPressed: _isSaving ? null : () => _submit(accounts),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save'),
+                  ),
+                ],
               ),
             );
-          }
-          _accountId ??= accounts.first.id;
-          final AccountRow? selectedAccount = _findAccount(accounts, _accountId);
-
-          return Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: <Widget>[
-                DropdownButtonFormField<String>(
-                  initialValue: _accountId,
-                  decoration: InputDecoration(labelText: _isTransfer ? 'From account' : 'Account'),
-                  items: <DropdownMenuItem<String>>[
-                    for (final AccountRow account in accounts)
-                      DropdownMenuItem<String>(
-                        value: account.id,
-                        child: Text('${account.name} (${account.currencyCode})'),
-                      ),
-                  ],
-                  onChanged: (String? id) => setState(() {
-                    _accountId = id;
-                    if (_destinationAccountId == _accountId) _destinationAccountId = null;
-                  }),
-                ),
-                if (_isTransfer) ...<Widget>[
-                  const SizedBox(height: 16),
-                  _DestinationAccountDropdown(
-                    accounts: accounts,
-                    sourceAccountId: _accountId,
-                    value: _destinationAccountId,
-                    onChanged: (String? id) => setState(() => _destinationAccountId = id),
-                  ),
-                ],
-                if (!_isTransfer) ...<Widget>[
-                  const SizedBox(height: 16),
-                  _CategoryDropdown(
-                    type: _type,
-                    value: _categoryId,
-                    onChanged: (String? id) => setState(() => _categoryId = id),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                if (selectedAccount != null)
-                  MoneyTextField(
-                    currencyCode: selectedAccount.currencyCode,
-                    initialValue: _initialAmountText,
-                    onParsed: (Money? amount) => setState(() => _amount = amount),
-                  ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  initialValue: _note,
-                  decoration: const InputDecoration(labelText: 'Note (optional)'),
-                  onChanged: (String value) => _note = value,
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Date'),
-                  subtitle: Text(
-                    '${_occurredAt.year}-${_occurredAt.month.toString().padLeft(2, '0')}-'
-                    '${_occurredAt.day.toString().padLeft(2, '0')}',
-                  ),
-                  trailing: const Icon(Icons.calendar_today_outlined),
-                  onTap: _pickDate,
-                ),
-                const SizedBox(height: 24),
-                if (_errorMessage != null) ...<Widget>[
-                  Text(
-                    _errorMessage!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                FilledButton(
-                  onPressed: _isSaving ? null : () => _submit(accounts),
-                  child: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Save'),
-                ),
-              ],
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -418,7 +559,10 @@ class _DestinationAccountDropdown extends StatelessWidget {
       decoration: const InputDecoration(labelText: 'To account'),
       items: <DropdownMenuItem<String>>[
         for (final AccountRow account in eligible)
-          DropdownMenuItem<String>(value: account.id, child: Text(account.name)),
+          DropdownMenuItem<String>(
+            value: account.id,
+            child: Text(account.name, overflow: TextOverflow.ellipsis),
+          ),
       ],
       onChanged: onChanged,
       validator: (String? v) => v == null ? 'Choose a destination account.' : null,
@@ -446,7 +590,10 @@ class _CategoryDropdown extends ConsumerWidget {
           decoration: const InputDecoration(labelText: 'Category (optional)'),
           items: <DropdownMenuItem<String>>[
             for (final CategoryRow category in categories)
-              DropdownMenuItem<String>(value: category.id, child: Text(category.name)),
+              DropdownMenuItem<String>(
+                value: category.id,
+                child: Text(category.name, overflow: TextOverflow.ellipsis),
+              ),
           ],
           onChanged: onChanged,
         );

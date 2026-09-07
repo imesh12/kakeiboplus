@@ -63,6 +63,35 @@ class _CurrencySwitchHarnessState extends State<_CurrencySwitchHarness> {
   }
 }
 
+/// The Checkpoint 5 restyle (fixed-type header, bordered Account/Category
+/// and Note/Date cards, extra section spacing) grew the form tall enough
+/// that, in the default widget-test viewport, the Save button sits past
+/// the ListView's lazily-built extent -- it is not merely off-screen, it
+/// is not mounted into the tree at all yet, so `tester.ensureVisible`
+/// cannot be used directly (it requires the target to already exist).
+/// `scrollUntilVisible` is the correct tool for that: it drags the
+/// nearest `Scrollable` in small steps and re-evaluates the finder after
+/// each step -- which is what forces the lazy `ListView` to build (and
+/// then reveal) the Save button -- before finishing with the same
+/// `Scrollable.ensureVisible` `ensureVisible` itself uses.
+///
+/// `.first` on the scrollable finder is required, not cosmetic: this
+/// Flutter version's `TextField`/`EditableText` builds its own internal
+/// `Scrollable` for cursor scrolling, so plain `find.byType(Scrollable)`
+/// matches the form's ListView *and* each TextFormField on it -- more
+/// than one match makes `scrollUntilVisible` throw ("Bad state: Too many
+/// elements") the moment it tries to resolve a single scrollable to
+/// drag. The ListView's own Scrollable is built, and therefore appears
+/// in the element tree, before the fields nested inside it, so `.first`
+/// deterministically selects the ListView, never a field's.
+Future<void> scrollToSaveButton(WidgetTester tester) {
+  return tester.scrollUntilVisible(
+    find.widgetWithText(FilledButton, 'Save'),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+}
+
 void main() {
   Future<AppDatabase> seededDb() async {
     final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -195,6 +224,7 @@ void main() {
     // field is last).
     await tester.enterText(find.byType(TextFormField).first, '12.50');
     await tester.pump();
+    await scrollToSaveButton(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pump();
 
@@ -251,6 +281,167 @@ void main() {
     // didUpdateWidget's deferred re-validation never ran, lastParsed
     // would still be the stale JPY-denominated value.
     expect(lastParsed, Money.fromMinorUnits(1000, 'LKR'));
+  });
+
+  // -- Checkpoint 5 (Transaction UX Phase B): Add/Edit form visual
+  // polish -- header/badge/type, the transfer From -> To affordance, and
+  // a smoke test that every existing control survived the restyle. None
+  // of these duplicate the behavior already covered above; they cover
+  // only what Checkpoint 5 itself added or could plausibly have broken.
+  group('Checkpoint 5 visual polish', () {
+    testWidgets('the Expense form header shows the fixed type as a badge and label', (
+      tester,
+    ) async {
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'expense')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // AppBar title is "Add expense" -- distinct from the header's
+      // plain "Expense" label, so no duplication to account for here.
+      expect(find.text('Expense'), findsOneWidget);
+      expect(find.byIcon(Icons.remove), findsOneWidget);
+    });
+
+    testWidgets('the Income form header shows the fixed type as a badge and label', (
+      tester,
+    ) async {
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'income')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // AppBar title is "Add income" -- distinct from the header's
+      // plain "Income" label.
+      expect(find.text('Income'), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget);
+    });
+
+    testWidgets('the Transfer form header shows the fixed type as a badge and label', (
+      tester,
+    ) async {
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'transfer')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Unlike expense/income, the AppBar title for a new transfer is
+      // itself "Transfer" (`_titleFor`, unchanged), so it legitimately
+      // duplicates the header's "Transfer" label -- two widgets, not
+      // one, per the test-discipline instruction to call this out.
+      expect(find.text('Transfer'), findsNWidgets(2));
+      expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+    });
+
+    testWidgets(
+        'the Transfer form shows a From -> To visual affordance between the account and '
+        'destination dropdowns, and destination filtering still only offers same-currency '
+        'accounts', (tester) async {
+      final AppDatabase db = await seededDb();
+      final profile = await ProfileRepository(db).getProfile();
+      await AccountRepository(db).createAccount(
+        profileId: profile!.id,
+        name: 'JPY Savings',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'transfer')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Decorative From -> To connector between the account and
+      // destination dropdowns (Checkpoint 5, requirement D) -- purely
+      // visual, adds no selector of its own.
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+
+      // Destination filtering (ADR-019) still works exactly as before: the
+      // dropdown's own display string is unchanged by Checkpoint 5
+      // ("Name (CURRENCY)"), and DropdownButtonFormField only renders an
+      // item's text once it's either selected or the menu is open -- with
+      // nothing selected yet, open it to confirm it offers the other
+      // same-currency (JPY) account and correctly excludes the LKR one.
+      expect(find.widgetWithText(DropdownButtonFormField<String>, 'To account'), findsOneWidget);
+      await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'To account'));
+      await tester.pumpAndSettle();
+      expect(find.text('JPY Savings (JPY)'), findsOneWidget);
+      expect(find.text('LKR Wallet (LKR)'), findsNothing);
+      await tester.tap(find.text('JPY Savings (JPY)'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+        'the account dropdown, category dropdown, amount field, note field, calendar icon, '
+        'and Save button are all still present and usable after the Checkpoint 5 restyle',
+        (tester) async {
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'expense')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String>, 'JPY Wallet (JPY)'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String>, 'Category (optional)'),
+        findsOneWidget,
+      );
+      expect(find.byType(TextFormField), findsNWidgets(2)); // amount + note
+      expect(find.byIcon(Icons.calendar_today_outlined), findsOneWidget);
+
+      // Save isn't mounted yet at this scroll position -- see
+      // scrollToSaveButton's doc comment -- so the existence check below
+      // has to come after scrolling, not before.
+      await scrollToSaveButton(tester);
+      expect(find.widgetWithText(FilledButton, 'Save'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextFormField).first, '100');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      // Extra settle cycle: same Riverpod autoDispose -> Drift
+      // StreamQueryStore.markAsClosed timer-drain gap documented on
+      // disposeInOrder above, for this expense-type Save+pop with
+      // categoriesForTypeProvider actively watched.
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsOneWidget); // saved and popped successfully
+    });
   });
 
   // -- Edit mode (Beta 1 Transaction UX, `docs/14_DECISION_LOG.md`
@@ -349,6 +540,7 @@ void main() {
 
       await tester.enterText(find.byType(TextFormField).first, '1500');
       await tester.enterText(find.byType(TextFormField).last, 'Lunch with client');
+      await scrollToSaveButton(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       // One extra settle cycle: Riverpod's autoDispose scheduler defers
@@ -405,6 +597,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
+      await scrollToSaveButton(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       // One extra settle cycle: same Riverpod autoDispose ->
@@ -485,6 +678,7 @@ void main() {
       await tester.tap(find.text('LKR Wallet (LKR)').last);
       await tester.pumpAndSettle(); // lets MoneyTextField's post-frame re-parse run
 
+      await scrollToSaveButton(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       // One extra settle cycle: combining the currency-switch's
@@ -551,6 +745,7 @@ void main() {
       await tester.tap(find.text('LKR Wallet (LKR)').last);
       await tester.pumpAndSettle();
 
+      await scrollToSaveButton(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
@@ -594,6 +789,7 @@ void main() {
       await txRepo.softDelete(txId);
 
       await tester.enterText(find.byType(TextFormField).first, '600');
+      await scrollToSaveButton(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
@@ -645,6 +841,7 @@ void main() {
       await tester.tap(find.text('JPY Emergency').last);
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField).first, '750');
+      await scrollToSaveButton(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
 
@@ -654,6 +851,44 @@ void main() {
       expect(updated.destinationAccountId, jpyThirdAccountId);
       expect(updated.amountMinorUnits, 750);
       expect(updated.categoryId, isNull);
+    });
+
+    testWidgets(
+        'edit mode presents the transaction type as a fixed, non-interactive label -- no '
+        'type switcher of any kind appears in the header', (tester) async {
+      final (AppDatabase db, String profileId, String jpyAccountId, String _) =
+          await seededEditDb();
+      final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+      final String txId = await txRepo.recordIncome(
+        profileId: profileId,
+        accountId: jpyAccountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      final Transaction existing = await transactionRow(db, txId);
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit income'), findsOneWidget); // AppBar title
+      expect(find.text('Income'), findsOneWidget); // header label, fixed type
+      expect(find.byIcon(Icons.add), findsOneWidget); // TransactionIconBadge icon for income
+
+      // No interactive type-switcher exists anywhere on the screen: no
+      // segmented control, no choice chips, no type dropdown -- the
+      // header is plain Text/Icon with no tap target of its own, and the
+      // only DropdownButtonFormFields on screen are account + category.
+      expect(find.byType(SegmentedButton<String>), findsNothing);
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(2));
     });
   });
 }
