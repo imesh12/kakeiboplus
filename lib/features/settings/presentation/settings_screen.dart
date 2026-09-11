@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/routing/app_routes.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../onboarding/presentation/profile_providers.dart';
 
 /// The "Profile" destination — Beta 0 keeps this to a read-only profile
@@ -11,6 +12,13 @@ import '../../onboarding/presentation/profile_providers.dart';
 /// home/living currency, notification preferences, and privacy controls
 /// (per `docs/00_MASTER_BLUEPRINT.md` §43) are Beta 1+ — none of that is
 /// implemented yet, so this screen doesn't pretend it is.
+///
+/// Checkpoint 4.3 (International / Localization Foundation): only the
+/// "International preferences" row's own label moves onto
+/// `AppLocalizations` here -- every other row ("Profile" title,
+/// Accounts/Categories/Budgets/Savings Goals/Recurring, the Beta 0
+/// disclaimer) is out of this checkpoint's small proof surface and
+/// stays an English literal.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -66,7 +74,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.public),
-                title: const Text('International preferences'),
+                title: Text(AppLocalizations.of(context).internationalPreferences),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.internationalPreferences),
               ),

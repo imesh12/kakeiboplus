@@ -4,6 +4,7 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/settings/presentation/international_preferences_screen.dart';
 import 'package:ai_financial_coach/features/settings/presentation/settings_screen.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,7 +102,11 @@ void main() {
     await db.close();
   }
 
-  Widget appWithRouter(ProviderContainer container, {bool startAtSettings = false}) {
+  Widget appWithRouter(
+    ProviderContainer container, {
+    bool startAtSettings = false,
+    Locale locale = const Locale('en'),
+  }) {
     final GoRouter router = GoRouter(
       initialLocation: startAtSettings ? AppRoutes.profile : '/launcher',
       routes: <RouteBase>[
@@ -125,12 +130,21 @@ void main() {
     );
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        routerConfig: router,
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
     );
   }
 
-  Future<void> openScreen(WidgetTester tester, ProviderContainer container) async {
-    await tester.pumpWidget(appWithRouter(container));
+  Future<void> openScreen(
+    WidgetTester tester,
+    ProviderContainer container, {
+    Locale locale = const Locale('en'),
+  }) async {
+    await tester.pumpWidget(appWithRouter(container, locale: locale));
     await tester.tap(find.text('open international preferences'));
     await tester.pumpAndSettle();
   }
@@ -295,9 +309,9 @@ void main() {
   /// off-screen on this scrollable form. See file-level doc comment,
   /// point 1. Uses the same deterministic [scrollPageUntilVisible]
   /// approach as [ensureFieldVisible].
-  Future<void> save(WidgetTester tester) async {
-    final Finder saveButton = find.text('Save');
-    await scrollPageUntilVisible(tester, saveButton, description: "The 'Save' button");
+  Future<void> save(WidgetTester tester, {String buttonLabel = 'Save'}) async {
+    final Finder saveButton = find.text(buttonLabel);
+    await scrollPageUntilVisible(tester, saveButton, description: "The '$buttonLabel' button");
     await tester.tap(saveButton.hitTestable());
     await tester.pumpAndSettle();
   }
@@ -426,7 +440,7 @@ void main() {
     expect(profile.homeCurrency, 'LKR'); // untouched
   });
 
-  testWidgets('Language only offers English as a normal selectable language', (tester) async {
+  testWidgets('Language offers both English and Japanese as selectable options', (tester) async {
     final (AppDatabase db, String profileId) = await seededDb();
     final ProviderContainer container =
         ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
@@ -444,8 +458,8 @@ void main() {
     // field actually OFFERS is read the same way `selectItem` reads it:
     // via [visiblePopupOption], which also handles the popup menu's own
     // internal `Scrollable` if the option isn't hit-testable yet --
-    // deliberately not special-cased here, since English is expected to
-    // already be visible without scrolling.
+    // deliberately not special-cased here, since both options are
+    // expected to already be visible without scrolling.
     await ensureFieldVisible(tester, languageKey);
     final Finder languageDropdown = find.descendant(
       of: find.byKey(languageKey),
@@ -457,26 +471,105 @@ void main() {
     await tester.tap(languageDropdown);
     await tester.pumpAndSettle();
 
+    // CP4.3 added 'ja' to `_languageCodes` and removed `_languageLabel`'s
+    // "not yet selectable" branch entirely, so Japanese is now a normal
+    // selectable option alongside English -- [visiblePopupOption] fails
+    // loudly (rather than silently reporting zero matches) if either
+    // label isn't present as exactly one hit-testable option.
     final Finder englishOption = await visiblePopupOption(
       tester,
       scrollablesBeforeOpen: scrollablesBeforeOpen,
       label: 'English',
     );
-    // 'Japanese' is a language `AppLanguageRegistry` already knows about
-    // (planned for CP4) but is not yet selectable -- see `_languageLabel`.
-    // Since the seeded `preferredLanguage` is 'en' and the screen's
-    // `_languageCodes` only ever offers 'en', "Japanese (not yet
-    // selectable)" must not appear as a hit-testable option in this
-    // open popup at all -- it isn't even in the tree, so no popup
-    // scrolling could ever make it appear.
-    expect(find.text('Japanese (not yet selectable)').hitTestable(), findsNothing);
+    await visiblePopupOption(
+      tester,
+      scrollablesBeforeOpen: scrollablesBeforeOpen,
+      label: 'Japanese',
+    );
+    // No language should render with the old "(not yet selectable)"
+    // suffix any more.
+    expect(find.textContaining('not yet selectable').hitTestable(), findsNothing);
 
-    // Close the popup the way a real user would -- by selecting the one
-    // option offered -- rather than leaving the route open.
+    // Close the popup the way a real user would -- by selecting the
+    // currently-seeded option -- rather than leaving the route open.
     await tester.tap(englishOption);
     await tester.pumpAndSettle();
 
     expect(await fieldValue(tester, languageKey), 'en');
+  });
+
+  testWidgets('selecting Japanese and Save persists it', (tester) async {
+    final (AppDatabase db, String profileId) = await seededDb();
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container);
+    await selectItem(tester, key: languageKey, itemValue: 'ja', itemLabel: 'Japanese');
+    expect(await fieldValue(tester, languageKey), 'ja');
+
+    await save(tester);
+
+    final ProfileRow? profile = await ProfileRepository(db).getProfile();
+    expect(profile!.preferredLanguage, 'ja');
+  });
+
+  testWidgets('a Japanese-seeded profile opened in the Japanese locale renders Japanese proof text',
+      (tester) async {
+    final (AppDatabase db, String profileId) = await seededDb(preferredLanguage: 'ja');
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container, locale: const Locale('ja'));
+    expect(tester.takeException(), isNull);
+
+    // The AppBar title, all 3 section headers, and the Save button all
+    // render via `AppLocalizations.of(context)` -- this is proof the
+    // Japanese locale actually renders translated strings end-to-end
+    // inside this screen. (That `appLocaleProvider` itself maps 'ja' ->
+    // `Locale('ja')` is already covered by
+    // `test/core/locale/app_locale_provider_test.dart`, and that
+    // `MaterialApp` is wired to honor a `Locale` at all is already
+    // covered by `test/widget/app_locale_wiring_test.dart` -- this test
+    // is the one that proves this screen's own strings actually use it.)
+    expect(find.text('言語・地域設定'), findsOneWidget); // internationalPreferences (AppBar title)
+    expect(find.text('地域'), findsOneWidget); // locationSection
+    expect(find.text('通貨'), findsOneWidget); // currencySection
+    expect(find.text('言語と表示形式'), findsOneWidget); // languageAndFormatSection
+
+    final Finder saveButton = find.text('保存'); // save
+    await scrollPageUntilVisible(tester, saveButton, description: "The '保存' (Save) button");
+    expect(saveButton, findsOneWidget);
+  });
+
+  testWidgets('switching from Japanese to English and Save persists it', (tester) async {
+    final (AppDatabase db, String profileId) = await seededDb(preferredLanguage: 'ja');
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    // This test harness's `locale:` is a static per-pump parameter --
+    // unlike the real app's `appLocaleProvider`, it does not reactively
+    // re-derive the rendered locale as the in-memory field selection
+    // changes. So this test opens in the Japanese locale (matching the
+    // seeded profile, and needed so the Save button's label -- itself
+    // localized -- is findable), changes the Language field to English,
+    // and asserts the *persisted* value after Save. English rendering
+    // after such a switch is already covered compositionally by this
+    // file's (English-locale-by-default) tests together with
+    // `test/widget/app_locale_wiring_test.dart`, which proves the real
+    // app's locale reactively follows `preferredLanguage` end-to-end.
+    await openScreen(tester, container, locale: const Locale('ja'));
+    expect(await fieldValue(tester, languageKey), 'ja');
+
+    await selectItem(tester, key: languageKey, itemValue: 'en', itemLabel: 'English');
+    expect(await fieldValue(tester, languageKey), 'en');
+
+    await save(tester, buttonLabel: '保存');
+
+    final ProfileRow? profile = await ProfileRepository(db).getProfile();
+    expect(profile!.preferredLanguage, 'en');
   });
 
   testWidgets('changing Date format persists it', (tester) async {

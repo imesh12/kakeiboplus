@@ -10,6 +10,7 @@ import '../../../core/locale/app_language.dart';
 import '../../../core/locale/date_format_preference.dart';
 import '../../../core/locale/number_format_preference.dart';
 import '../../../core/locale/timezone_preference.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../onboarding/domain/country_registry.dart';
 import '../../onboarding/presentation/profile_providers.dart';
 
@@ -18,6 +19,16 @@ import '../../onboarding/presentation/profile_providers.dart';
 /// `ProfileRepository.updateInternationalPreferences` already persists
 /// atomically. UI/navigation only -- no schema, repository, MoneyFormatter,
 /// transaction, or recurrence change lives here.
+///
+/// Checkpoint 4.3 moves this screen's own static chrome (title, section
+/// headers, field labels, Save) onto `AppLocalizations`, and makes
+/// Japanese a normal selectable [_languageCodes] entry alongside English
+/// -- see [_languageLabel]. The dynamic, per-item registry labels below
+/// (`_countryLabel`, `_currencyLabel`, `_dateFormatLabel`,
+/// `_numberFormatLabel`, `_timezoneLabel`) are deliberately OUT of CP4.3's
+/// scope and stay English literals -- translating 14+ country/currency/
+/// timezone display names and format examples is a separate, much larger
+/// effort, not part of this checkpoint's small proof surface.
 ///
 /// # Raw-value-is-source-of-truth policy (critical -- see CP3 audit +
 /// CP3A's "critical unknown-value safety" rule)
@@ -57,7 +68,10 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
       CountryRegistry.all.map((OnboardingCountry c) => c.code).toList();
   static final List<String> _currencyCodes =
       CurrencyRegistry.seed.map((Currency c) => c.code).toList();
-  static final List<String> _languageCodes = <String>[AppLanguageRegistry.english.code];
+  static final List<String> _languageCodes = <String>[
+    AppLanguageRegistry.english.code,
+    AppLanguageRegistry.japanese.code,
+  ];
   static final List<String> _dateFormatIds =
       DateFormatRegistry.supported.map((DateFormatPreference p) => p.id).toList();
   static final List<String> _numberFormatIds =
@@ -130,9 +144,10 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
     final AsyncValue<ProfileRow?> profileAsync = ref.watch(activeProfileProvider);
     final TextTheme text = Theme.of(context).textTheme;
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('International preferences')),
+      appBar: AppBar(title: Text(l10n.internationalPreferences)),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (Object e, StackTrace st) => Center(child: Text('Could not load profile: $e')),
@@ -144,11 +159,11 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: <Widget>[
-                Text('Location', style: text.titleMedium),
+                Text(l10n.locationSection, style: text.titleMedium),
                 const SizedBox(height: 8),
                 _DropdownField(
                   key: const Key('homeCountryField'),
-                  label: 'Home country',
+                  label: l10n.homeCountry,
                   value: _homeCountry!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _homeCountry!,
@@ -159,7 +174,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                 ),
                 _DropdownField(
                   key: const Key('currentCountryField'),
-                  label: 'Current country',
+                  label: l10n.currentCountry,
                   value: _currentCountry!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _currentCountry!,
@@ -169,11 +184,11 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                   onChanged: (String v) => setState(() => _currentCountry = v),
                 ),
                 const SizedBox(height: 24),
-                Text('Currency', style: text.titleMedium),
+                Text(l10n.currencySection, style: text.titleMedium),
                 const SizedBox(height: 8),
                 _DropdownField(
                   key: const Key('homeCurrencyField'),
-                  label: 'Home currency',
+                  label: l10n.homeCurrency,
                   value: _homeCurrency!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _homeCurrency!,
@@ -184,7 +199,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                 ),
                 _DropdownField(
                   key: const Key('livingCurrencyField'),
-                  label: 'Living currency',
+                  label: l10n.livingCurrency,
                   value: _livingCurrency!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _livingCurrency!,
@@ -194,11 +209,11 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                   onChanged: (String v) => setState(() => _livingCurrency = v),
                 ),
                 const SizedBox(height: 24),
-                Text('Language & format', style: text.titleMedium),
+                Text(l10n.languageAndFormatSection, style: text.titleMedium),
                 const SizedBox(height: 8),
                 _DropdownField(
                   key: const Key('languageField'),
-                  label: 'Language',
+                  label: l10n.language,
                   value: _preferredLanguage!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _preferredLanguage!,
@@ -209,7 +224,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                 ),
                 _DropdownField(
                   key: const Key('dateFormatField'),
-                  label: 'Date format',
+                  label: l10n.dateFormat,
                   value: _dateFormat!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _dateFormat!,
@@ -220,7 +235,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                 ),
                 _DropdownField(
                   key: const Key('numberFormatField'),
-                  label: 'Number format',
+                  label: l10n.numberFormat,
                   value: _numberFormat!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _numberFormat!,
@@ -231,7 +246,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                 ),
                 _DropdownField(
                   key: const Key('timezoneField'),
-                  label: 'Timezone',
+                  label: l10n.timezone,
                   value: _timezone!,
                   items: _itemsPreservingCurrentValue(
                     currentValue: _timezone!,
@@ -253,7 +268,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Save'),
+                      : Text(l10n.save),
                 ),
               ],
             ),
@@ -310,20 +325,21 @@ String _currencyLabel(String code) {
   return currency == null ? 'Unknown ($code)' : '${currency.code} — ${currency.displayName}';
 }
 
-/// English display name for the one currently-selectable language
-/// ('en'). For any other code: if [AppLanguageRegistry] already knows it
-/// (e.g. 'ja' -- planned for CP4, not yet selectable), shows that known
-/// name marked not-yet-selectable rather than a bare code; for a
-/// genuinely unrecognized code, a safe "Unknown (...)" label. Never
+/// English display name for a known, currently-selectable language
+/// ('en' or 'ja' -- see [_languageCodes]); a safe "Unknown (...)" label
+/// for anything [AppLanguageRegistry] doesn't recognize at all. Never
 /// calls [AppLanguageRegistry.byCode] here -- that method's English
 /// fallback exists for a different purpose (a safe default when nothing
 /// is persisted yet) and would incorrectly mask a genuinely unknown code
-/// as if it were English.
+/// as if it were English. (Checkpoint 4.3: both languages
+/// [AppLanguageRegistry.knownLanguages] currently contains are
+/// selectable, so there is no longer a "known but not yet selectable"
+/// case to special-case here -- that branch existed only for 'ja' prior
+/// to this checkpoint.)
 String _languageLabel(String code) {
-  if (code == AppLanguageRegistry.english.code) return AppLanguageRegistry.english.englishName;
   for (final AppLanguage language in AppLanguageRegistry.knownLanguages) {
     if (language.code.toLowerCase() == code.toLowerCase()) {
-      return '${language.englishName} (not yet selectable)';
+      return language.englishName;
     }
   }
   return 'Unknown ($code)';

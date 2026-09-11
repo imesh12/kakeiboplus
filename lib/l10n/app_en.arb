@@ -1,0 +1,16 @@
+{
+  "@@locale": "en",
+  "internationalPreferences": "International preferences",
+  "locationSection": "Location",
+  "currencySection": "Currency",
+  "languageAndFormatSection": "Language & format",
+  "homeCountry": "Home country",
+  "currentCountry": "Current country",
+  "homeCurrency": "Home currency",
+  "livingCurrency": "Living currency",
+  "language": "Language",
+  "dateFormat": "Date format",
+  "numberFormat": "Number format",
+  "timezone": "Timezone",
+  "save": "Save"
+}

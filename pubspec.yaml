@@ -32,6 +32,16 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Localization (International / Localization Foundation Checkpoint
+  # 4.1): SDK-provided delegates (Material/Cupertino/WidgetsLocalizations)
+  # required by `flutter gen-l10n`'s generated AppLocalizations
+  # (lib/l10n/generated/app_localizations.dart, see l10n.yaml) and by
+  # `MaterialApp.localizationsDelegates` once a later CP4 checkpoint
+  # wires locale into the app root. Not yet consumed by any widget or
+  # provider in CP4.1 itself -- scaffolding only.
+  flutter_localizations:
+    sdk: flutter
+
   # State management (mandated by CLAUDE_PROJECT_INSTRUCTIONS.md).
   # Beta 0 uses classic (non-code-generated) Riverpod providers rather
   # than riverpod_generator's @riverpod annotations — this is a
@@ -63,7 +73,7 @@ dependencies:
   # Currency DECIMAL-DIGIT formatting itself is driven by our own currency
   # metadata (lib/core/currency), never by intl's built-in per-currency
   # defaults — see docs/14_DECISION_LOG.md ADR-012.
-  intl: ^0.19.0
+  intl: ^0.20.3
 
   # Safe decimal parsing at the money input boundary — never `double`.
   # See docs/14_DECISION_LOG.md ADR-017 and lib/core/money/money_parser.dart.
@@ -115,3 +125,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true

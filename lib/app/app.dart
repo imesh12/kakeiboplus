@@ -5,13 +5,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/database/providers.dart';
+import '../core/locale/app_locale_provider.dart';
 import '../core/routing/app_router.dart';
 import '../features/recurring/presentation/recurring_notification_providers.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../shared/theme/app_theme.dart';
 
 /// App root: wires up `MaterialApp.router` with the Beta 0 [GoRouter],
-/// seeds system categories once the database is available, and (Beta 1
-/// Task 4B) reconciles recurring reminder notifications.
+/// seeds system categories once the database is available, (Beta 1
+/// Task 4B) reconciles recurring reminder notifications, and
+/// (International / Localization Foundation Checkpoint 4.2) resolves the
+/// app's runtime [Locale] from [appLocaleProvider] -- a pure derivation
+/// of the persisted profile's language, never a write path (see that
+/// provider's own doc comment). CP4.2 wires the locale/delegates only;
+/// no production widget strings are localized yet, and Japanese is not
+/// yet selectable anywhere in the UI.
 ///
 /// A [ConsumerStatefulWidget] rather than the simpler [ConsumerWidget]
 /// specifically so it can be a [WidgetsBindingObserver] -- Task 4B
@@ -69,11 +77,20 @@ class _AiFinancialCoachAppState extends ConsumerState<AiFinancialCoachApp>
 
     final GoRouter router = ref.watch(routerProvider);
 
+    // CP4.2: derived purely from the persisted profile (see
+    // appLocaleProvider's doc comment) -- never written back, never
+    // mutates the profile. No screen consumes AppLocalizations yet; this
+    // only makes MaterialApp resolve/accept the two supported locales.
+    final Locale locale = ref.watch(appLocaleProvider);
+
     return MaterialApp.router(
       title: 'AI Financial Coach',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
     );
   }

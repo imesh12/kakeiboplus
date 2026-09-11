@@ -1,0 +1,16 @@
+{
+  "@@locale": "ja",
+  "internationalPreferences": "言語・地域設定",
+  "locationSection": "地域",
+  "currencySection": "通貨",
+  "languageAndFormatSection": "言語と表示形式",
+  "homeCountry": "母国",
+  "currentCountry": "現在の国",
+  "homeCurrency": "基準通貨",
+  "livingCurrency": "生活通貨",
+  "language": "言語",
+  "dateFormat": "日付形式",
+  "numberFormat": "数値形式",
+  "timezone": "タイムゾーン",
+  "save": "保存"
+}
