@@ -64,6 +64,12 @@ class SettingsScreen extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.recurring),
               ),
+              ListTile(
+                leading: const Icon(Icons.public),
+                title: const Text('International preferences'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.internationalPreferences),
+              ),
               const Divider(),
               const Padding(
                 padding: EdgeInsets.all(16),

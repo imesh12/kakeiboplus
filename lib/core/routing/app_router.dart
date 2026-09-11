@@ -10,6 +10,7 @@ import '../../features/goals/presentation/savings_goals_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/onboarding/presentation/profile_providers.dart';
 import '../../features/recurring/presentation/recurring_screen.dart';
+import '../../features/settings/presentation/international_preferences_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/transactions/presentation/activity_screen.dart';
 import '../../features/transactions/presentation/add_transaction_screen.dart';
@@ -82,6 +83,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => GoalDetailScreen(goalId: state.pathParameters['id']!),
       ),
       GoRoute(path: AppRoutes.recurring, builder: (context, state) => const RecurringScreen()),
+      GoRoute(
+        path: AppRoutes.internationalPreferences,
+        builder: (context, state) => const InternationalPreferencesScreen(),
+      ),
     ],
   );
 });

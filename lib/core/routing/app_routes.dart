@@ -50,4 +50,8 @@ abstract class AppRoutes {
   /// The recurring rules list -- Beta 1 Task 4A. See
   /// `docs/14_DECISION_LOG.md` ADR-023.
   static const String recurring = '/recurring';
+
+  /// International preference editing -- International / Localization
+  /// Foundation Checkpoint 3B. Reached from the Profile/Settings screen.
+  static const String internationalPreferences = '/international-preferences';
 }
