@@ -75,4 +75,44 @@ class ProfileRepository {
       ),
     );
   }
+
+  /// Atomically updates all 8 international preference fields at once
+  /// -- International / Localization Foundation Checkpoint 3A.
+  /// `displayName` is deliberately excluded: this is preference/locale
+  /// metadata, not profile identity, and this method must not touch it.
+  /// A single `ProfilesCompanion` write against exactly one row (same
+  /// shape as [updateHomeAndLivingCurrency] above), touching no other
+  /// table. Values are persisted exactly as given -- this method does
+  /// NOT validate, normalize, or rewrite them against any registry (see
+  /// `lib/core/locale/` and
+  /// `lib/features/onboarding/domain/country_registry.dart` for the
+  /// safe-lookup/fallback logic that belongs at the presentation layer
+  /// instead) -- an unrecognized existing value must survive a write of
+  /// the *other* fields unchanged, and this method never runs on its
+  /// own without the caller supplying every field explicitly.
+  Future<void> updateInternationalPreferences({
+    required String profileId,
+    required String homeCountry,
+    required String currentCountry,
+    required String homeCurrency,
+    required String livingCurrency,
+    required String preferredLanguage,
+    required String timezone,
+    required String dateFormat,
+    required String numberFormat,
+  }) {
+    return (_db.update(_db.profiles)..where((tbl) => tbl.id.equals(profileId))).write(
+      ProfilesCompanion(
+        homeCountry: Value<String>(homeCountry),
+        currentCountry: Value<String>(currentCountry),
+        homeCurrency: Value<String>(homeCurrency),
+        livingCurrency: Value<String>(livingCurrency),
+        preferredLanguage: Value<String>(preferredLanguage),
+        timezone: Value<String>(timezone),
+        dateFormat: Value<String>(dateFormat),
+        numberFormat: Value<String>(numberFormat),
+        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+      ),
+    );
+  }
 }

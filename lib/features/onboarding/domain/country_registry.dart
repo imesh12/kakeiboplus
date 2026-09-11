@@ -41,4 +41,26 @@ class CountryRegistry {
 
   static OnboardingCountry byCode(String code) =>
       all.firstWhere((c) => c.code == code, orElse: () => all.first);
+
+  /// Safe lookup by ISO code for International / Localization Foundation
+  /// Checkpoint 3A: returns `null` for `null`, empty, or any code not in
+  /// [all], rather than silently falling back to a default country.
+  ///
+  /// [byCode] above exists specifically for onboarding's country picker,
+  /// where the control always needs *some* valid selection and falling
+  /// back to [all]'s first entry is the right default-selection
+  /// behavior -- that method is unchanged and still used that way.
+  /// [findByCode] must be used instead anywhere an *existing persisted*
+  /// value (e.g. a profile's already-stored `home_country` /
+  /// `current_country`) needs to be distinguished from a genuinely known
+  /// one: an unrecognized existing value must never be silently
+  /// reinterpreted as Japan (or any other country) merely by reading it.
+  /// Exact (case-sensitive) match, matching [byCode]'s own comparison.
+  static OnboardingCountry? findByCode(String? code) {
+    if (code == null) return null;
+    for (final OnboardingCountry country in all) {
+      if (country.code == code) return country;
+    }
+    return null;
+  }
 }
