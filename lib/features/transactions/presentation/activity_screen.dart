@@ -397,6 +397,43 @@ class _DateSectionHeader extends StatelessWidget {
   }
 }
 
+/// One Activity row -- Beta 1 Transaction UX Phase B, Checkpoint 2
+/// (`docs/14_DECISION_LOG.md` ADR-025/026), hardened in International /
+/// Localization Foundation Checkpoint 2 (large-amount layout hardening)
+/// against overflow with long formatted amounts (large VND/MMK-scale
+/// values, KWD's extra minor-unit digit) at narrow widths and/or larger
+/// text scales.
+///
+/// Deliberately NOT a [ListTile]: [ListTile]'s internal layout gives
+/// `trailing` its full intrinsic (unconstrained) width and only shrinks
+/// the title/subtitle column to whatever's left over, with no floor --
+/// past a point that produces a `RenderFlex` overflow, and even before
+/// that point it silently squeezes title/subtitle. This row instead
+/// measures the amount text's own natural width (at the CURRENT text
+/// style/text scale -- see [_amountFitsInline]) and switches between two
+/// arrangements based purely on whether that width plus the fixed
+/// leading icon and a minimum comfortable description width actually
+/// fits the row's available width:
+///
+///  * Normal / most cases -- horizontal: `[icon] [title/subtitle] [amount]`,
+///    with the description column as an [Expanded] that yields first
+///    (title/subtitle may ellipsize).
+///  * Genuinely constrained (narrow width and/or a large text scale
+///    pushing the amount's own natural width too wide to share the row)
+///    -- stacked: `[icon] [title/subtitle]` on one line, the FULL amount
+///    on the line below, right-aligned.
+///
+/// The amount [Text] itself is never wrapped in [FittedBox]/ellipsis/a
+/// fixed pixel cap in either arrangement -- it always renders at its
+/// natural `bodyLarge`/bold size and every digit `MoneyFormatter`
+/// produced. This is deliberate: a [FittedBox] would let the app quietly
+/// shrink financial text back down at exactly the larger-text-scale
+/// accessibility settings a user turned on for legibility, and an
+/// ellipsis would drop digits from a value the user needs to trust
+/// completely. Nothing here is currency- or transaction-type-specific --
+/// the same two constants below apply identically regardless of
+/// currency, sign, or amount magnitude; the only per-row input to the
+/// decision is the amount string's own measured width.
 class _TransactionRow extends StatelessWidget {
   const _TransactionRow({
     required this.tx,
@@ -409,6 +446,28 @@ class _TransactionRow extends StatelessWidget {
   final String accountName;
   final String? destinationAccountName;
   final CategoryRow? category;
+
+  /// The fixed size of [TransactionIconBadge] -- reproduced here (not
+  /// imported from it) only because the layout decision below needs to
+  /// know it in advance, before that widget is laid out.
+  static const double _leadingWidth = 40;
+
+  /// Matches [ListTile]'s own default `horizontalTitleGap` -- the gap
+  /// this row reproduces between the leading icon and the description
+  /// column, in both arrangements.
+  static const double _leadingGap = 16;
+
+  /// The gap between the description column and the amount in the
+  /// horizontal arrangement.
+  static const double _amountGap = 16;
+
+  /// A minimum comfortable width reserved for the description column
+  /// before this row prefers the stacked arrangement over letting
+  /// title/subtitle be squeezed to a near-unreadable sliver next to a
+  /// technically-still-fitting amount. This is a general readability
+  /// floor for descriptive text, not a per-currency or per-amount-length
+  /// threshold -- it does not change based on what the amount is.
+  static const double _minDescriptionWidth = 72;
 
   @override
   Widget build(BuildContext context) {
@@ -457,32 +516,115 @@ class _TransactionRow extends StatelessWidget {
       'transfer' => formattedAmount,
       _ => 'minus $formattedAmount',
     };
+    final String amountString = '$amountPrefix$formattedAmount';
+
+    final TextStyle? titleStyle = text.bodyLarge?.copyWith(fontWeight: FontWeight.w600);
+    final TextStyle? subtitleStyle = text.bodySmall?.copyWith(color: colors.onSurfaceVariant);
+    // Never shrunk, never ellipsized -- see the class doc comment.
+    final TextStyle? amountStyle =
+        text.bodyLarge?.copyWith(color: amountColor, fontWeight: FontWeight.bold);
+
+    final Widget leadingIcon = Semantics(
+      label: typeWord,
+      child: TransactionIconBadge(
+        type: tx.type,
+        color: amountColor,
+        categoryIconName: isTransfer ? null : category?.icon,
+      ),
+    );
+
+    // Descriptive text is exactly what's allowed to yield: capped to one
+    // line with an ellipsis rather than wrapping unpredictably or taking
+    // space the amount needs. Content/semantics are unchanged from
+    // before this checkpoint -- only the overflow behavior is new.
+    final Widget titleText =
+        Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle);
+    final Widget? subtitleText = subtitle.isEmpty
+        ? null
+        : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: subtitleStyle);
+    final Widget description = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        titleText,
+        if (subtitleText != null) subtitleText,
+      ],
+    );
+
+    // The amount: single line, never wrapped, never ellipsized, never
+    // shrunk -- `softWrap: false` only prevents a second line; it is the
+    // surrounding LayoutBuilder decision below (not this widget) that
+    // guarantees there is always enough width for it to render at its
+    // natural size.
+    final Widget amountText = Semantics(
+      label: spokenAmount,
+      excludeSemantics: true,
+      child: Text(amountString, maxLines: 1, softWrap: false, style: amountStyle),
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       child: Card(
         elevation: 0,
+        clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: ListTile(
+        child: InkWell(
           onTap: () => context.push(AppRoutes.transactionDetail(tx.id)),
-          leading: Semantics(
-            label: typeWord,
-            child: TransactionIconBadge(
-              type: tx.type,
-              color: amountColor,
-              categoryIconName: isTransfer ? null : category?.icon,
-            ),
-          ),
-          title: Text(title, style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-          subtitle: subtitle.isEmpty
-              ? null
-              : Text(subtitle, style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-          trailing: Semantics(
-            label: spokenAmount,
-            excludeSemantics: true,
-            child: Text(
-              '$amountPrefix$formattedAmount',
-              style: text.bodyLarge?.copyWith(color: amountColor, fontWeight: FontWeight.bold),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                // The amount's own natural (unconstrained) width at the
+                // CURRENT text style and text scale -- this single
+                // measurement is what makes the decision automatically
+                // currency-, sign-, and text-scale-agnostic, with no
+                // per-currency or per-transaction-type branching
+                // anywhere in this method.
+                final TextPainter painter = TextPainter(
+                  text: TextSpan(text: amountString, style: amountStyle),
+                  textDirection: Directionality.of(context),
+                  textScaler: MediaQuery.textScalerOf(context),
+                )..layout();
+
+                final double available =
+                    constraints.maxWidth - _leadingWidth - _leadingGap - _amountGap;
+                final bool fitsHorizontally = available - painter.width >= _minDescriptionWidth;
+
+                if (fitsHorizontally) {
+                  return Row(
+                    key: const Key('transactionRowHorizontal'),
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+                      leadingIcon,
+                      const SizedBox(width: _leadingGap),
+                      Expanded(child: description),
+                      const SizedBox(width: _amountGap),
+                      amountText,
+                    ],
+                  );
+                }
+
+                // Genuinely constrained: the full amount moves below the
+                // description, right-aligned, rather than shrinking or
+                // truncating either side.
+                return Column(
+                  key: const Key('transactionRowStacked'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: <Widget>[
+                        leadingIcon,
+                        const SizedBox(width: _leadingGap),
+                        Expanded(child: description),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Align(alignment: Alignment.centerRight, child: amountText),
+                  ],
+                );
+              },
             ),
           ),
         ),

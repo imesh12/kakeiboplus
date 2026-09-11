@@ -5,6 +5,7 @@ import 'package:ai_financial_coach/core/database/repositories/category_repositor
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
+import 'package:ai_financial_coach/core/money/money_formatter.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/activity_screen.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/transaction_detail_screen.dart';
@@ -40,6 +41,12 @@ import 'package:go_router/go_router.dart';
 // five searchable fields `activity_filter.dart` documents (category
 // name, source account name, destination account name, note, formatted
 // amount) without inventing new categories.
+
+// Checkpoint 2 (International / Localization Foundation) large-amount
+// hardening tests use the SAME MoneyFormatter convention every existing
+// Activity row test above already relies on, to build the exact expected
+// rendered string -- never a hand-typed string guess.
+const MoneyFormatter formatter = MoneyFormatter();
 
 void main() {
   Future<(AppDatabase, String profileId, String accountId)> seededDb() async {
@@ -705,5 +712,432 @@ void main() {
     expect(find.text('Dining Out'), findsOneWidget);
     expect(find.text('Salary'), findsOneWidget);
     expect(find.text('Wallet → Savings'), findsOneWidget);
+  });
+
+  // ---------------------------------------------------------------------
+  // International / Localization Foundation, Checkpoint 2: large-amount
+  // Activity layout hardening. `_TransactionRow` no longer uses
+  // `ListTile` -- see its class doc comment in `activity_screen.dart` --
+  // specifically to survive long formatted amounts (large VND/MMK-scale
+  // values, KWD's extra minor-unit digit) at narrow widths and/or larger
+  // text scales without ever ellipsizing/shrinking/dropping a digit from
+  // the amount itself. These tests assert absence of any layout
+  // exception and presence of the complete formatted amount string --
+  // never pixel coordinates.
+  // ---------------------------------------------------------------------
+
+  testWidgets('a large MMK expense amount renders in full with no layout overflow',
+      (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String mmkAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Myanmar Wallet',
+      type: 'cash',
+      currencyCode: 'MMK',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'MMK'); // 9,876,543.21 MMK
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: mmkAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('-${formatter.format(amount)}'), findsOneWidget);
+  });
+
+  testWidgets('a large VND income amount renders in full with no layout overflow',
+      (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String vndAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Vietnam Wallet',
+      type: 'cash',
+      currencyCode: 'VND',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'VND'); // 987,654,321 VND (0 minor units)
+    await txRepo.recordIncome(
+      profileId: profileId,
+      accountId: vndAccountId,
+      amount: amount,
+      categoryId: 'sys-salary',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('+${formatter.format(amount)}'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a KWD amount with 3 minor-unit decimals renders in full with no layout overflow',
+      (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String kwdAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Kuwait Wallet',
+      type: 'cash',
+      currencyCode: 'KWD',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654, 'KWD'); // 987.654 KWD
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: kwdAccountId,
+      amount: amount,
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('-${formatter.format(amount)}'), findsOneWidget);
+  });
+
+  testWidgets('a transfer row with a large amount renders in full with no layout overflow',
+      (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String sourceId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'MMK Primary',
+      type: 'cash',
+      currencyCode: 'MMK',
+    );
+    final String destinationId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'MMK Savings',
+      type: 'cash',
+      currencyCode: 'MMK',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(500000000, 'MMK'); // 5,000,000.00 MMK
+    await txRepo.recordTransfer(
+      profileId: profileId,
+      sourceAccountId: sourceId,
+      destinationAccountId: destinationId,
+      amount: amount,
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // Transfer rows carry no sign prefix -- unchanged from before this checkpoint.
+    expect(find.text(formatter.format(amount)), findsOneWidget);
+    expect(find.text('MMK Primary → MMK Savings'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the row lays out without overflow on a narrow (320px-wide) surface with a large amount',
+      (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String vndAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Vietnam Wallet',
+      type: 'cash',
+      currencyCode: 'VND',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'VND');
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: vndAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('-${formatter.format(amount)}'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the row lays out without overflow at an increased text scale with a large amount',
+      (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String mmkAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Myanmar Wallet',
+      type: 'cash',
+      currencyCode: 'MMK',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'MMK');
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: mmkAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('-${formatter.format(amount)}'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the row lays out without overflow with narrow width AND an increased text scale '
+      'together', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String vndAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Vietnam Wallet',
+      type: 'cash',
+      currencyCode: 'VND',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'VND');
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: vndAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('-${formatter.format(amount)}'), findsOneWidget);
+    // This worst-case combination is exactly what's expected to push the
+    // row into the stacked arrangement -- see the dedicated structural
+    // test below for the direct proof via the `transactionRowStacked` key.
+    expect(find.byKey(const Key('transactionRowStacked')), findsOneWidget);
+  });
+
+  testWidgets(
+      'long account/category/descriptive text together with a long amount lays out without '
+      'overflow, and the title ellipsizes rather than squeezing the amount', (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String sourceId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'International Kuwaiti Dinar Primary Household Wallet',
+      type: 'cash',
+      currencyCode: 'KWD',
+    );
+    final String destinationId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Overseas Long Term Kuwaiti Dinar Savings Reserve Account',
+      type: 'cash',
+      currencyCode: 'KWD',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'KWD'); // 987,654.321 KWD
+    await txRepo.recordTransfer(
+      profileId: profileId,
+      sourceAccountId: sourceId,
+      destinationAccountId: destinationId,
+      amount: amount,
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final String expectedAmount = formatter.format(amount);
+    const String fullTransferTitle =
+        'International Kuwaiti Dinar Primary Household Wallet → '
+        'Overseas Long Term Kuwaiti Dinar Savings Reserve Account';
+
+    // The full amount is always present in full -- never ellipsized.
+    expect(find.text(expectedAmount), findsOneWidget);
+
+    // The long combined transfer title is exactly the element this policy
+    // allows to ellipsize. Asserted structurally on the Text widget's own
+    // configuration -- maxLines and overflow -- rather than on rendered
+    // output, so this does not depend on RenderParagraph/rendering.dart.
+    final Finder titleFinder = find.text(fullTransferTitle);
+    expect(titleFinder, findsOneWidget);
+
+    final Text titleText = tester.widget<Text>(titleFinder);
+    expect(titleText.maxLines, 1);
+    expect(titleText.overflow, TextOverflow.ellipsis);
+
+    expect(find.text(expectedAmount), findsOneWidget);
+  });
+
+  testWidgets('tapping a transaction row with a large amount still navigates to transaction '
+      'detail', (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String mmkAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Myanmar Wallet',
+      type: 'cash',
+      currencyCode: 'MMK',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'MMK');
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: mmkAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      note: 'Big purchase',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Dining Out'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('editTransaction')), findsOneWidget);
+  });
+
+  testWidgets('the row uses the horizontal layout at normal width, not the stacked one',
+      (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String vndAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Vietnam Wallet',
+      type: 'cash',
+      currencyCode: 'VND',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'VND');
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: vndAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    // Plenty of room at the default widget-test surface size -- this is
+    // the direct structural proof (a Key, not a pixel coordinate) that
+    // the horizontal arrangement is what's actually built here.
+    expect(find.byKey(const Key('transactionRowHorizontal')), findsOneWidget);
+    expect(find.byKey(const Key('transactionRowStacked')), findsNothing);
+  });
+
+  testWidgets(
+      'the same row/data switches to the stacked layout once genuinely constrained by width '
+      'and text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String vndAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Vietnam Wallet',
+      type: 'cash',
+      currencyCode: 'VND',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'VND');
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: vndAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container));
+    await tester.pumpAndSettle();
+
+    // Same fixture as the horizontal-layout test above, now genuinely
+    // constrained -- the direct structural proof (via Key, independent
+    // of any pixel coordinate) that the adaptive layout is actually
+    // exercised, not just that no exception happened to be thrown.
+    expect(find.byKey(const Key('transactionRowStacked')), findsOneWidget);
+    expect(find.byKey(const Key('transactionRowHorizontal')), findsNothing);
   });
 }
