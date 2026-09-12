@@ -67,4 +67,79 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transactionTypeTransfer => 'Transfer';
+
+  @override
+  String get amountLabel => 'Amount';
+
+  @override
+  String get accountLabel => 'Account';
+
+  @override
+  String get fromAccountLabel => 'From account';
+
+  @override
+  String get toAccountLabel => 'To account';
+
+  @override
+  String get categoryOptionalLabel => 'Category (optional)';
+
+  @override
+  String get noteOptionalLabel => 'Note (optional)';
+
+  @override
+  String get dateLabel => 'Date';
+
+  @override
+  String get addAccountFirstMessage =>
+      'Add an account first (Profile → Accounts) before recording money.';
+
+  @override
+  String couldNotLoadAccounts(String error) {
+    return 'Could not load accounts: $error';
+  }
+
+  @override
+  String couldNotLoadCategories(String error) {
+    return 'Could not load categories: $error';
+  }
+
+  @override
+  String couldNotSaveTransaction(String error) {
+    return 'Could not save: $error';
+  }
+
+  @override
+  String get enterValidAmount => 'Enter a valid amount.';
+
+  @override
+  String get chooseDestinationAccount => 'Choose a destination account.';
+
+  @override
+  String noEligibleTransferDestination(String currency) {
+    return 'No other $currency account to transfer to yet. Cross-currency transfers are not supported in this version.';
+  }
+
+  @override
+  String currencyMismatchError(String fromCurrency, String toCurrency) {
+    return 'That amount\'s currency doesn\'t match the selected account ($fromCurrency → $toCurrency).';
+  }
+
+  @override
+  String get transactionNoLongerAvailable =>
+      'This transaction is no longer available -- it may have been deleted elsewhere.';
+
+  @override
+  String get addExpenseTitle => 'Add expense';
+
+  @override
+  String get addIncomeTitle => 'Add income';
+
+  @override
+  String get editExpenseTitle => 'Edit expense';
+
+  @override
+  String get editIncomeTitle => 'Edit income';
+
+  @override
+  String get editTransferTitle => 'Edit transfer';
 }

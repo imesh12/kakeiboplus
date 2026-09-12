@@ -217,6 +217,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transfer'**
   String get transactionTypeTransfer;
+
+  /// No description provided for @amountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount'**
+  String get amountLabel;
+
+  /// No description provided for @accountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get accountLabel;
+
+  /// No description provided for @fromAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'From account'**
+  String get fromAccountLabel;
+
+  /// No description provided for @toAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'To account'**
+  String get toAccountLabel;
+
+  /// No description provided for @categoryOptionalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category (optional)'**
+  String get categoryOptionalLabel;
+
+  /// No description provided for @noteOptionalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note (optional)'**
+  String get noteOptionalLabel;
+
+  /// No description provided for @dateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get dateLabel;
+
+  /// No description provided for @addAccountFirstMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an account first (Profile → Accounts) before recording money.'**
+  String get addAccountFirstMessage;
+
+  /// No description provided for @couldNotLoadAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load accounts: {error}'**
+  String couldNotLoadAccounts(String error);
+
+  /// No description provided for @couldNotLoadCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load categories: {error}'**
+  String couldNotLoadCategories(String error);
+
+  /// No description provided for @couldNotSaveTransaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save: {error}'**
+  String couldNotSaveTransaction(String error);
+
+  /// No description provided for @enterValidAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid amount.'**
+  String get enterValidAmount;
+
+  /// No description provided for @chooseDestinationAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a destination account.'**
+  String get chooseDestinationAccount;
+
+  /// No description provided for @noEligibleTransferDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'No other {currency} account to transfer to yet. Cross-currency transfers are not supported in this version.'**
+  String noEligibleTransferDestination(String currency);
+
+  /// No description provided for @currencyMismatchError.
+  ///
+  /// In en, this message translates to:
+  /// **'That amount\'s currency doesn\'t match the selected account ({fromCurrency} → {toCurrency}).'**
+  String currencyMismatchError(String fromCurrency, String toCurrency);
+
+  /// No description provided for @transactionNoLongerAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This transaction is no longer available -- it may have been deleted elsewhere.'**
+  String get transactionNoLongerAvailable;
+
+  /// No description provided for @addExpenseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add expense'**
+  String get addExpenseTitle;
+
+  /// No description provided for @addIncomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add income'**
+  String get addIncomeTitle;
+
+  /// No description provided for @editExpenseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit expense'**
+  String get editExpenseTitle;
+
+  /// No description provided for @editIncomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit income'**
+  String get editIncomeTitle;
+
+  /// No description provided for @editTransferTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit transfer'**
+  String get editTransferTitle;
 }
 
 class _AppLocalizationsDelegate

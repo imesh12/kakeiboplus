@@ -6,6 +6,7 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/edit_transaction_screen.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/transaction_detail_screen.dart';
 import 'package:drift/native.dart';
@@ -97,7 +98,20 @@ void main() {
     );
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        // CP6.2 Follow-up: `AddTransactionScreen` (reached here via
+        // `EditTransactionScreen`) now reads `AppLocalizations.of(context)`,
+        // so this harness needs the same localization wiring
+        // `add_transaction_screen_test.dart`'s `appWithPushedScreen()` and
+        // `app_shell_test.dart`'s `buildApp()` already carry. Every test in
+        // this file expects English text (e.g. 'Edit expense'), so a fixed
+        // `locale: const Locale('en')` is enough -- no Japanese-proof tests
+        // live in this file.
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     );
   }
 

@@ -6,6 +6,7 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/add_transaction_screen.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/widgets/money_text_field.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -84,9 +85,9 @@ class _CurrencySwitchHarnessState extends State<_CurrencySwitchHarness> {
 /// drag. The ListView's own Scrollable is built, and therefore appears
 /// in the element tree, before the fields nested inside it, so `.first`
 /// deterministically selects the ListView, never a field's.
-Future<void> scrollToSaveButton(WidgetTester tester) {
+Future<void> scrollToSaveButton(WidgetTester tester, {String label = 'Save'}) {
   return tester.scrollUntilVisible(
-    find.widgetWithText(FilledButton, 'Save'),
+    find.widgetWithText(FilledButton, label),
     300,
     scrollable: find.byType(Scrollable).first,
   );
@@ -134,10 +135,25 @@ void main() {
   /// in this tree, so this one container is the only thing holding
   /// `accountsProvider` / `activeProfileProvider`'s live Drift query
   /// subscriptions.
-  Widget appWithPushedScreen(ProviderContainer container, Widget screen) {
+  // CP6.2 (Localization Phase 1): `AddTransactionScreen` now reads
+  // `AppLocalizations.of(context)`, so every test app -- not just the new
+  // Japanese-locale ones -- must wire
+  // `AppLocalizations.localizationsDelegates`/`supportedLocales`, exactly
+  // like `app_shell_test.dart` already does for CP6.1. `{Locale locale =
+  // const Locale('en')}` keeps every pre-existing call site passing
+  // (English is still the default), while the new Japanese-proof tests
+  // pass `locale: const Locale('ja')`.
+  Widget appWithPushedScreen(
+    ProviderContainer container,
+    Widget screen, {
+    Locale locale = const Locale('en'),
+  }) {
     return UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => Scaffold(
             body: Center(
@@ -889,6 +905,278 @@ void main() {
       expect(find.byType(SegmentedButton<String>), findsNothing);
       expect(find.byType(ChoiceChip), findsNothing);
       expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(2));
+    });
+  });
+
+  // -- CP6.2 (Localization Phase 1): Full Add Transaction Form
+  // Localization. Exercises the REAL `AddTransactionScreen` under the
+  // Japanese locale (via `appWithPushedScreen`'s new `locale:` param) --
+  // no fake/translated stand-in widgets, same pattern CP6.1 established
+  // for `app_shell_test.dart`.
+  group('CP6.2 Japanese localization', () {
+    testWidgets(
+        'A: the expense form renders its major labels in Japanese and Save '
+        'remains usable end-to-end, with no exceptions', (tester) async {
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(
+          container,
+          const AddTransactionScreen(initialType: 'expense'),
+          locale: const Locale('ja'),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.text('支出を追加'), findsOneWidget); // AppBar title
+      expect(find.text('支出'), findsOneWidget); // header label (fixed type)
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String>, '口座'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String>, 'カテゴリ（任意）'),
+        findsOneWidget,
+      );
+      expect(find.text('日付'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextFormField).first, '100');
+      await tester.pump();
+      await scrollToSaveButton(tester, label: '保存');
+      expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(); // categoriesForTypeProvider autoDispose drain, as above
+
+      expect(find.text('open'), findsOneWidget); // saved and popped successfully
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'B: the income form shows the correct Japanese transaction type and its '
+        'core fields remain usable', (tester) async {
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(
+          container,
+          const AddTransactionScreen(initialType: 'income'),
+          locale: const Locale('ja'),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.text('収入を追加'), findsOneWidget); // AppBar title
+      expect(find.text('収入'), findsOneWidget); // header label (fixed type)
+
+      await tester.enterText(find.byType(TextFormField).first, '200');
+      await tester.pump();
+      await scrollToSaveButton(tester, label: '保存');
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsOneWidget); // saved and popped successfully
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'C: the transfer form shows 振替, localizes the source/destination '
+        'fields, and same-currency filtering behavior is unchanged', (tester) async {
+      // Same seeded shape as the top-level "destination dropdown ...
+      // only offers accounts sharing the source account's currency"
+      // test: exactly one JPY account and one LKR account, so there is
+      // no eligible same-currency destination -- proving the fallback
+      // message (and its localization) without tapping any dropdown
+      // menu, which keeps this test independent of the known
+      // transfer-dropdown tap warning elsewhere in this file.
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(
+          container,
+          const AddTransactionScreen(initialType: 'transfer'),
+          locale: const Locale('ja'),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // AppBar title for add-mode transfer is itself "振替" (reusing the
+      // same word as the header label), exactly like the English
+      // "Transfer" case -- two widgets, not one.
+      expect(find.text('振替'), findsNWidgets(2));
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String>, '振替元口座'),
+        findsOneWidget,
+      );
+      // From -> To visual affordance still renders regardless of locale.
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+      // No eligible same-currency destination -- ADR-019 form-layer
+      // filtering unchanged -- so the localized fallback message shows
+      // instead of a destination dropdown.
+      expect(find.textContaining('他に振替可能なJPY口座がありません'), findsOneWidget);
+      expect(find.widgetWithText(DropdownButtonFormField<String>, '振替先口座'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'D: choosing no destination on a transfer with an eligible destination '
+        'surfaces the localized Japanese validation message', (tester) async {
+      final AppDatabase db = await seededDb();
+      // A second JPY account so a real destination dropdown renders
+      // (eligible.isNotEmpty) instead of the C test's fallback message --
+      // this exercises `_DestinationAccountDropdown`'s own `validator`
+      // via `FormState.validate()`, a different code path from the
+      // no-eligible-account case.
+      final profile = await ProfileRepository(db).getProfile();
+      await AccountRepository(db).createAccount(
+        profileId: profile!.id,
+        name: 'JPY Savings',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(
+          container,
+          const AddTransactionScreen(initialType: 'transfer'),
+          locale: const Locale('ja'),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // A valid amount, but no destination account is ever selected.
+      await tester.enterText(find.byType(TextFormField).first, '100');
+      await tester.pump();
+      await scrollToSaveButton(tester, label: '保存');
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsNothing); // did NOT pop -- save was rejected
+      expect(find.text('振替先口座を選択してください。'), findsOneWidget);
+      final List<dynamic> rows = await db.select(db.transactions).get();
+      expect(rows, isEmpty);
+    });
+
+    testWidgets(
+        'E1: the Japanese expense form has no overflow/render exceptions at 1.6x '
+        'text scale, and the amount field and Save remain reachable', (tester) async {
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(
+          container,
+          const AddTransactionScreen(initialType: 'expense'),
+          locale: const Locale('ja'),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.byType(TextFormField).first, findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).first, '100');
+      await tester.pump();
+      await scrollToSaveButton(tester, label: '保存');
+      expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'E2: the Japanese transfer form has no overflow/render exceptions at 2.0x '
+        'text scale, and the amount field and Save remain reachable', (tester) async {
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(
+          container,
+          const AddTransactionScreen(initialType: 'transfer'),
+          locale: const Locale('ja'),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.byType(TextFormField).first, findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).first, '100');
+      await tester.pump();
+      await scrollToSaveButton(tester, label: '保存');
+      expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'E3: the Japanese expense form has no overflow/render exceptions at a '
+        'narrow 320px width combined with 1.6x text scale, and the amount field '
+        'and Save remain reachable', (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+
+      final AppDatabase db = await seededDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(
+          container,
+          const AddTransactionScreen(initialType: 'expense'),
+          locale: const Locale('ja'),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.byType(TextFormField).first, findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).first, '100');
+      await tester.pump();
+      await scrollToSaveButton(tester, label: '保存');
+      expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

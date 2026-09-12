@@ -19,5 +19,64 @@
   "navProfile": "プロフィール",
   "transactionTypeExpense": "支出",
   "transactionTypeIncome": "収入",
-  "transactionTypeTransfer": "振替"
+  "transactionTypeTransfer": "振替",
+  "amountLabel": "金額",
+  "accountLabel": "口座",
+  "fromAccountLabel": "振替元口座",
+  "toAccountLabel": "振替先口座",
+  "categoryOptionalLabel": "カテゴリ（任意）",
+  "noteOptionalLabel": "メモ（任意）",
+  "dateLabel": "日付",
+  "addAccountFirstMessage": "取引を記録する前に、まず口座を追加してください（プロフィール → 口座）。",
+  "couldNotLoadAccounts": "口座を読み込めませんでした: {error}",
+  "@couldNotLoadAccounts": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotLoadCategories": "カテゴリを読み込めませんでした: {error}",
+  "@couldNotLoadCategories": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotSaveTransaction": "保存できませんでした: {error}",
+  "@couldNotSaveTransaction": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "enterValidAmount": "有効な金額を入力してください。",
+  "chooseDestinationAccount": "振替先口座を選択してください。",
+  "noEligibleTransferDestination": "他に振替可能な{currency}口座がありません。異なる通貨間の振替は現在のバージョンでは対応していません。",
+  "@noEligibleTransferDestination": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "currencyMismatchError": "この金額の通貨が選択した口座と一致しません（{fromCurrency} → {toCurrency}）。",
+  "@currencyMismatchError": {
+    "placeholders": {
+      "fromCurrency": {
+        "type": "String"
+      },
+      "toCurrency": {
+        "type": "String"
+      }
+    }
+  },
+  "transactionNoLongerAvailable": "この取引は利用できません。他の場所で削除された可能性があります。",
+  "addExpenseTitle": "支出を追加",
+  "addIncomeTitle": "収入を追加",
+  "editExpenseTitle": "支出を編集",
+  "editIncomeTitle": "収入を編集",
+  "editTransferTitle": "振替を編集"
 }

@@ -19,5 +19,64 @@
   "navProfile": "Profile",
   "transactionTypeExpense": "Expense",
   "transactionTypeIncome": "Income",
-  "transactionTypeTransfer": "Transfer"
+  "transactionTypeTransfer": "Transfer",
+  "amountLabel": "Amount",
+  "accountLabel": "Account",
+  "fromAccountLabel": "From account",
+  "toAccountLabel": "To account",
+  "categoryOptionalLabel": "Category (optional)",
+  "noteOptionalLabel": "Note (optional)",
+  "dateLabel": "Date",
+  "addAccountFirstMessage": "Add an account first (Profile → Accounts) before recording money.",
+  "couldNotLoadAccounts": "Could not load accounts: {error}",
+  "@couldNotLoadAccounts": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotLoadCategories": "Could not load categories: {error}",
+  "@couldNotLoadCategories": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotSaveTransaction": "Could not save: {error}",
+  "@couldNotSaveTransaction": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "enterValidAmount": "Enter a valid amount.",
+  "chooseDestinationAccount": "Choose a destination account.",
+  "noEligibleTransferDestination": "No other {currency} account to transfer to yet. Cross-currency transfers are not supported in this version.",
+  "@noEligibleTransferDestination": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "currencyMismatchError": "That amount's currency doesn't match the selected account ({fromCurrency} → {toCurrency}).",
+  "@currencyMismatchError": {
+    "placeholders": {
+      "fromCurrency": {
+        "type": "String"
+      },
+      "toCurrency": {
+        "type": "String"
+      }
+    }
+  },
+  "transactionNoLongerAvailable": "This transaction is no longer available -- it may have been deleted elsewhere.",
+  "addExpenseTitle": "Add expense",
+  "addIncomeTitle": "Add income",
+  "editExpenseTitle": "Edit expense",
+  "editIncomeTitle": "Edit income",
+  "editTransferTitle": "Edit transfer"
 }

@@ -11,6 +11,7 @@ import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import 'transaction_icon_badge.dart';
+import '../../../l10n/generated/app_localizations.dart';
 
 /// Add Expense / Add Income / Transfer, OR edit an existing one of
 /// those — one screen either way, per `docs/02_SCREEN_CATALOG.md` items
@@ -75,11 +76,14 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
   /// The plain type word shown in the Checkpoint 5 header -- distinct
   /// from [_titleFor], which produces the AppBar's "Add expense"/"Edit
-  /// income"/etc. title text.
-  String get _typeLabel => switch (_type) {
-        'income' => 'Income',
-        'transfer' => 'Transfer',
-        _ => 'Expense',
+  /// income"/etc. title text. CP6.2: reuses the same
+  /// `transactionType*` ARB keys CP6.1 already introduced for the Add
+  /// sheet (`add_transaction_sheet.dart`) rather than duplicating them --
+  /// both surfaces show the same three words.
+  String _typeLabel(AppLocalizations l10n) => switch (_type) {
+        'income' => l10n.transactionTypeIncome,
+        'transfer' => l10n.transactionTypeTransfer,
+        _ => l10n.transactionTypeExpense,
       };
 
   // Plain-decimal seed text for `MoneyTextField` in edit mode --
@@ -110,6 +114,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    // CP6.2 (Localization Phase 1): resolved once per build and reused
+    // by every literal string below (header, dropdown labels, empty/
+    // error states, Save) -- `_DestinationAccountDropdown` and
+    // `_CategoryDropdown` are separate widgets below and resolve their
+    // own copy from their own `context` instead.
+    final AppLocalizations l10n = AppLocalizations.of(context);
     // ColorScheme-driven per type -- matches the convention Activity and
     // Transaction Detail (Checkpoints 2/4) already established, so the
     // same transaction type reads consistently everywhere in the app.
@@ -121,17 +131,18 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_titleFor(_type))),
+      appBar: AppBar(title: Text(_titleFor(l10n, _type))),
       body: SafeArea(
         child: accountsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (Object e, StackTrace st) => Center(child: Text('Could not load accounts: $e')),
+          error: (Object e, StackTrace st) =>
+              Center(child: Text(l10n.couldNotLoadAccounts(e.toString()))),
           data: (List<AccountRow> accounts) {
             if (accounts.isEmpty) {
-              return const Center(
+              return Center(
                 child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('Add an account first (Profile → Accounts) before recording money.'),
+                  padding: const EdgeInsets.all(24),
+                  child: Text(l10n.addAccountFirstMessage),
                 ),
               );
             }
@@ -155,12 +166,12 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     child: Column(
                       children: <Widget>[
                         Semantics(
-                          label: _typeLabel,
+                          label: _typeLabel(l10n),
                           child: TransactionIconBadge(type: _type, color: typeColor),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _typeLabel,
+                          _typeLabel(l10n),
                           style: text.titleMedium?.copyWith(
                             color: typeColor,
                             fontWeight: FontWeight.w600,
@@ -192,8 +203,21 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                         children: <Widget>[
                           DropdownButtonFormField<String>(
                             initialValue: _accountId,
+                            // CP6.2 follow-up: `isExpanded: true` -- without it,
+                            // `DropdownButton`'s own inner Row sizes itself to the
+                            // UNCLAMPED intrinsic width of the selected item's Text,
+                            // so the `overflow: TextOverflow.ellipsis` already set on
+                            // that Text below never gets a chance to engage (there is
+                            // no bounded width for it to ellipsize against) -- a
+                            // documented `DropdownButton` gotcha, not something
+                            // specific to any one language. `isExpanded: true` makes
+                            // the button fill the available width instead, which is
+                            // what actually lets the ellipsis do its job at a narrow
+                            // viewport/large text scale, for a long account name in
+                            // ANY locale.
+                            isExpanded: true,
                             decoration: InputDecoration(
-                              labelText: _isTransfer ? 'From account' : 'Account',
+                              labelText: _isTransfer ? l10n.fromAccountLabel : l10n.accountLabel,
                             ),
                             items: <DropdownMenuItem<String>>[
                               for (final AccountRow account in accounts)
@@ -255,6 +279,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                       ),
                       child: MoneyTextField(
                         currencyCode: selectedAccount.currencyCode,
+                        label: l10n.amountLabel,
                         initialValue: _initialAmountText,
                         onParsed: (Money? amount) => setState(() => _amount = amount),
                       ),
@@ -277,8 +302,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                         children: <Widget>[
                           TextFormField(
                             initialValue: _note,
-                            decoration: const InputDecoration(
-                              labelText: 'Note (optional)',
+                            decoration: InputDecoration(
+                              labelText: l10n.noteOptionalLabel,
                               border: InputBorder.none,
                             ),
                             onChanged: (String value) => _note = value,
@@ -286,7 +311,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                           const Divider(height: 1),
                           ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: const Text('Date'),
+                            title: Text(l10n.dateLabel),
                             subtitle: Text(
                               '${_occurredAt.year}-${_occurredAt.month.toString().padLeft(2, '0')}-'
                               '${_occurredAt.day.toString().padLeft(2, '0')}',
@@ -322,7 +347,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Save'),
+                        : Text(l10n.save),
                   ),
                 ],
               ),
@@ -368,14 +393,20 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   }
 
   Future<void> _submit(List<AccountRow> accounts) async {
+    // CP6.2: resolved once, before any `await` below -- a plain value
+    // read from `context`, not a `BuildContext` itself, so it's safe to
+    // keep using across the async gaps that follow (unlike, say,
+    // `Navigator.of(context)`, which this method re-derives from
+    // `context` only after checking `mounted`).
+    final AppLocalizations l10n = AppLocalizations.of(context);
     setState(() => _errorMessage = null);
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_amount == null) {
-      setState(() => _errorMessage = 'Enter a valid amount.');
+      setState(() => _errorMessage = l10n.enterValidAmount);
       return;
     }
     if (_isTransfer && _destinationAccountId == null) {
-      setState(() => _errorMessage = 'Choose a destination account.');
+      setState(() => _errorMessage = l10n.chooseDestinationAccount);
       return;
     }
 
@@ -475,33 +506,34 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       // transaction_repository.dart -- so surface its rejection cleanly
       // rather than letting it crash.
       setState(() {
-        _errorMessage = "That amount's currency doesn't match the selected account "
-            '(${e.currencyCodeA} → ${e.currencyCodeB}).';
+        _errorMessage = l10n.currencyMismatchError(e.currencyCodeA, e.currencyCodeB);
       });
     } on TransactionNotFoundException {
       setState(() {
-        _errorMessage = 'This transaction is no longer available -- it may have '
-            'been deleted elsewhere.';
+        _errorMessage = l10n.transactionNoLongerAvailable;
       });
     } catch (e) {
-      setState(() => _errorMessage = 'Could not save: $e');
+      setState(() => _errorMessage = l10n.couldNotSaveTransaction(e.toString()));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  String _titleFor(String type) {
+  String _titleFor(AppLocalizations l10n, String type) {
     if (_isEditing) {
       return switch (type) {
-        'income' => 'Edit income',
-        'transfer' => 'Edit transfer',
-        _ => 'Edit expense',
+        'income' => l10n.editIncomeTitle,
+        'transfer' => l10n.editTransferTitle,
+        _ => l10n.editExpenseTitle,
       };
     }
     return switch (type) {
-      'income' => 'Add income',
-      'transfer' => 'Transfer',
-      _ => 'Add expense',
+      'income' => l10n.addIncomeTitle,
+      // Add-mode transfer reuses the exact same word/translation as the
+      // header label and the Add sheet (CP6.1) -- "Transfer"/"振替" is
+      // one concept, not a separate title string.
+      'transfer' => l10n.transactionTypeTransfer,
+      _ => l10n.addExpenseTitle,
     };
   }
 }
@@ -521,6 +553,10 @@ class _DestinationAccountDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // CP6.2: this widget renders its own copy independently of
+    // `AddTransactionScreen.build`'s -- it's a separate `StatelessWidget`
+    // with its own `context`, same pattern `_CategoryDropdown` below uses.
+    final AppLocalizations l10n = AppLocalizations.of(context);
     AccountRow? source;
     for (final AccountRow candidate in accounts) {
       if (candidate.id == sourceAccountId) {
@@ -548,15 +584,18 @@ class _DestinationAccountDropdown extends StatelessWidget {
 
     if (source != null && eligible.isEmpty) {
       return Text(
-        'No other ${source.currencyCode} account to transfer to yet. '
-        'Cross-currency transfers are not supported in this version.',
+        l10n.noEligibleTransferDestination(source.currencyCode),
         style: TextStyle(color: Theme.of(context).colorScheme.error),
       );
     }
 
     return DropdownButtonFormField<String>(
       initialValue: eligible.any((a) => a.id == value) ? value : null,
-      decoration: const InputDecoration(labelText: 'To account'),
+      // See the account dropdown's own comment above (same file) --
+      // without this, a long account name can overflow this button's row
+      // at a narrow viewport/large text scale in any locale.
+      isExpanded: true,
+      decoration: InputDecoration(labelText: l10n.toAccountLabel),
       items: <DropdownMenuItem<String>>[
         for (final AccountRow account in eligible)
           DropdownMenuItem<String>(
@@ -565,7 +604,7 @@ class _DestinationAccountDropdown extends StatelessWidget {
           ),
       ],
       onChanged: onChanged,
-      validator: (String? v) => v == null ? 'Choose a destination account.' : null,
+      validator: (String? v) => v == null ? l10n.chooseDestinationAccount : null,
     );
   }
 }
@@ -579,15 +618,23 @@ class _CategoryDropdown extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // CP6.2: this widget renders its own copy independently of
+    // `AddTransactionScreen.build`'s -- it's a separate `ConsumerWidget`
+    // with its own `context`.
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<CategoryRow>> categoriesAsync =
         ref.watch(categoriesForTypeProvider(type));
     return categoriesAsync.when(
       loading: () => const LinearProgressIndicator(),
-      error: (Object e, StackTrace st) => Text('Could not load categories: $e'),
+      error: (Object e, StackTrace st) => Text(l10n.couldNotLoadCategories(e.toString())),
       data: (List<CategoryRow> categories) {
         return DropdownButtonFormField<String>(
           initialValue: categories.any((c) => c.id == value) ? value : null,
-          decoration: const InputDecoration(labelText: 'Category (optional)'),
+          // See the account dropdown's own comment above (same file) --
+          // without this, a long category name can overflow this button's
+          // row at a narrow viewport/large text scale in any locale.
+          isExpanded: true,
+          decoration: InputDecoration(labelText: l10n.categoryOptionalLabel),
           items: <DropdownMenuItem<String>>[
             for (final CategoryRow category in categories)
               DropdownMenuItem<String>(
