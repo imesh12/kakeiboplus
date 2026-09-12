@@ -206,5 +206,82 @@
   "enterAccountNameMessage": "Enter a name.",
   "accountTypeLabel": "Type",
   "cancel": "Cancel",
-  "addAccountButton": "Add"
+  "addAccountButton": "Add",
+  "budgetsScreenTitle": "Budgets · {month}",
+  "@budgetsScreenTitle": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotLoadBudgets": "Could not load budgets: {error}",
+  "@couldNotLoadBudgets": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noBudgetsSetThisMonthMessage": "No budgets set for this month yet. Tap + to set an overall monthly budget or a category budget.",
+  "overallBudgetsSectionTitle": "Overall budgets",
+  "categoryBudgetsSectionTitle": "Category budgets",
+  "overallMonthlyBudgetOption": "Overall monthly budget",
+  "categoryBudgetOption": "Category budget",
+  "editOverallBudgetTitle": "Edit overall monthly budget",
+  "setOverallBudgetTitle": "Set overall monthly budget",
+  "monthlyBudgetAmountLabel": "Monthly budget amount",
+  "editCategoryBudgetTitle": "Edit category budget",
+  "setCategoryBudgetTitle": "Set category budget",
+  "categoryFieldLabel": "Category",
+  "chooseCategoryMessage": "Choose a category.",
+  "categoryBudgetAmountLabel": "Category budget amount",
+  "editTooltip": "Edit",
+  "removeTooltip": "Remove",
+  "couldNotLoadGoals": "Could not load goals: {error}",
+  "@couldNotLoadGoals": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noSavingsGoalsYetTapMessage": "No savings goals yet. Tap + to set one.",
+  "newSavingsGoalDialogTitle": "New savings goal",
+  "goalNameLabel": "Goal name",
+  "enterGoalNameMessage": "Enter a name for this goal.",
+  "targetAmountLabel": "Target amount",
+  "noTargetDateMessage": "No target date",
+  "targetDateLabel": "Target date",
+  "chooseButton": "Choose",
+  "clearTargetDateTooltip": "Clear target date",
+  "goalFallbackTitle": "Goal",
+  "editGoalAction": "Edit goal",
+  "deleteGoalTooltip": "Delete goal",
+  "couldNotLoadGoalDetail": "Could not load this goal: {error}",
+  "@couldNotLoadGoalDetail": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "goalNoLongerAvailableMessage": "This goal is no longer available.",
+  "deleteGoalConfirmTitle": "Delete this goal?",
+  "deleteGoalConfirmMessage": "Its contribution history is kept, but the goal itself will no longer be active.",
+  "deleteButton": "Delete",
+  "remainingLabel": "Remaining",
+  "recommendedDailyContributionLabel": "Recommended daily contribution",
+  "contributionHistoryTitle": "Contribution history",
+  "couldNotLoadContributionHistory": "Could not load contribution history: {error}",
+  "@couldNotLoadContributionHistory": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noContributionsYetMessage": "No contributions yet.",
+  "addContributionDialogTitle": "Add a contribution",
+  "addContributionButton": "Add"
 }

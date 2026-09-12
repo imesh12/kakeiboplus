@@ -5,6 +5,7 @@ import 'package:ai_financial_coach/core/database/repositories/savings_goal_contr
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/goals/presentation/goal_detail_screen.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,10 +43,18 @@ void main() {
 
   // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
   // `MaterialApp`'s own `builder:` -- see `test/support/rtl_harness.dart`.
-  Widget appWithGoalDetail(ProviderContainer container, String goalId, {bool rtl = false}) {
+  Widget appWithGoalDetail(
+    ProviderContainer container,
+    String goalId, {
+    bool rtl = false,
+    Locale locale = const Locale('en'),
+  }) {
     return UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: GoalDetailScreen(goalId: goalId),
         builder: rtl ? rtlAppBuilder : null,
       ),
@@ -459,6 +468,252 @@ void main() {
         matching: find.text('In progress'),
       ),
       findsOneWidget,
+    );
+  });
+
+  // CP6.6: Goal Detail Japanese localization. Re-uses every seeding/
+  // layout-key helper above unchanged; only `appWithGoalDetail` grew a
+  // `locale` parameter (default 'en', so every test above this point is
+  // unaffected). Letters below reference the CP6.6 checkpoint's overall
+  // Savings Goal coverage list (A/B/K live in
+  // `test/widget/savings_goals_screen_test.dart`).
+  group('CP6.6 Japanese localization', () {
+    testWidgets(
+      'C: standard Japanese Goal Detail renders localized principal labels with target/saved/'
+      'remaining values intact',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final String goalId = await SavingsGoalRepository(db).createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'), // ¥100,000
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Emergency Fund'), findsWidgets); // untouched goal name
+        expect(find.textContaining('¥100,000のうち'), findsOneWidget); // ofAmount(target)
+        expect(find.textContaining('進行中'), findsOneWidget); // goalStatusInProgress
+        expect(find.text('残り'), findsOneWidget); // remainingLabel
+        expect(
+          tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+          '¥0', // nothing saved yet -- value itself is untouched
+        );
+        expect(find.text('積立履歴'), findsOneWidget); // contributionHistoryTitle
+        expect(find.text('積立はまだありません。'), findsOneWidget); // noContributionsYetMessage
+      },
+    );
+
+    testWidgets(
+      'D: Japanese + the hero row switches to a stacked layout and keeps every digit of a '
+      'large MMK saved amount at a narrow 320px width and an extreme 2.0x text scale',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Large MMK Goal',
+          targetAmount: Money.fromMinorUnits(2000000000, 'MMK'),
+        );
+        final SavingsGoalContributionRepository contributionRepo =
+            SavingsGoalContributionRepository(db, goalRepo);
+        await contributionRepo.addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(999999999, 'MMK'), // K9,999,999.99
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('goalHeroStacked')), findsOneWidget);
+        expect(find.byKey(const Key('goalHeroHorizontal')), findsNothing);
+        expect(
+          tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+          'K9,999,999.99',
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('goalHeroStacked')),
+            matching: find.text('進行中'), // goalStatusInProgress
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'E: Japanese + a large 0-decimal VND saved amount keeps every digit at a narrow 320px '
+      'width and a 1.6x text scale',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Large VND Goal',
+          targetAmount: Money.fromMinorUnits(1999999998, 'VND'),
+        );
+        final SavingsGoalContributionRepository contributionRepo =
+            SavingsGoalContributionRepository(db, goalRepo);
+        await contributionRepo.addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(999999999, 'VND'),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+          '₫999,999,999',
+        );
+      },
+    );
+
+    testWidgets(
+      'F: Japanese + a 3-decimal KWD saved amount renders with its registry-defined precision, '
+      'not 0, in the hero row under normal width and text scale',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'KWD Precision Goal',
+          targetAmount: Money.fromMinorUnits(99999999, 'KWD'),
+        );
+        final SavingsGoalContributionRepository contributionRepo =
+            SavingsGoalContributionRepository(db, goalRepo);
+        await contributionRepo.addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+          'د.ك12,345.678',
+        );
+      },
+    );
+
+    testWidgets(
+      'G: Japanese + 1.6x text scale renders the goal detail screen without exceptions',
+      (tester) async {
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+
+        final (AppDatabase db, String profileId) = await seededDb();
+        final String goalId = await SavingsGoalRepository(db).createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('残り'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'H: Japanese + 2.0x text scale renders the goal detail screen without exceptions',
+      (tester) async {
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+
+        final (AppDatabase db, String profileId) = await seededDb();
+        final String goalId = await SavingsGoalRepository(db).createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('残り'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'J: contribution/action regression -- adding a contribution under the Japanese locale '
+      'shows a fully localized dialog, and submitting it still persists and updates the '
+      'saved amount and contribution history',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final String goalId = await SavingsGoalRepository(db).createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addContributionFab')));
+        await tester.pumpAndSettle();
+        expect(find.text('積立を追加'), findsOneWidget); // addContributionDialogTitle
+        expect(find.text('金額'), findsOneWidget); // amountLabel
+
+        await tester.enterText(find.byKey(const Key('contributionAmountField')), '30000');
+        await tester.tap(find.byKey(const Key('saveContribution')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('積立を追加'), findsNothing); // dialog closed
+        expect(
+          tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+          '¥30,000',
+        );
+        expect(find.text('積立はまだありません。'), findsNothing);
+      },
     );
   });
 }

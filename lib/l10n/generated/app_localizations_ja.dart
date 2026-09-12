@@ -334,4 +334,141 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get addAccountButton => '追加';
+
+  @override
+  String budgetsScreenTitle(String month) {
+    return '予算 · $month';
+  }
+
+  @override
+  String couldNotLoadBudgets(String error) {
+    return '予算を読み込めませんでした: $error';
+  }
+
+  @override
+  String get noBudgetsSetThisMonthMessage =>
+      '今月の予算はまだ設定されていません。+ をタップして全体予算またはカテゴリ予算を設定してください。';
+
+  @override
+  String get overallBudgetsSectionTitle => '全体予算';
+
+  @override
+  String get categoryBudgetsSectionTitle => 'カテゴリ予算';
+
+  @override
+  String get overallMonthlyBudgetOption => '毎月の全体予算';
+
+  @override
+  String get categoryBudgetOption => 'カテゴリ予算';
+
+  @override
+  String get editOverallBudgetTitle => '毎月の全体予算を編集';
+
+  @override
+  String get setOverallBudgetTitle => '毎月の全体予算を設定';
+
+  @override
+  String get monthlyBudgetAmountLabel => '毎月の予算額';
+
+  @override
+  String get editCategoryBudgetTitle => 'カテゴリ予算を編集';
+
+  @override
+  String get setCategoryBudgetTitle => 'カテゴリ予算を設定';
+
+  @override
+  String get categoryFieldLabel => 'カテゴリ';
+
+  @override
+  String get chooseCategoryMessage => 'カテゴリを選択してください。';
+
+  @override
+  String get categoryBudgetAmountLabel => 'カテゴリ予算額';
+
+  @override
+  String get editTooltip => '編集';
+
+  @override
+  String get removeTooltip => '削除';
+
+  @override
+  String couldNotLoadGoals(String error) {
+    return '目標を読み込めませんでした: $error';
+  }
+
+  @override
+  String get noSavingsGoalsYetTapMessage => '貯蓄目標がまだありません。+ をタップして設定してください。';
+
+  @override
+  String get newSavingsGoalDialogTitle => '新しい貯蓄目標';
+
+  @override
+  String get goalNameLabel => '目標名';
+
+  @override
+  String get enterGoalNameMessage => 'この目標の名前を入力してください。';
+
+  @override
+  String get targetAmountLabel => '目標金額';
+
+  @override
+  String get noTargetDateMessage => '目標日なし';
+
+  @override
+  String get targetDateLabel => '目標日';
+
+  @override
+  String get chooseButton => '選択';
+
+  @override
+  String get clearTargetDateTooltip => '目標日をクリア';
+
+  @override
+  String get goalFallbackTitle => '目標';
+
+  @override
+  String get editGoalAction => '目標を編集';
+
+  @override
+  String get deleteGoalTooltip => '目標を削除';
+
+  @override
+  String couldNotLoadGoalDetail(String error) {
+    return 'この目標を読み込めませんでした: $error';
+  }
+
+  @override
+  String get goalNoLongerAvailableMessage => 'この目標は利用できません。';
+
+  @override
+  String get deleteGoalConfirmTitle => 'この目標を削除しますか?';
+
+  @override
+  String get deleteGoalConfirmMessage => '積立履歴は保持されますが、目標自体は有効ではなくなります。';
+
+  @override
+  String get deleteButton => '削除';
+
+  @override
+  String get remainingLabel => '残り';
+
+  @override
+  String get recommendedDailyContributionLabel => '推奨される1日あたりの積立額';
+
+  @override
+  String get contributionHistoryTitle => '積立履歴';
+
+  @override
+  String couldNotLoadContributionHistory(String error) {
+    return '積立履歴を読み込めませんでした: $error';
+  }
+
+  @override
+  String get noContributionsYetMessage => '積立はまだありません。';
+
+  @override
+  String get addContributionDialogTitle => '積立を追加';
+
+  @override
+  String get addContributionButton => '追加';
 }

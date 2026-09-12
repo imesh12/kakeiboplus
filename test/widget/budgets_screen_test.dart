@@ -7,6 +7,7 @@ import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
 import 'package:ai_financial_coach/features/budgets/presentation/budgets_screen.dart';
 import 'package:ai_financial_coach/features/categories/presentation/category_providers.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,10 +40,15 @@ void main() {
     return (db, profileId);
   }
 
-  Widget appWithBudgets(ProviderContainer container) {
+  Widget appWithBudgets(ProviderContainer container, {Locale locale = const Locale('en')}) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: BudgetsScreen()),
+      child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BudgetsScreen(),
+      ),
     );
   }
 
@@ -364,6 +370,304 @@ void main() {
         matching: find.textContaining('\u062F.\u064312,345.678'),
       ),
       findsOneWidget,
+    );
+  });
+
+  // CP6.6: Budgets screen Japanese localization. Re-uses every seeding/
+  // layout-key helper above unchanged; only `appWithBudgets` grew a
+  // `locale` parameter (default 'en', so every test above this point is
+  // unaffected).
+  group('CP6.6 Japanese localization', () {
+    testWidgets(
+      'A: standard Japanese Budgets renders a localized AppBar/section header and an '
+      'untouched currency code and amount',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profileId,
+          month: month,
+          amount: Money.fromMinorUnits(120000, 'JPY'), // ¥120,000
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('予算 ·'), findsOneWidget); // AppBar (budgetsScreenTitle)
+        expect(find.text('全体予算'), findsOneWidget); // overallBudgetsSectionTitle
+        expect(find.text('JPY'), findsOneWidget); // currency code -- never translated
+        expect(find.text('¥120,000'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'B: a custom category name renders exactly as stored under the Japanese locale, '
+      'alongside the localized "Category budgets" section header',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        const String customCategoryName = 'カスタム外食カテゴリ';
+        final String categoryId = await CategoryRepository(db).createCategory(
+          profileId: profileId,
+          name: customCategoryName,
+          type: 'expense',
+        );
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        await BudgetRepository(db).setCategoryBudget(
+          profileId: profileId,
+          categoryId: categoryId,
+          month: month,
+          amount: Money.fromMinorUnits(20000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('カテゴリ予算'), findsOneWidget); // categoryBudgetsSectionTitle
+        // The custom category name is persisted content -- it is
+        // reproduced verbatim, never run through l10n, even though it
+        // happens to already be Japanese text.
+        expect(find.text(customCategoryName), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'C: Japanese + MMK renders its registry-defined 2 decimal places (never 0) at normal '
+      'width and text scale',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profileId,
+          month: month,
+          amount: Money.fromMinorUnits(150075, 'MMK'), // K1,500.75
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('overallBudgetTile_MMK')),
+            matching: find.text('K1,500.75'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'D: Japanese + a large 0-decimal VND budget keeps every digit intact',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profileId,
+          month: month,
+          amount: Money.fromMinorUnits(999999999, 'VND'), // ₫999,999,999
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('overallBudgetTile_VND')),
+            matching: find.text('₫999,999,999'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'E: Japanese + a large 3-decimal KWD category budget keeps every digit intact',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final String categoryId = await CategoryRepository(db).createCategory(
+          profileId: profileId,
+          name: 'Precision Category',
+          type: 'expense',
+        );
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        await BudgetRepository(db).setCategoryBudget(
+          profileId: profileId,
+          categoryId: categoryId,
+          month: month,
+          amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.descendant(
+            of: find.byKey(Key('categoryBudgetTile_${categoryId}_KWD')),
+            matching: find.textContaining('د.ك12,345.678'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'F: Japanese + 1.6x text scale renders both budget sections without exceptions',
+      (tester) async {
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+
+        final (AppDatabase db, String profileId) = await seededDb(withCategories: true);
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profileId,
+          month: month,
+          amount: Money.fromMinorUnits(120000, 'JPY'),
+        );
+        await BudgetRepository(db).setCategoryBudget(
+          profileId: profileId,
+          categoryId: 'sys-dining',
+          month: month,
+          amount: Money.fromMinorUnits(20000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('全体予算'), findsOneWidget);
+        expect(find.text('カテゴリ予算'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'G: Japanese + 2.0x text scale renders both budget sections without exceptions',
+      (tester) async {
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+
+        final (AppDatabase db, String profileId) = await seededDb(withCategories: true);
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profileId,
+          month: month,
+          amount: Money.fromMinorUnits(120000, 'JPY'),
+        );
+        await BudgetRepository(db).setCategoryBudget(
+          profileId: profileId,
+          categoryId: 'sys-dining',
+          month: month,
+          amount: Money.fromMinorUnits(20000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('全体予算'), findsOneWidget);
+        expect(find.text('カテゴリ予算'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'H: 320px narrow width + Japanese + 1.6x text scale + a long custom category name + a '
+      'large international (MMK) amount lays out without exceptions',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 700);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const String longName = '狭い画面でのレイアウトを確認するための、かなり長いカテゴリ名';
+        final (AppDatabase db, String profileId) = await seededDb();
+        final String categoryId = await CategoryRepository(db).createCategory(
+          profileId: profileId,
+          name: longName,
+          type: 'expense',
+        );
+        final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        final String budgetId = await BudgetRepository(db).setCategoryBudget(
+          profileId: profileId,
+          categoryId: categoryId,
+          month: month,
+          amount: Money.fromMinorUnits(999999999, 'MMK'), // K9,999,999.99
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(Key('categoryBudgetTile_${categoryId}_MMK')), findsOneWidget);
+        expect(find.text(longName), findsOneWidget);
+        expect(find.textContaining('K9,999,999.99'), findsOneWidget);
+        expect(find.byKey(Key('editCategoryBudget_$budgetId')), findsOneWidget);
+        expect(find.byKey(Key('deleteCategoryBudget_$budgetId')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'I: navigation/action regression -- creating an overall monthly budget under the '
+      'Japanese locale shows a fully localized sheet and dialog, and still creates a real, '
+      'persisted budget that appears in the (still Japanese) list',
+      (tester) async {
+        final (AppDatabase db, _) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('今月の予算はまだ設定されていません'), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('addBudgetFab')));
+        await tester.pumpAndSettle();
+        expect(find.text('毎月の全体予算'), findsOneWidget); // overallMonthlyBudgetOption
+        expect(find.text('カテゴリ予算'), findsOneWidget); // categoryBudgetOption
+
+        await tester.tap(find.byKey(const Key('addOverallBudgetOption')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('毎月の全体予算を設定'), findsOneWidget); // setOverallBudgetTitle
+        await tester.enterText(find.byKey(const Key('overallBudgetAmountField')), '120000');
+        await tester.tap(find.byKey(const Key('saveOverallBudget')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('毎月の全体予算を設定'), findsNothing); // dialog closed
+        expect(find.byKey(const Key('overallBudgetTile_JPY')), findsOneWidget);
+        expect(find.text('¥120,000'), findsOneWidget);
+      },
     );
   });
 }

@@ -10,6 +10,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../domain/savings_goal_calculation.dart';
 import '../domain/savings_goal_milestones.dart';
@@ -34,17 +35,22 @@ class GoalDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<SavingsGoalSummary?> summaryAsync = ref.watch(goalSummaryProvider(goalId));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(summaryAsync.valueOrNull?.name ?? 'Goal'),
+        // `summary.name` is user-entered content and is never
+        // translated; the fallback word shown only while loading (or if
+        // the goal can't be found yet) is the only localizable piece
+        // here.
+        title: Text(summaryAsync.valueOrNull?.name ?? l10n.goalFallbackTitle),
         actions: <Widget>[
           if (summaryAsync.valueOrNull != null) ...<Widget>[
             IconButton(
               key: const Key('editGoal'),
               icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit goal',
+              tooltip: l10n.editGoalAction,
               onPressed: () => showDialog<void>(
                 context: context,
                 builder: (_) => _EditGoalDialog(goal: summaryAsync.requireValue!.goal),
@@ -53,7 +59,7 @@ class GoalDetailScreen extends ConsumerWidget {
             IconButton(
               key: const Key('deleteGoal'),
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete goal',
+              tooltip: l10n.deleteGoalTooltip,
               onPressed: () => _confirmDelete(context, ref),
             ),
           ],
@@ -61,14 +67,15 @@ class GoalDetailScreen extends ConsumerWidget {
       ),
       body: summaryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) => Center(child: Text('Could not load this goal: $e')),
+        error: (Object e, StackTrace st) =>
+            Center(child: Text(l10n.couldNotLoadGoalDetail(e.toString()))),
         data: (SavingsGoalSummary? summary) {
           if (summary == null) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
-                  'This goal is no longer available.',
+                  l10n.goalNoLongerAvailableMessage,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -94,22 +101,21 @@ class GoalDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Delete this goal?'),
-        content: const Text(
-          'Its contribution history is kept, but the goal itself will no longer be active.',
-        ),
+        title: Text(l10n.deleteGoalConfirmTitle),
+        content: Text(l10n.deleteGoalConfirmMessage),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             key: const Key('confirmDeleteGoal'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.deleteButton),
           ),
         ],
       ),
@@ -127,14 +133,18 @@ class _GoalDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
     final SavingsGoalCalculation calc = summary.calculation;
 
+    // Same shared status-label keys as the goals list (`_GoalListTile`)
+    // and the Home dashboard's priority-goal card (CP6.3) -- one closed
+    // enum, one set of translations, reused everywhere it's shown.
     final (Color statusColor, String statusLabel) = switch (calc.status) {
-      SavingsGoalStatus.completed => (colors.primary, 'Completed'),
-      SavingsGoalStatus.overdue => (colors.error, 'Overdue'),
-      SavingsGoalStatus.inProgress => (colors.onSurfaceVariant, 'In progress'),
+      SavingsGoalStatus.completed => (colors.primary, l10n.goalStatusCompleted),
+      SavingsGoalStatus.overdue => (colors.error, l10n.overdueLabel),
+      SavingsGoalStatus.inProgress => (colors.onSurfaceVariant, l10n.goalStatusInProgress),
     };
 
     // `ratio` here is presentation-only -- never fed back into any
@@ -158,7 +168,9 @@ class _GoalDetailBody extends ConsumerWidget {
           statusColor: statusColor,
         ),
         Text(
-          'of ${_formatter.format(calc.target)} · ${calc.wholePercentSaved}%',
+          // Same `ofAmount` reuse as the goals list -- see that file's
+          // comment.
+          '${l10n.ofAmount(_formatter.format(calc.target))} · ${calc.wholePercentSaved}%',
           style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 12),
@@ -173,12 +185,12 @@ class _GoalDetailBody extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         _DetailRow(
-          label: 'Remaining',
+          label: l10n.remainingLabel,
           value: _formatter.format(calc.remaining),
         ),
         if (summary.goal.targetDate != null)
           _DetailRow(
-            label: 'Target date',
+            label: l10n.targetDateLabel,
             // `targetDate` is a calendar-only UTC-midnight value -- see
             // `goal_target_date.dart`. Formatting it directly (never
             // `.toLocal()`) is deliberate: converting it to local time
@@ -186,12 +198,13 @@ class _GoalDetailBody extends ConsumerWidget {
             // bug `normalizeCalendarDateToUtc` exists to prevent at
             // write time. Contrast `_ContributionTile` below, where
             // `contributedAt` IS a genuine instant and `.toLocal()` is
-            // correct there.
+            // correct there. Only the row's label is localized; the
+            // date-format policy itself is untouched by CP6.6.
             value: DateFormat.yMMMd().format(summary.goal.targetDate!),
           ),
         if (calc.recommendedDailyContribution != null)
           _DetailRow(
-            label: 'Recommended daily contribution',
+            label: l10n.recommendedDailyContributionLabel,
             value: _formatter.format(calc.recommendedDailyContribution!),
           ),
         if (calc.reachedMilestones.isNotEmpty) ...<Widget>[
@@ -213,7 +226,7 @@ class _GoalDetailBody extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: 24),
-        Text('Contribution history', style: text.titleMedium),
+        Text(l10n.contributionHistoryTitle, style: text.titleMedium),
         const SizedBox(height: 4),
         _ContributionHistory(goalId: summary.id),
       ],
@@ -375,6 +388,7 @@ class _ContributionHistory extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<SavingsGoalContributionRow>> contributionsAsync =
         ref.watch(goalContributionsProvider(goalId));
 
@@ -383,12 +397,13 @@ class _ContributionHistory extends ConsumerWidget {
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (Object e, StackTrace st) => Text('Could not load contribution history: $e'),
+      error: (Object e, StackTrace st) =>
+          Text(l10n.couldNotLoadContributionHistory(e.toString())),
       data: (List<SavingsGoalContributionRow> contributions) {
         if (contributions.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Text('No contributions yet.'),
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text(l10n.noContributionsYetMessage),
           );
         }
         return Column(
@@ -408,6 +423,7 @@ class _ContributionTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Money amount =
         Money.fromMinorUnits(contribution.amountMinorUnits, contribution.currencyCode);
     return ListTile(
@@ -417,12 +433,13 @@ class _ContributionTile extends ConsumerWidget {
       title: Text(_formatter.format(amount)),
       // `contributedAt` IS a genuine instant -- `.toLocal()` here is
       // correct, unlike `targetDate` above. See that comment for why
-      // these two use different rules.
+      // these two use different rules. Only this row's tooltip is
+      // localized; the date/time formatting itself is untouched.
       subtitle: Text(DateFormat.yMMMd().add_jm().format(contribution.contributedAt.toLocal())),
       trailing: IconButton(
         key: Key('deleteContribution_${contribution.id}'),
         icon: const Icon(Icons.delete_outline),
-        tooltip: 'Remove',
+        tooltip: l10n.removeTooltip,
         onPressed: () => unawaited(
           ref.read(savingsGoalContributionRepositoryProvider).softDeleteContribution(contribution.id),
         ),
@@ -463,26 +480,27 @@ class _AddContributionDialogState extends ConsumerState<_AddContributionDialog> 
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Add a contribution'),
+      title: Text(l10n.addContributionDialogTitle),
       content: Form(
         key: _formKey,
         child: MoneyTextField(
           key: const Key('contributionAmountField'),
           currencyCode: widget.currencyCode,
-          label: 'Amount',
+          label: l10n.amountLabel,
           onParsed: (Money? m) => _parsedAmount = m,
         ),
       ),
       actions: <Widget>[
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           key: const Key('saveContribution'),
           onPressed: _isSaving ? null : _submit,
-          child: const Text('Add'),
+          child: Text(l10n.addContributionButton),
         ),
       ],
     );
@@ -555,8 +573,9 @@ class _EditGoalDialogState extends ConsumerState<_EditGoalDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Edit goal'),
+      title: Text(l10n.editGoalAction),
       content: Form(
         key: _formKey,
         child: Column(
@@ -565,14 +584,14 @@ class _EditGoalDialogState extends ConsumerState<_EditGoalDialog> {
             TextFormField(
               key: const Key('editGoalNameField'),
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Goal name'),
+              decoration: InputDecoration(labelText: l10n.goalNameLabel),
               validator: (String? v) =>
-                  (v == null || v.trim().isEmpty) ? 'Enter a name for this goal.' : null,
+                  (v == null || v.trim().isEmpty) ? l10n.enterGoalNameMessage : null,
             ),
             MoneyTextField(
               key: const Key('editGoalTargetAmountField'),
               currencyCode: widget.goal.currencyCode,
-              label: 'Target amount',
+              label: l10n.targetAmountLabel,
               initialValue: Money.fromMinorUnits(widget.goal.targetAmountMinorUnits, widget.goal.currencyCode)
                   .toMajorUnitsString(),
               onParsed: (Money? m) => _parsedAmount = m,
@@ -582,8 +601,8 @@ class _EditGoalDialogState extends ConsumerState<_EditGoalDialog> {
               contentPadding: EdgeInsets.zero,
               title: Text(
                 _targetDate == null
-                    ? 'No target date'
-                    : 'Target date: ${DateFormat.yMMMd().format(_targetDate!)}',
+                    ? l10n.noTargetDateMessage
+                    : '${l10n.targetDateLabel}: ${DateFormat.yMMMd().format(_targetDate!)}',
               ),
               trailing: Wrap(
                 spacing: 4,
@@ -591,12 +610,12 @@ class _EditGoalDialogState extends ConsumerState<_EditGoalDialog> {
                   TextButton(
                     key: const Key('editPickGoalTargetDate'),
                     onPressed: _pickTargetDate,
-                    child: const Text('Choose'),
+                    child: Text(l10n.chooseButton),
                   ),
                   if (_targetDate != null)
                     IconButton(
                       icon: const Icon(Icons.clear),
-                      tooltip: 'Clear target date',
+                      tooltip: l10n.clearTargetDateTooltip,
                       onPressed: () => setState(() => _targetDate = null),
                     ),
                 ],
@@ -608,12 +627,12 @@ class _EditGoalDialogState extends ConsumerState<_EditGoalDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           key: const Key('saveEditGoal'),
           onPressed: _isSaving ? null : _submit,
-          child: const Text('Save'),
+          child: Text(l10n.save),
         ),
       ],
     );

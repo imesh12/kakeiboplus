@@ -691,6 +691,258 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add'**
   String get addAccountButton;
+
+  /// No description provided for @budgetsScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Budgets · {month}'**
+  String budgetsScreenTitle(String month);
+
+  /// No description provided for @couldNotLoadBudgets.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load budgets: {error}'**
+  String couldNotLoadBudgets(String error);
+
+  /// No description provided for @noBudgetsSetThisMonthMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No budgets set for this month yet. Tap + to set an overall monthly budget or a category budget.'**
+  String get noBudgetsSetThisMonthMessage;
+
+  /// No description provided for @overallBudgetsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Overall budgets'**
+  String get overallBudgetsSectionTitle;
+
+  /// No description provided for @categoryBudgetsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Category budgets'**
+  String get categoryBudgetsSectionTitle;
+
+  /// No description provided for @overallMonthlyBudgetOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Overall monthly budget'**
+  String get overallMonthlyBudgetOption;
+
+  /// No description provided for @categoryBudgetOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Category budget'**
+  String get categoryBudgetOption;
+
+  /// No description provided for @editOverallBudgetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit overall monthly budget'**
+  String get editOverallBudgetTitle;
+
+  /// No description provided for @setOverallBudgetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set overall monthly budget'**
+  String get setOverallBudgetTitle;
+
+  /// No description provided for @monthlyBudgetAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly budget amount'**
+  String get monthlyBudgetAmountLabel;
+
+  /// No description provided for @editCategoryBudgetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit category budget'**
+  String get editCategoryBudgetTitle;
+
+  /// No description provided for @setCategoryBudgetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set category budget'**
+  String get setCategoryBudgetTitle;
+
+  /// No description provided for @categoryFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get categoryFieldLabel;
+
+  /// No description provided for @chooseCategoryMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a category.'**
+  String get chooseCategoryMessage;
+
+  /// No description provided for @categoryBudgetAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category budget amount'**
+  String get categoryBudgetAmountLabel;
+
+  /// No description provided for @editTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get editTooltip;
+
+  /// No description provided for @removeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get removeTooltip;
+
+  /// No description provided for @couldNotLoadGoals.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load goals: {error}'**
+  String couldNotLoadGoals(String error);
+
+  /// No description provided for @noSavingsGoalsYetTapMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No savings goals yet. Tap + to set one.'**
+  String get noSavingsGoalsYetTapMessage;
+
+  /// No description provided for @newSavingsGoalDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New savings goal'**
+  String get newSavingsGoalDialogTitle;
+
+  /// No description provided for @goalNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Goal name'**
+  String get goalNameLabel;
+
+  /// No description provided for @enterGoalNameMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name for this goal.'**
+  String get enterGoalNameMessage;
+
+  /// No description provided for @targetAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Target amount'**
+  String get targetAmountLabel;
+
+  /// No description provided for @noTargetDateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No target date'**
+  String get noTargetDateMessage;
+
+  /// No description provided for @targetDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Target date'**
+  String get targetDateLabel;
+
+  /// No description provided for @chooseButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose'**
+  String get chooseButton;
+
+  /// No description provided for @clearTargetDateTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear target date'**
+  String get clearTargetDateTooltip;
+
+  /// No description provided for @goalFallbackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get goalFallbackTitle;
+
+  /// No description provided for @editGoalAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit goal'**
+  String get editGoalAction;
+
+  /// No description provided for @deleteGoalTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete goal'**
+  String get deleteGoalTooltip;
+
+  /// No description provided for @couldNotLoadGoalDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this goal: {error}'**
+  String couldNotLoadGoalDetail(String error);
+
+  /// No description provided for @goalNoLongerAvailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This goal is no longer available.'**
+  String get goalNoLongerAvailableMessage;
+
+  /// No description provided for @deleteGoalConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this goal?'**
+  String get deleteGoalConfirmTitle;
+
+  /// No description provided for @deleteGoalConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Its contribution history is kept, but the goal itself will no longer be active.'**
+  String get deleteGoalConfirmMessage;
+
+  /// No description provided for @deleteButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get deleteButton;
+
+  /// No description provided for @remainingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining'**
+  String get remainingLabel;
+
+  /// No description provided for @recommendedDailyContributionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended daily contribution'**
+  String get recommendedDailyContributionLabel;
+
+  /// No description provided for @contributionHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Contribution history'**
+  String get contributionHistoryTitle;
+
+  /// No description provided for @couldNotLoadContributionHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load contribution history: {error}'**
+  String couldNotLoadContributionHistory(String error);
+
+  /// No description provided for @noContributionsYetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No contributions yet.'**
+  String get noContributionsYetMessage;
+
+  /// No description provided for @addContributionDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a contribution'**
+  String get addContributionDialogTitle;
+
+  /// No description provided for @addContributionButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get addContributionButton;
 }
 
 class _AppLocalizationsDelegate

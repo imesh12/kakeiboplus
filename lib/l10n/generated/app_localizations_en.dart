@@ -344,4 +344,145 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addAccountButton => 'Add';
+
+  @override
+  String budgetsScreenTitle(String month) {
+    return 'Budgets · $month';
+  }
+
+  @override
+  String couldNotLoadBudgets(String error) {
+    return 'Could not load budgets: $error';
+  }
+
+  @override
+  String get noBudgetsSetThisMonthMessage =>
+      'No budgets set for this month yet. Tap + to set an overall monthly budget or a category budget.';
+
+  @override
+  String get overallBudgetsSectionTitle => 'Overall budgets';
+
+  @override
+  String get categoryBudgetsSectionTitle => 'Category budgets';
+
+  @override
+  String get overallMonthlyBudgetOption => 'Overall monthly budget';
+
+  @override
+  String get categoryBudgetOption => 'Category budget';
+
+  @override
+  String get editOverallBudgetTitle => 'Edit overall monthly budget';
+
+  @override
+  String get setOverallBudgetTitle => 'Set overall monthly budget';
+
+  @override
+  String get monthlyBudgetAmountLabel => 'Monthly budget amount';
+
+  @override
+  String get editCategoryBudgetTitle => 'Edit category budget';
+
+  @override
+  String get setCategoryBudgetTitle => 'Set category budget';
+
+  @override
+  String get categoryFieldLabel => 'Category';
+
+  @override
+  String get chooseCategoryMessage => 'Choose a category.';
+
+  @override
+  String get categoryBudgetAmountLabel => 'Category budget amount';
+
+  @override
+  String get editTooltip => 'Edit';
+
+  @override
+  String get removeTooltip => 'Remove';
+
+  @override
+  String couldNotLoadGoals(String error) {
+    return 'Could not load goals: $error';
+  }
+
+  @override
+  String get noSavingsGoalsYetTapMessage =>
+      'No savings goals yet. Tap + to set one.';
+
+  @override
+  String get newSavingsGoalDialogTitle => 'New savings goal';
+
+  @override
+  String get goalNameLabel => 'Goal name';
+
+  @override
+  String get enterGoalNameMessage => 'Enter a name for this goal.';
+
+  @override
+  String get targetAmountLabel => 'Target amount';
+
+  @override
+  String get noTargetDateMessage => 'No target date';
+
+  @override
+  String get targetDateLabel => 'Target date';
+
+  @override
+  String get chooseButton => 'Choose';
+
+  @override
+  String get clearTargetDateTooltip => 'Clear target date';
+
+  @override
+  String get goalFallbackTitle => 'Goal';
+
+  @override
+  String get editGoalAction => 'Edit goal';
+
+  @override
+  String get deleteGoalTooltip => 'Delete goal';
+
+  @override
+  String couldNotLoadGoalDetail(String error) {
+    return 'Could not load this goal: $error';
+  }
+
+  @override
+  String get goalNoLongerAvailableMessage =>
+      'This goal is no longer available.';
+
+  @override
+  String get deleteGoalConfirmTitle => 'Delete this goal?';
+
+  @override
+  String get deleteGoalConfirmMessage =>
+      'Its contribution history is kept, but the goal itself will no longer be active.';
+
+  @override
+  String get deleteButton => 'Delete';
+
+  @override
+  String get remainingLabel => 'Remaining';
+
+  @override
+  String get recommendedDailyContributionLabel =>
+      'Recommended daily contribution';
+
+  @override
+  String get contributionHistoryTitle => 'Contribution history';
+
+  @override
+  String couldNotLoadContributionHistory(String error) {
+    return 'Could not load contribution history: $error';
+  }
+
+  @override
+  String get noContributionsYetMessage => 'No contributions yet.';
+
+  @override
+  String get addContributionDialogTitle => 'Add a contribution';
+
+  @override
+  String get addContributionButton => 'Add';
 }

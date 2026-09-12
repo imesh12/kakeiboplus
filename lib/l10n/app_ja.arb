@@ -206,5 +206,82 @@
   "enterAccountNameMessage": "名前を入力してください。",
   "accountTypeLabel": "種類",
   "cancel": "キャンセル",
-  "addAccountButton": "追加"
+  "addAccountButton": "追加",
+  "budgetsScreenTitle": "予算 · {month}",
+  "@budgetsScreenTitle": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotLoadBudgets": "予算を読み込めませんでした: {error}",
+  "@couldNotLoadBudgets": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noBudgetsSetThisMonthMessage": "今月の予算はまだ設定されていません。+ をタップして全体予算またはカテゴリ予算を設定してください。",
+  "overallBudgetsSectionTitle": "全体予算",
+  "categoryBudgetsSectionTitle": "カテゴリ予算",
+  "overallMonthlyBudgetOption": "毎月の全体予算",
+  "categoryBudgetOption": "カテゴリ予算",
+  "editOverallBudgetTitle": "毎月の全体予算を編集",
+  "setOverallBudgetTitle": "毎月の全体予算を設定",
+  "monthlyBudgetAmountLabel": "毎月の予算額",
+  "editCategoryBudgetTitle": "カテゴリ予算を編集",
+  "setCategoryBudgetTitle": "カテゴリ予算を設定",
+  "categoryFieldLabel": "カテゴリ",
+  "chooseCategoryMessage": "カテゴリを選択してください。",
+  "categoryBudgetAmountLabel": "カテゴリ予算額",
+  "editTooltip": "編集",
+  "removeTooltip": "削除",
+  "couldNotLoadGoals": "目標を読み込めませんでした: {error}",
+  "@couldNotLoadGoals": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noSavingsGoalsYetTapMessage": "貯蓄目標がまだありません。+ をタップして設定してください。",
+  "newSavingsGoalDialogTitle": "新しい貯蓄目標",
+  "goalNameLabel": "目標名",
+  "enterGoalNameMessage": "この目標の名前を入力してください。",
+  "targetAmountLabel": "目標金額",
+  "noTargetDateMessage": "目標日なし",
+  "targetDateLabel": "目標日",
+  "chooseButton": "選択",
+  "clearTargetDateTooltip": "目標日をクリア",
+  "goalFallbackTitle": "目標",
+  "editGoalAction": "目標を編集",
+  "deleteGoalTooltip": "目標を削除",
+  "couldNotLoadGoalDetail": "この目標を読み込めませんでした: {error}",
+  "@couldNotLoadGoalDetail": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "goalNoLongerAvailableMessage": "この目標は利用できません。",
+  "deleteGoalConfirmTitle": "この目標を削除しますか?",
+  "deleteGoalConfirmMessage": "積立履歴は保持されますが、目標自体は有効ではなくなります。",
+  "deleteButton": "削除",
+  "remainingLabel": "残り",
+  "recommendedDailyContributionLabel": "推奨される1日あたりの積立額",
+  "contributionHistoryTitle": "積立履歴",
+  "couldNotLoadContributionHistory": "積立履歴を読み込めませんでした: {error}",
+  "@couldNotLoadContributionHistory": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noContributionsYetMessage": "積立はまだありません。",
+  "addContributionDialogTitle": "積立を追加",
+  "addContributionButton": "追加"
 }

@@ -8,6 +8,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../domain/budget_month.dart';
@@ -29,22 +30,27 @@ class BudgetsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<BudgetRow>> budgetsAsync = ref.watch(currentMonthBudgetsProvider);
     final BudgetMonth month = ref.watch(currentBudgetMonthProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text('Budgets · ${month.toKey()}')),
+      // The "YYYY-MM" month key itself is left exactly as
+      // `BudgetMonth.toKey()` already produces it -- see that method's
+      // doc comment; only the surrounding "Budgets ·" word is
+      // localized text.
+      appBar: AppBar(title: Text(l10n.budgetsScreenTitle(month.toKey()))),
       body: budgetsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) => Center(child: Text('Could not load budgets: $e')),
+        error: (Object e, StackTrace st) =>
+            Center(child: Text(l10n.couldNotLoadBudgets(e.toString()))),
         data: (List<BudgetRow> budgets) {
           if (budgets.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
-                  "No budgets set for this month yet. Tap + to set an overall monthly budget "
-                  'or a category budget.',
+                  l10n.noBudgetsSetThisMonthMessage,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -59,11 +65,11 @@ class BudgetsScreen extends ConsumerWidget {
           return ListView(
             children: <Widget>[
               if (overall.isNotEmpty) ...<Widget>[
-                const _SectionHeader('Overall budgets'),
+                _SectionHeader(l10n.overallBudgetsSectionTitle),
                 for (final BudgetRow row in overall) _OverallBudgetTile(row: row),
               ],
               if (category.isNotEmpty) ...<Widget>[
-                const _SectionHeader('Category budgets'),
+                _SectionHeader(l10n.categoryBudgetsSectionTitle),
                 for (final BudgetRow row in category) _CategoryBudgetTile(row: row),
               ],
             ],
@@ -79,6 +85,7 @@ class BudgetsScreen extends ConsumerWidget {
   }
 
   Future<void> _showAddBudgetSheet(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -90,7 +97,7 @@ class BudgetsScreen extends ConsumerWidget {
               ListTile(
                 key: const Key('addOverallBudgetOption'),
                 leading: const Icon(Icons.savings_outlined),
-                title: const Text('Overall monthly budget'),
+                title: Text(l10n.overallMonthlyBudgetOption),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   showDialog<void>(context: context, builder: (_) => const _OverallBudgetDialog());
@@ -99,7 +106,7 @@ class BudgetsScreen extends ConsumerWidget {
               ListTile(
                 key: const Key('addCategoryBudgetOption'),
                 leading: const Icon(Icons.category_outlined),
-                title: const Text('Category budget'),
+                title: Text(l10n.categoryBudgetOption),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   showDialog<void>(context: context, builder: (_) => const _CategoryBudgetDialog());
@@ -133,6 +140,7 @@ class _OverallBudgetTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Money amount = Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode);
     return ListTile(
       key: Key('overallBudgetTile_${row.currencyCode}'),
@@ -145,7 +153,7 @@ class _OverallBudgetTile extends ConsumerWidget {
           IconButton(
             key: Key('editOverallBudget_${row.currencyCode}'),
             icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Edit',
+            tooltip: l10n.editTooltip,
             onPressed: () => showDialog<void>(
               context: context,
               builder: (_) => _OverallBudgetDialog(existing: row),
@@ -154,7 +162,7 @@ class _OverallBudgetTile extends ConsumerWidget {
           IconButton(
             key: Key('deleteOverallBudget_${row.currencyCode}'),
             icon: const Icon(Icons.delete_outline),
-            tooltip: 'Remove',
+            tooltip: l10n.removeTooltip,
             onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
           ),
         ],
@@ -169,12 +177,20 @@ class _CategoryBudgetTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Money amount = Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode);
     final AsyncValue<CategoryRow> categoryAsync = ref.watch(categoryByIdProvider(row.categoryId!));
     return ListTile(
       key: Key('categoryBudgetTile_${row.categoryId}_${row.currencyCode}'),
       leading: const Icon(Icons.category_outlined),
       title: Text(
+        // `CategoryRow.name` is persisted content (a system category's
+        // seeded English name, or a profile's own custom category) --
+        // CP6.6 leaves it untouched exactly like every other screen
+        // that already displays it (e.g. Activity). The loading
+        // ellipsis and the categoryId fallback on error are not
+        // translatable copy either -- a placeholder glyph and a raw
+        // identifier, respectively.
         categoryAsync.when(
           data: (CategoryRow c) => c.name,
           loading: () => '…',
@@ -188,7 +204,7 @@ class _CategoryBudgetTile extends ConsumerWidget {
           IconButton(
             key: Key('editCategoryBudget_${row.id}'),
             icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Edit',
+            tooltip: l10n.editTooltip,
             onPressed: () => showDialog<void>(
               context: context,
               builder: (_) => _CategoryBudgetDialog(existing: row),
@@ -197,7 +213,7 @@ class _CategoryBudgetTile extends ConsumerWidget {
           IconButton(
             key: Key('deleteCategoryBudget_${row.id}'),
             icon: const Icon(Icons.delete_outline),
-            tooltip: 'Remove',
+            tooltip: l10n.removeTooltip,
             onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
           ),
         ],
@@ -258,9 +274,10 @@ class _OverallBudgetDialogState extends ConsumerState<_OverallBudgetDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool editing = widget.existing != null;
     return AlertDialog(
-      title: Text(editing ? 'Edit overall monthly budget' : 'Set overall monthly budget'),
+      title: Text(editing ? l10n.editOverallBudgetTitle : l10n.setOverallBudgetTitle),
       content: Form(
         key: _formKey,
         child: Column(
@@ -268,7 +285,7 @@ class _OverallBudgetDialogState extends ConsumerState<_OverallBudgetDialog> {
           children: <Widget>[
             DropdownButtonFormField<String>(
               initialValue: _currencyCode,
-              decoration: const InputDecoration(labelText: 'Currency'),
+              decoration: InputDecoration(labelText: l10n.currencySection),
               // Fixed while editing -- changing currency would target a
               // different budget key instead of updating this one; to
               // budget a different currency, set a new overall budget.
@@ -281,7 +298,7 @@ class _OverallBudgetDialogState extends ConsumerState<_OverallBudgetDialog> {
             MoneyTextField(
               key: const Key('overallBudgetAmountField'),
               currencyCode: _currencyCode,
-              label: 'Monthly budget amount',
+              label: l10n.monthlyBudgetAmountLabel,
               initialValue: widget.existing == null
                   ? null
                   : Money.fromMinorUnits(widget.existing!.amountMinorUnits, widget.existing!.currencyCode)
@@ -294,12 +311,12 @@ class _OverallBudgetDialogState extends ConsumerState<_OverallBudgetDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           key: const Key('saveOverallBudget'),
           onPressed: _isSaving ? null : _submit,
-          child: const Text('Save'),
+          child: Text(l10n.save),
         ),
       ],
     );
@@ -357,12 +374,13 @@ class _CategoryBudgetDialogState extends ConsumerState<_CategoryBudgetDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool editing = widget.existing != null;
     final AsyncValue<List<CategoryRow>> categoriesAsync =
         ref.watch(categoriesForTypeProvider('expense'));
 
     return AlertDialog(
-      title: Text(editing ? 'Edit category budget' : 'Set category budget'),
+      title: Text(editing ? l10n.editCategoryBudgetTitle : l10n.setCategoryBudgetTitle),
       content: Form(
         key: _formKey,
         child: Column(
@@ -373,26 +391,29 @@ class _CategoryBudgetDialogState extends ConsumerState<_CategoryBudgetDialog> {
                 padding: EdgeInsets.all(8),
                 child: CircularProgressIndicator(),
               ),
-              error: (Object e, StackTrace st) => Text('Could not load categories: $e'),
+              error: (Object e, StackTrace st) => Text(l10n.couldNotLoadCategories(e.toString())),
               data: (List<CategoryRow> categories) {
                 return DropdownButtonFormField<String>(
                   key: const Key('categoryBudgetCategoryField'),
                   initialValue: _categoryId,
-                  decoration: const InputDecoration(labelText: 'Category'),
+                  decoration: InputDecoration(labelText: l10n.categoryFieldLabel),
                   // Fixed while editing -- see the currency-field comment
                   // in _OverallBudgetDialogState for the same reasoning.
                   onChanged: editing ? null : (String? v) => setState(() => _categoryId = v),
                   items: <DropdownMenuItem<String>>[
+                    // `CategoryRow.name` is persisted content -- see the
+                    // matching comment on `_CategoryBudgetTile` above;
+                    // never translated here either.
                     for (final CategoryRow c in categories)
                       DropdownMenuItem<String>(value: c.id, child: Text(c.name)),
                   ],
-                  validator: (String? v) => v == null ? 'Choose a category.' : null,
+                  validator: (String? v) => v == null ? l10n.chooseCategoryMessage : null,
                 );
               },
             ),
             DropdownButtonFormField<String>(
               initialValue: _currencyCode,
-              decoration: const InputDecoration(labelText: 'Currency'),
+              decoration: InputDecoration(labelText: l10n.currencySection),
               onChanged: editing ? null : (String? v) => setState(() => _currencyCode = v ?? _currencyCode),
               items: <DropdownMenuItem<String>>[
                 for (final currency in CurrencyRegistry.seed)
@@ -402,7 +423,7 @@ class _CategoryBudgetDialogState extends ConsumerState<_CategoryBudgetDialog> {
             MoneyTextField(
               key: const Key('categoryBudgetAmountField'),
               currencyCode: _currencyCode,
-              label: 'Category budget amount',
+              label: l10n.categoryBudgetAmountLabel,
               initialValue: widget.existing == null
                   ? null
                   : Money.fromMinorUnits(widget.existing!.amountMinorUnits, widget.existing!.currencyCode)
@@ -415,12 +436,12 @@ class _CategoryBudgetDialogState extends ConsumerState<_CategoryBudgetDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           key: const Key('saveCategoryBudget'),
           onPressed: _isSaving ? null : _submit,
-          child: const Text('Save'),
+          child: Text(l10n.save),
         ),
       ],
     );
