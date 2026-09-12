@@ -2,6 +2,7 @@ import 'package:ai_financial_coach/shared/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import '../support/rtl_harness.dart';
 
 /// Release-gate-adjacent widget test: "Navigation shell renders exactly
 /// the four Beta 0 destinations" (Home / Activity / Add / Profile — no
@@ -10,7 +11,12 @@ import 'package:go_router/go_router.dart';
 /// Decision 12. Uses a small standalone [GoRouter] rather than the full
 /// [routerProvider] to keep this test independent of database setup.
 void main() {
-  Widget buildApp() {
+  // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
+  // `MaterialApp.router`'s own `builder:` -- see
+  // `test/support/rtl_harness.dart` for why that's the only place it can
+  // be injected. Every existing call site keeps working unchanged
+  // (`rtl` defaults to false).
+  Widget buildApp({bool rtl = false}) {
     final GoRouter router = GoRouter(
       initialLocation: '/home',
       routes: <RouteBase>[
@@ -24,7 +30,7 @@ void main() {
         ),
       ],
     );
-    return MaterialApp.router(routerConfig: router);
+    return MaterialApp.router(routerConfig: router, builder: rtl ? rtlAppBuilder : null);
   }
 
   /// CP5.5 (AppShell / Bottom Navigation Text-Scale Validation): a
@@ -397,6 +403,95 @@ void main() {
     // tree -- it is not a production defect. Scoping to descendants of
     // the `NavigationBar` proves the bottom-navigation destinations
     // themselves expose the expected semantics labels.
+    final Finder navBar = find.byType(NavigationBar);
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('Home'))),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('Activity'))),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('Add'))),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('Profile'))),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    handle.dispose();
+  });
+  testWidgets(
+      'CP5.6: under RTL, the shell still renders all four destinations with no '
+      'exceptions/overflow -- Material NavigationBar handles the mirroring itself',
+      (tester) async {
+    await tester.pumpWidget(buildApp(rtl: true));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(NavigationDestination, 'Home'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Activity'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Add'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Profile'), findsOneWidget);
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CP5.6: under RTL, Home/Activity/Profile destinations remain tappable and switching '
+      'between them still works, with no exceptions', (tester) async {
+    await tester.pumpWidget(buildApp(rtl: true));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('Activity body'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Profile'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile body'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 3);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Home'));
+    await tester.pumpAndSettle();
+    expect(find.text('Home body'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CP5.6: under RTL, the Add action still opens the transaction sheet without '
+      'disturbing the selected destination or routing semantics', (tester) async {
+    await tester.pumpWidget(buildApp(rtl: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(ListTile, 'Expense'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Income'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Transfer'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CP5.6: under RTL, destinations remain discoverable via semantics',
+      (tester) async {
+    final SemanticsHandle handle = tester.ensureSemantics();
+    // See CP5.5's fix: disposed explicitly at the end of the test body,
+    // not via addTearDown -- `_endOfTestVerifications` checks handle
+    // disposal before this test's own async callback returns, i.e.
+    // before any addTearDown queue would fire.
+
+    await tester.pumpWidget(buildApp(rtl: true));
+    await tester.pumpAndSettle();
+
     final Finder navBar = find.byType(NavigationBar);
     expect(
       find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('Home'))),

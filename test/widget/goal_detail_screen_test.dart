@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/rtl_harness.dart';
+
 // NOTE: exercises generated Drift code — see CLAUDE_FIRST_CODING_PROMPT.md.
 //
 // Deliberately does NOT exercise `GoalDetailScreen`'s delete-goal flow
@@ -38,10 +40,15 @@ void main() {
     return (db, profileId);
   }
 
-  Widget appWithGoalDetail(ProviderContainer container, String goalId) {
+  // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
+  // `MaterialApp`'s own `builder:` -- see `test/support/rtl_harness.dart`.
+  Widget appWithGoalDetail(ProviderContainer container, String goalId, {bool rtl = false}) {
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(home: GoalDetailScreen(goalId: goalId)),
+      child: MaterialApp(
+        home: GoalDetailScreen(goalId: goalId),
+        builder: rtl ? rtlAppBuilder : null,
+      ),
     );
   }
 
@@ -403,6 +410,55 @@ void main() {
     expect(
       tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
       '\u062F.\u064312,345.678', // د.ك12,345.678
+    );
+  });
+
+  testWidgets(
+      'CP5.6: RTL smoke -- the hero row (already `Directionality.of(context)`-aware since '
+      'CP5.4a) switches to a stacked layout and keeps every digit of a large MMK saved '
+      'amount at a narrow 320px width and an extreme 2.0x text scale, under RTL, with no '
+      'exceptions', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb();
+    final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+    final String goalId = await goalRepo.createGoal(
+      profileId: profileId,
+      name: 'Large MMK Goal',
+      targetAmount: Money.fromMinorUnits(2000000000, 'MMK'),
+    );
+    final SavingsGoalContributionRepository contributionRepo =
+        SavingsGoalContributionRepository(db, goalRepo);
+    await contributionRepo.addContribution(
+      goalId: goalId,
+      amount: Money.fromMinorUnits(999999999, 'MMK'), // K9,999,999.99
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithGoalDetail(container, goalId, rtl: true));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('goalHeroStacked')), findsOneWidget);
+    expect(find.byKey(const Key('goalHeroHorizontal')), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+      'K9,999,999.99',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('goalHeroStacked')),
+        matching: find.text('In progress'),
+      ),
+      findsOneWidget,
     );
   });
 }

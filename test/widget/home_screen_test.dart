@@ -19,6 +19,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import '../support/rtl_harness.dart';
+
 // NOTE: exercises generated Drift code — see CLAUDE_FIRST_CODING_PROMPT.md.
 //
 // Beta 1 Task 1 UI polish pass. These tests cover presentation only --
@@ -75,10 +77,12 @@ void main() {
   /// none of these tests tap), so `HomeScreen` can be mounted directly as
   /// `MaterialApp.home` -- there is no need for the push-on-top-of-a-
   /// placeholder-route harness `add_transaction_screen_test.dart` uses.
-  Widget appWithHome(ProviderContainer container) {
+  // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
+  // `MaterialApp`'s own `builder:` -- see `test/support/rtl_harness.dart`.
+  Widget appWithHome(ProviderContainer container, {bool rtl = false}) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: HomeScreen()),
+      child: MaterialApp(home: const HomeScreen(), builder: rtl ? rtlAppBuilder : null),
     );
   }
 
@@ -1302,4 +1306,71 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+      "CP5.6: under RTL, the stacked account tile's balance is expected to hug the same "
+      'reading-start edge as the account name above it -- demonstrates whether '
+      '`Alignment.centerLeft` (physical, today) or `AlignmentDirectional.centerStart` '
+      '(directional) is actually in use', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    const String longName = 'A rather long account name to stress narrow-width layout';
+    final AppDatabase db = await seededDb(
+      living: 'MMK',
+      home: 'MMK',
+      accounts: <_SeedAccount>[
+        _SeedAccount(
+          name: longName,
+          currencyCode: 'MMK',
+          openingBalance: Money.fromMinorUnits(999999999, 'MMK'),
+        ),
+      ],
+    );
+    final ProfileRow? profile = await ProfileRepository(db).getProfile();
+    final accountQuery = db.select(db.accounts)
+      ..where(
+        (tbl) =>
+            tbl.profileId.equals(profile!.id) &
+            tbl.isActive.equals(true) &
+            tbl.deletedAt.isNull(),
+      );
+    final AccountRow account = (await accountQuery.get()).first;
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithHome(container, rtl: true));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text(longName), 300.0);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final Finder accountLayout = find.byKey(Key('accountTileStacked_${account.id}'));
+    expect(accountLayout, findsOneWidget);
+    final Finder money =
+        find.descendant(of: accountLayout, matching: find.text('K9,999,999.99'));
+    expect(money, findsOneWidget);
+
+    // Same defect class as `accounts_screen.dart`'s stacked row (CP5.6
+    // report finding B): `_AccountTile`'s stacked fallback in
+    // `home_screen.dart` also positions the balance with a physical
+    // `Alignment.centerLeft` rather than `AlignmentDirectional.centerStart`,
+    // so under RTL it's expected to stay pinned to the physical left
+    // instead of moving to the row's right/start edge where the account
+    // name above it (via `CrossAxisAlignment.start`) correctly moves to.
+    final double rowRight = tester.getTopRight(accountLayout).dx;
+    final double moneyRight = tester.getTopRight(money).dx;
+    expect(
+      moneyRight,
+      closeTo(rowRight, 1.0),
+      reason: "expected the balance to hug the stacked tile's reading-start edge "
+          "(the tile's right edge under RTL), matching the account name above it",
+    );
+  });
 }

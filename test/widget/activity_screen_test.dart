@@ -15,6 +15,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import '../support/rtl_harness.dart';
+
 // NOTE: exercises generated Drift code -- see CLAUDE_FIRST_CODING_PROMPT.md.
 //
 // Beta 1 Transaction UX (`docs/14_DECISION_LOG.md` ADR-025/026), Phase B
@@ -119,7 +121,10 @@ void main() {
     return (db, profileId, accountId, secondAccountId);
   }
 
-  Widget appWithRouter(ProviderContainer container) {
+  // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
+  // `MaterialApp.router`'s own `builder:` -- see
+  // `test/support/rtl_harness.dart`.
+  Widget appWithRouter(ProviderContainer container, {bool rtl = false}) {
     final GoRouter router = GoRouter(
       initialLocation: AppRoutes.activity,
       routes: <RouteBase>[
@@ -133,7 +138,7 @@ void main() {
     );
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(routerConfig: router, builder: rtl ? rtlAppBuilder : null),
     );
   }
 
@@ -1139,5 +1144,75 @@ void main() {
     // exercised, not just that no exception happened to be thrown.
     expect(find.byKey(const Key('transactionRowStacked')), findsOneWidget);
     expect(find.byKey(const Key('transactionRowHorizontal')), findsNothing);
+  });
+
+  testWidgets(
+      'CP5.6: RTL + text-scale stress -- a narrow 320px width, 1.6x text scale, a long '
+      'descriptive note, and a large international (VND) amount together under RTL, with '
+      "the amount expected to hug the stacked row's reading-end edge", (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String vndAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Vietnam Wallet',
+      type: 'cash',
+      currencyCode: 'VND',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final Money amount = Money.fromMinorUnits(987654321, 'VND'); // ₫987,654,321
+    await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: vndAccountId,
+      amount: amount,
+      categoryId: 'sys-dining',
+      note: 'A rather long note to stress narrow-width description content',
+      occurredAtUtc: DateTime.now().toUtc(),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container, rtl: true));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final Finder rowLayout = find.byKey(const Key('transactionRowStacked'));
+    expect(rowLayout, findsOneWidget);
+    final Finder amountText =
+        find.descendant(of: rowLayout, matching: find.textContaining('987,654,321'));
+    expect(amountText, findsOneWidget);
+    expect(
+      find.descendant(of: rowLayout, matching: find.textContaining('Dining Out')),
+      findsOneWidget,
+    );
+
+    // `activity_screen.dart`'s stacked fallback explicitly keeps the
+    // amount "right-aligned" (its own comment) via a physical
+    // `Alignment.centerRight`, matching the horizontal Row's trailing
+    // placement in LTR. But `Row` mirrors its trailing child to the
+    // physical LEFT under RTL (a `Row`'s last child sits at the "end",
+    // which is left in RTL) -- while the hardcoded `Alignment.centerRight`
+    // stays physically right regardless of direction. CP5.6's audit
+    // expects the amount to also move to the row's left/end edge under
+    // RTL for consistency with the horizontal layout; this assertion
+    // demonstrates whether that's actually the case today -- see CP5.6
+    // report finding B.
+    final double rowLeft = tester.getTopLeft(rowLayout).dx;
+    final double amountLeft = tester.getTopLeft(amountText).dx;
+    expect(
+      amountLeft,
+      closeTo(rowLeft, 1.0),
+      reason: "expected the amount to hug the stacked row's reading-end edge "
+          "(the row's left edge under RTL), matching how the horizontal layout's "
+          'trailing amount already mirrors',
+    );
   });
 }

@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/rtl_harness.dart';
+
 // NOTE: exercises generated Drift code -- see CLAUDE_FIRST_CODING_PROMPT.md.
 //
 // CP5.2b: dedicated coverage for the Accounts screen's per-row layout
@@ -71,10 +73,12 @@ void main() {
     return (await db.select(db.accounts).get()).first;
   }
 
-  Widget appWithAccounts(ProviderContainer container) {
+  // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
+  // `MaterialApp`'s own `builder:` -- see `test/support/rtl_harness.dart`.
+  Widget appWithAccounts(ProviderContainer container, {bool rtl = false}) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: AccountsScreen()),
+      child: MaterialApp(home: const AccountsScreen(), builder: rtl ? rtlAppBuilder : null),
     );
   }
 
@@ -317,4 +321,88 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+      'CP5.6: under RTL, a normal-width row still renders the horizontal layout with no '
+      'exceptions -- the Row itself mirrors correctly', (tester) async {
+    final AppDatabase db = await seededDb(
+      accounts: <_SeedAccount>[
+        _SeedAccount(
+          name: 'Yangon Wallet',
+          currencyCode: 'MMK',
+          openingBalance: Money.fromMinorUnits(150075, 'MMK'), // K1,500.75
+        ),
+      ],
+    );
+    final AccountRow account = await soleAccount(db);
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithAccounts(container, rtl: true));
+    await tester.pumpAndSettle();
+
+    final Finder rowLayout = find.byKey(Key('accountsRowHorizontal_${account.id}'));
+    expect(tester.takeException(), isNull);
+    expect(rowLayout, findsOneWidget);
+    expect(find.descendant(of: rowLayout, matching: find.text('K1,500.75')), findsOneWidget);
+  });
+
+  testWidgets(
+      "CP5.6: under RTL, the stacked narrow-width row's balance is expected to hug the same "
+      'reading-start edge as the account name above it -- demonstrates whether '
+      '`Alignment.centerLeft` (physical, today) or `AlignmentDirectional.centerStart` '
+      '(directional) is actually in use', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    const String longName = 'A rather long account name to stress narrow-width layout';
+    final AppDatabase db = await seededDb(
+      accounts: <_SeedAccount>[
+        _SeedAccount(
+          name: longName,
+          currencyCode: 'MMK',
+          openingBalance: Money.fromMinorUnits(999999999, 'MMK'),
+        ),
+      ],
+    );
+    final AccountRow account = await soleAccount(db);
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithAccounts(container, rtl: true));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final Finder rowLayout = find.byKey(Key('accountsRowStacked_${account.id}'));
+    expect(rowLayout, findsOneWidget);
+    final Finder money = find.descendant(of: rowLayout, matching: find.text('K9,999,999.99'));
+    expect(money, findsOneWidget);
+
+    // `accounts_screen.dart`'s stacked fallback positions the balance with a
+    // physical `Alignment.centerLeft`, not a directional
+    // `AlignmentDirectional.centerStart`. In LTR the two coincide (start ==
+    // left), which is why this has gone unnoticed -- but under RTL, "start"
+    // is the row's right edge, which is where the account name above it
+    // renders (its `CrossAxisAlignment.start` already tracks Directionality
+    // correctly). CP5.6's audit expects the balance to also hug that same
+    // right/start edge under RTL; this assertion demonstrates whether
+    // today's code still pins it to the physical left instead -- see CP5.6
+    // report finding B.
+    final double rowRight = tester.getTopRight(rowLayout).dx;
+    final double moneyRight = tester.getTopRight(money).dx;
+    expect(
+      moneyRight,
+      closeTo(rowRight, 1.0),
+      reason: "expected the balance to hug the stacked block's reading-start edge "
+          "(the row's right edge under RTL), matching the account name above it",
+    );
+  });
 }
