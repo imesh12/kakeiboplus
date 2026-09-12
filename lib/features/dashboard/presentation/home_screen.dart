@@ -80,12 +80,28 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 const _SavingsGoalsCard(),
                 const SizedBox(height: 16),
-                const _UpcomingCommitmentsCard(),
+                const _UpcomingCommitmentsCard(
+                 key: Key('upcomingCommitmentsCardSection'),
+                ),
                 const SizedBox(height: 28),
+                // CP5.1: the "Accounts" label had no flex protection at
+                // all (unlike the analogous header rows on the budget
+                // and recurring cards just above) -- at 320px + 1.6x it
+                // overflowed the row on its own. Letting it yield first
+                // (Expanded + one-line ellipsis) matches those two
+                // existing header rows; the "Manage" button's own
+                // behavior is unchanged.
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
-                    Text('Accounts', style: Theme.of(context).textTheme.titleMedium),
+                    Expanded(
+                      child: Text(
+                        'Accounts',
+                        style: Theme.of(context).textTheme.titleMedium,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     TextButton(
                       onPressed: () => context.push(AppRoutes.accounts),
                       child: const Text('Manage'),
@@ -217,6 +233,8 @@ class _CurrencyBadge extends StatelessWidget {
       decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999)),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(
           context,
         ).textTheme.labelSmall?.copyWith(color: foreground, fontWeight: FontWeight.w600),
@@ -284,7 +302,15 @@ class _HeroCurrencyCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (badge != null) _CurrencyBadge(label: badge!, prominent: true),
+                    // CP5.1: `_CurrencyBadge` (e.g. "Living currency") is
+                    // the only non-flexible sibling in this Row -- at
+                    // narrow widths combined with large text scale its
+                    // own natural width can exceed what's left after the
+                    // icon+code group, so it must be allowed to shrink
+                    // (and, per `_CurrencyBadge`'s own ellipsis) rather
+                    // than paint past the card.
+                    if (badge != null)
+                      Flexible(child: _CurrencyBadge(label: badge!, prominent: true)),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -633,6 +659,119 @@ class _BudgetCard extends ConsumerWidget {
 /// purely because a progress bar cannot visually render past full; the
 /// over-budget state stays explicit via the status chip and the (still
 /// uncapped) percentage text right next to it.
+/// Pairs an authoritative primary money value with a secondary
+/// descriptive value (a target/budgeted amount prefixed with "of ", or a
+/// scheduled date) -- International / Localization Foundation
+/// Checkpoint 5.1. Shared by [_ConfiguredBudget], [_PriorityGoalSummary],
+/// and [_RecurringItemSummary], which each had the same underlying gap:
+/// a bare `Wrap` already correctly drops [secondaryText] onto its own
+/// line whenever the pair TOGETHER don't fit the row (a `Wrap` only ever
+/// decides between its children's own natural widths, so that part
+/// already worked) -- but `Wrap` never constrains an individual child's
+/// width, so if [primaryText] ALONE is wider than the row -- a real
+/// possibility at large text scale and/or narrow widths, and/or with
+/// KWD's extra minor-unit digit or a very large amount -- it painted
+/// past the row's own bounds instead of ever wrapping.
+///
+/// This measures both texts' own natural width at the CURRENT text
+/// style and text scale ([MediaQuery.textScalerOf]) against the row's
+/// actual available width ([LayoutBuilder]). When they comfortably fit
+/// side by side, this renders exactly the previous `Wrap` -- primary
+/// then secondary, bottom-aligned -- unchanged from before this
+/// checkpoint (`key`ed `'<keyPrefix>SideBySide'`). When they don't,
+/// [secondaryText] moves below [primaryText] instead of beside it
+/// (`key`ed `'<keyPrefix>Stacked'`).
+///
+/// In EITHER arrangement, [primaryText] is a plain [Text] that is never
+/// wrapped in `FittedBox`, never ellipsized, and never has `maxLines`
+/// capped -- every digit `MoneyFormatter` produced always renders, full
+/// stop. In the stacked arrangement it sits directly in a [Column],
+/// which bounds it to the row's own available width without capping its
+/// height -- so even in the (rarer) case where [primaryText] alone is
+/// too wide for one line, it simply wraps onto a second line rather than
+/// painting outside the card. [secondaryText] MAY ellipsize (capped to
+/// one line) -- it is never itself the authoritative figure (it either
+/// restates [primaryText]'s sibling total, e.g. "of ¥120,000", or is a
+/// date).
+///
+/// Deliberately does not branch on currency code, transaction/rule kind,
+/// or locale anywhere -- the decision depends only on the two strings'
+/// own measured widths, so it applies identically regardless of what
+/// produced them.
+class _AdaptiveAmountLine extends StatelessWidget {
+  const _AdaptiveAmountLine({
+    required this.keyPrefix,
+    required this.primaryText,
+    required this.primaryStyle,
+    required this.secondaryText,
+    required this.secondaryStyle,
+  });
+
+  /// Distinguishes this instance's layout-mode keys from the other
+  /// cards reusing this same widget on the same screen (e.g.
+  /// `'budgetAmount'`, `'goalAmount'`, `'recurringAmount'`) -- tests
+  /// assert on `Key('<keyPrefix>SideBySide')`/`Key('<keyPrefix>Stacked')`
+  /// to confirm which arrangement actually rendered.
+  final String keyPrefix;
+  final String primaryText;
+  final TextStyle? primaryStyle;
+  final String secondaryText;
+  final TextStyle? secondaryStyle;
+
+  /// Horizontal gap between primary and secondary in the side-by-side
+  /// arrangement -- matches the previous `Wrap`'s `spacing: 8`.
+  static const double _gap = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget primary = Text(primaryText, style: primaryStyle);
+    final Widget secondary = Text(
+      secondaryText,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: secondaryStyle,
+    );
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final TextScaler scaler = MediaQuery.textScalerOf(context);
+        final direction = Directionality.of(context);
+        final double primaryWidth = (TextPainter(
+          text: TextSpan(text: primaryText, style: primaryStyle),
+          textDirection: direction,
+          textScaler: scaler,
+        )..layout())
+            .width;
+        final double secondaryWidth = (TextPainter(
+          text: TextSpan(text: secondaryText, style: secondaryStyle),
+          textDirection: direction,
+          textScaler: scaler,
+        )..layout())
+            .width;
+
+        final bool fitsSideBySide = primaryWidth + _gap + secondaryWidth <= constraints.maxWidth;
+
+        if (fitsSideBySide) {
+          return Wrap(
+            key: Key('${keyPrefix}SideBySide'),
+            crossAxisAlignment: WrapCrossAlignment.end,
+            spacing: _gap,
+            runSpacing: 2,
+            children: <Widget>[primary, secondary],
+          );
+        }
+
+        return Column(
+          key: Key('${keyPrefix}Stacked'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[primary, const SizedBox(height: 2), secondary],
+        );
+      },
+    );
+  }
+}
+
 class _ConfiguredBudget extends StatelessWidget {
   const _ConfiguredBudget({required this.calculation});
 
@@ -665,34 +804,21 @@ class _ConfiguredBudget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // A `Wrap`, not a `Row` -- at narrow widths (see the 320px test in
-        // `test/widget/home_screen_test.dart`) the remaining amount plus
-        // "of <budgeted>" can be wider than the card, and neither figure
-        // may be clipped, ellipsized, or shrunk to stay readable. `Wrap`
-        // renders them on one line whenever they fit (identical to the
-        // previous `Row` on a normal-width phone) and drops "of
-        // <budgeted>" to its own line, still fully legible, only when
-        // they don't.
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.end,
-          spacing: 8,
-          runSpacing: 2,
-          children: <Widget>[
-            Text(
-              _formatter.format(remaining),
-              style: text.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: remaining.isNegative ? colors.error : null,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                'of ${_formatter.format(budgeted)}',
-                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-              ),
-            ),
-          ],
+        // International / Localization Foundation Checkpoint 5.1: see
+        // `_AdaptiveAmountLine`'s doc comment for why a bare `Wrap` here
+        // wasn't quite enough -- it never bounded the remaining amount's
+        // OWN width, so a KWD-precision or very large remaining amount
+        // at large text scale on a narrow screen could paint past the
+        // card. Never shrinks, ellipsizes, or branches on currency.
+        _AdaptiveAmountLine(
+          keyPrefix: 'budgetAmount',
+          primaryText: _formatter.format(remaining),
+          primaryStyle: text.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: remaining.isNegative ? colors.error : null,
+          ),
+          secondaryText: 'of ${_formatter.format(budgeted)}',
+          secondaryStyle: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
         ClipRRect(
@@ -705,24 +831,44 @@ class _ConfiguredBudget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
+        // CP5.1: both the status chip and the percentage figure were
+        // previously non-flexible in a `spaceBetween` Row -- a longer
+        // status label (e.g. a longer translation of "Ahead of pace") or
+        // an uncapped, potentially multi-digit "<percent>% used" at large
+        // text scale on a narrow screen could together exceed the row's
+        // width with neither able to shrink. Wrapping each in `Flexible`
+        // (with the chip's and figure's own text allowed to ellipsize)
+        // lets them shrink instead of overflowing; the true, uncapped
+        // percentage value itself is never altered -- only its rendered
+        // width can, in the extreme case, be visually truncated.
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
-            Container(
-              key: const Key('budgetStatusChip'),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                statusLabel,
-                style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+            Flexible(
+              child: Container(
+                key: const Key('budgetStatusChip'),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  statusLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
-            Text(
-              '$percentUsed% used',
-              style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '$percentUsed% used',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
             ),
           ],
         ),
@@ -850,23 +996,14 @@ class _PriorityGoalSummary extends StatelessWidget {
       children: <Widget>[
         Text(summary.name, style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.end,
-          spacing: 8,
-          runSpacing: 2,
-          children: <Widget>[
-            Text(
-              _formatter.format(calc.saved),
-              style: text.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                'of ${_formatter.format(calc.target)}',
-                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-              ),
-            ),
-          ],
+        // CP5.1: see `_AdaptiveAmountLine`'s doc comment -- same fix as
+        // `_ConfiguredBudget` above, applied to the saved-vs-target pair.
+        _AdaptiveAmountLine(
+          keyPrefix: 'goalAmount',
+          primaryText: _formatter.format(calc.saved),
+          primaryStyle: text.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          secondaryText: 'of ${_formatter.format(calc.target)}',
+          secondaryStyle: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
         ClipRRect(
@@ -879,23 +1016,42 @@ class _PriorityGoalSummary extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
+        // CP5.1: same fix as `_ConfiguredBudget`'s status/percent row --
+        // both the status chip and the percentage figure were
+        // non-flexible in a `spaceBetween` Row, so a longer status label
+        // or the percentage at large text scale on a narrow screen could
+        // together exceed the row with neither able to shrink. Wrapping
+        // each in `Flexible` (with one-line ellipsis) lets them shrink
+        // instead of overflowing; `calc.wholePercentSaved` itself is
+        // never altered, only its rendered width can, in the extreme,
+        // visually truncate.
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                statusLabel,
-                style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  statusLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
-            Text(
-              '${calc.wholePercentSaved}%',
-              style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '${calc.wholePercentSaved}%',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
             ),
           ],
         ),
@@ -913,7 +1069,11 @@ class _PriorityGoalSummary extends StatelessWidget {
 /// same single-item, no-fabricated-total rule [_SavingsGoalsCard]
 /// already follows for goals (see `docs/14_DECISION_LOG.md` ADR-023).
 class _UpcomingCommitmentsCard extends ConsumerWidget {
-  const _UpcomingCommitmentsCard();
+  // CP5.1: accepts a key so tests can deterministically scroll the
+  // Home ListView until this card is mounted (`tester.scrollUntilVisible`)
+  // instead of relying on a tall-enough fixed viewport -- presentation-only,
+  // no behavior change.
+  const _UpcomingCommitmentsCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1026,23 +1186,15 @@ class _RecurringItemSummary extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.end,
-          spacing: 8,
-          runSpacing: 2,
-          children: <Widget>[
-            Text(
-              _formatter.format(amount),
-              style: text.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                DateFormat.yMMMd().format(item.scheduledDateUtc),
-                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-              ),
-            ),
-          ],
+        // CP5.1: see `_AdaptiveAmountLine`'s doc comment -- same fix as
+        // `_ConfiguredBudget` above, applied to the amount-vs-scheduled-
+        // date pair.
+        _AdaptiveAmountLine(
+          keyPrefix: 'recurringAmount',
+          primaryText: _formatter.format(amount),
+          primaryStyle: text.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          secondaryText: DateFormat.yMMMd().format(item.scheduledDateUtc),
+          secondaryStyle: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 8),
         Container(

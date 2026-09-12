@@ -678,4 +678,328 @@ void main() {
       }
     },
   );
+
+  // International / Localization Foundation Checkpoint 5.1 --
+  // `_ConfiguredBudget`/`_PriorityGoalSummary`/`_RecurringItemSummary` now
+  // share `_AdaptiveAmountLine` instead of a bare `Wrap`: the amount is
+  // NEVER shrunk (no `FittedBox`), never ellipsized, and never loses a
+  // digit -- when it and its secondary line ("of <total>" or a date)
+  // don't both fit the row, the secondary line moves below the amount
+  // instead. These tests assert the actual rendered strings (every
+  // digit `MoneyFormatter` produced), not merely the absence of an
+  // exception, and assert on the `<prefix>Stacked`/`<prefix>SideBySide`
+  // keys to confirm which arrangement actually rendered -- see
+  // `home_screen.dart`'s `_AdaptiveAmountLine` doc comment.
+
+  testWidgets(
+    'CP5.1: the budget card renders the amount side by side with "of <budgeted>" at normal '
+    'width and default text scale -- unchanged from before this checkpoint',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      // A short remaining/budgeted pair is deliberately used here (not
+      // ¥120,000 -- see CP5.1's root-cause investigation): on real
+      // measured Material 3 text metrics, "¥120,000" (headlineSmall,
+      // bold) + "of ¥120,000" (bodyMedium) together need ~357px, which
+      // does not fit this card's ~328px content width even at normal
+      // (400px-logical) width and default text scale -- so it always
+      // stacked, both before and after this checkpoint, and was never a
+      // valid example of the side-by-side arrangement this test means to
+      // verify. ¥5,000 is short enough to genuinely fit side by side.
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profile!.id,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(5000, 'JPY'), // ¥5,000
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('¥5,000'), findsOneWidget);
+      expect(find.text('of ¥5,000'), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountSideBySide')), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountStacked')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.1: the budget card stacks the amount below "of <budgeted>" -- with every digit of a '
+    'large 0-decimal VND remaining amount still fully rendered -- at 320px width and a 1.6x '
+    'text scale together',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final AppDatabase db = await seededDb(
+        living: 'VND',
+        home: 'VND',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'VND Wallet', currencyCode: 'VND')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profile!.id,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(999999999, 'VND'), // ₫999,999,999
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      // Every digit still present, in full, on both the primary amount
+      // and the secondary "of <budgeted>" line -- not merely "no
+      // exception was thrown".
+      expect(find.text('₫999,999,999'), findsOneWidget);
+      expect(find.text('of ₫999,999,999'), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountStacked')), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountSideBySide')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.1: the budget card stacks and keeps every digit of a KWD remaining amount with 3 '
+    'decimal places at 320px width and a 1.6x text scale together',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final AppDatabase db = await seededDb(
+        living: 'KWD',
+        home: 'KWD',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profile!.id,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('د.ك12,345.678'), findsOneWidget);
+      expect(find.text('of د.ك12,345.678'), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountStacked')), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountSideBySide')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.1: the budget card stacks and keeps every digit of a large JPY remaining amount at '
+    '320px width and a 1.6x text scale together',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profile!.id,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(99999999, 'JPY'), // ¥99,999,999
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('¥99,999,999'), findsOneWidget);
+      expect(find.text('of ¥99,999,999'), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountStacked')), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountSideBySide')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.1: the budget card stacks and keeps every digit of a large MMK remaining amount at '
+    '320px width and a 2.0x text scale together',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final AppDatabase db = await seededDb(
+        living: 'MMK',
+        home: 'MMK',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'MMK Wallet', currencyCode: 'MMK')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profile!.id,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(999999999, 'MMK'), // K9,999,999.99 -- MMK has 2 minor units
+        // (per `CurrencyRegistry`), not 0 -- see report note.
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('K9,999,999.99'), findsOneWidget);
+      expect(find.text('of K9,999,999.99'), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountStacked')), findsOneWidget);
+      expect(find.byKey(const Key('budgetAmountSideBySide')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.1: the savings goals card stacks and keeps every digit of large VND saved/target '
+    'amounts at 320px width and a 1.6x text scale together',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+      final String goalId = await goalRepo.createGoal(
+        profileId: profile!.id,
+        name: 'Large VND Goal',
+        targetAmount: Money.fromMinorUnits(999999999, 'VND'), // ₫999,999,999
+      );
+      await SavingsGoalContributionRepository(db, goalRepo).addContribution(
+        goalId: goalId,
+        amount: Money.fromMinorUnits(500000000, 'VND'), // ₫500,000,000
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('₫500,000,000'), findsOneWidget);
+      expect(find.text('of ₫999,999,999'), findsOneWidget);
+      expect(find.byKey(const Key('goalAmountStacked')), findsOneWidget);
+      expect(find.byKey(const Key('goalAmountSideBySide')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.1: the recurring card stacks and keeps every digit of a KWD amount with 3 decimal '
+    'places at 320px width and a 1.6x text scale together',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[
+          const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY'),
+          const _SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD'),
+        ],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      // Deterministic one-shot lookup, scoped to the KWD account -- same
+      // reasoning as the due-today/narrow-width recurring tests above
+      // for why `watchActiveForProfile(...).first` is avoided here.
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.currencyCode.equals('KWD') &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow kwdAccount = (await accountQuery.get()).first;
+      final DateTime todayUtc = DateTime.now().toUtc();
+      await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        profileId: profile!.id,
+        kind: RecurringRuleKind.expense,
+        name: 'Large KWD Rule',
+        amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+        accountId: kwdAccount.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      // CP5.1: the recurring card sits below two currency cards plus the
+      // (empty-state) budget and goals cards -- at 320px width the
+      // `ListView`'s viewport + cache extent doesn't reach it on the
+      // first pump regardless of a tall fixed `physicalSize`, so scroll
+      // deterministically to the card's own stable key (added to
+      // `_UpcomingCommitmentsCard` for exactly this) rather than relying
+      // on height alone. Width and text scale are untouched.
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('upcomingCommitmentsCardSection')),
+        200.0,
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('د.ك12,345.678'), findsOneWidget);
+      expect(find.byKey(const Key('recurringAmountStacked')), findsOneWidget);
+      expect(find.byKey(const Key('recurringAmountSideBySide')), findsNothing);
+    },
+  );
 }
