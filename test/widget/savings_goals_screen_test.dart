@@ -2,6 +2,7 @@ import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/savings_goal_contribution_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/goals/presentation/savings_goals_screen.dart';
 import 'package:drift/native.dart';
@@ -155,5 +156,71 @@ void main() {
     if (overflowException != null) {
       fail('Narrow-screen (320px) goals screen layout threw an exception:\n\n$overflowException');
     }
+  });
+
+  // CP5.4b: `_GoalListTile.subtitle`'s combined
+  // "$saved of $target \u00b7 $percent% \u00b7 $status" string is one
+  // plain `Text` with no `overflow`/`maxLines` set -- it wraps rather
+  // than clips (per the CP5.4 audit), so this stress case confirms
+  // every digit of a large, precision-sensitive currency amount still
+  // survives intact (not abbreviated, not dropped) alongside a long
+  // goal name at a narrow width and a large text scale, without
+  // requiring the line to stay single-line.
+  testWidgets(
+      'CP5.4b: a long goal name and a large 3-decimal KWD saved/target amount survive intact '
+      'at a narrow 320px width and a 1.6x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    const String longName = 'A rather long savings goal name to stress narrow-width layout';
+    final (AppDatabase db, String profileId) = await seededDb();
+    final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+    final String goalId = await goalRepo.createGoal(
+      profileId: profileId,
+      name: longName,
+      // \u062F.\u064324,691.356 -- double the contribution below, so
+      // wholePercentSaved lands on an exact 50 with no rounding
+      // ambiguity to reproduce.
+      targetAmount: Money.fromMinorUnits(24691356, 'KWD'),
+    );
+    final SavingsGoalContributionRepository contributionRepo =
+        SavingsGoalContributionRepository(db, goalRepo);
+    await contributionRepo.addContribution(
+      goalId: goalId,
+      // \u062F.\u064312,345.678 -- KWD has 3 minor units per
+      // `CurrencyRegistry`, not 0; same magnitude already verified
+      // correct by a real Windows run in CP5.2a/CP5.4a.
+      amount: Money.fromMinorUnits(12345678, 'KWD'),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithGoals(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+
+    // Scoped to this specific goal's own tile -- not a page-wide
+    // find.textContaining(...) -- since the subtitle is one combined
+    // Text and a page-wide substring search could in principle collide
+    // if this fixture ever grew to seed more than one goal.
+    final Finder tile = find.byKey(Key('goalTile_$goalId'));
+    expect(tile, findsOneWidget);
+    expect(
+      find.descendant(of: tile, matching: find.textContaining('\u062F.\u064312,345.678')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: tile, matching: find.textContaining('\u062F.\u064324,691.356')),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: tile, matching: find.textContaining('50%')), findsOneWidget);
+    expect(find.descendant(of: tile, matching: find.textContaining('In progress')), findsOneWidget);
   });
 }

@@ -6,6 +6,7 @@ import 'package:ai_financial_coach/core/database/repositories/recurring_rule_rep
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/notifications/notification_providers.dart';
 import 'package:ai_financial_coach/core/notifications/notification_scheduler.dart';
+import 'package:intl/intl.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequency.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_schedule.dart';
@@ -757,6 +758,63 @@ void main() {
       await tester.pumpAndSettle();
       final RecurringRuleRow saved = await db.select(db.recurringRules).getSingle();
       expect(saved.notificationsEnabled, isFalse);
+    },
+  );
+
+  // CP5.4b: `_PendingItemTile`'s amount/date line
+  // ('${amount} \u00b7 ${date}') is one plain `Text` with no
+  // `overflow`/`maxLines` set -- it wraps rather than clips (per the
+  // CP5.4 audit), so this stress case confirms every digit of a large,
+  // precision-sensitive currency amount and the scheduled date both
+  // survive intact alongside a long rule name at a narrow width and a
+  // large text scale, without requiring the amount and date to stay on
+  // one line.
+  testWidgets(
+    'CP5.4b: a long rule name and a large 3-decimal KWD amount survive intact at a narrow '
+    '320px width and a 1.6x text scale',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const String longName = 'A rather long recurring rule name to stress narrow-width layout';
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb(
+        accounts: const <_SeedAccount>[_SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD')],
+      );
+      final DateTime todayUtc = DateTime.now().toUtc();
+      final DateTime anchor = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+      await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: longName,
+        // \u062F.\u064312,345.678 -- KWD has 3 minor units per
+        // `CurrencyRegistry`, not 0; same magnitude already verified
+        // correct by a real Windows run in CP5.2a/CP5.4a.
+        amount: Money.fromMinorUnits(12345678, 'KWD'),
+        accountId: accounts.first.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: anchor,
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      // Only one rule is seeded and this screen shows no aggregate/
+      // total elsewhere (unlike the goal detail hero row, where
+      // "Remaining" can echo the same figure), so an unscoped
+      // page-wide search carries no duplicate-match risk here.
+      expect(find.text(longName), findsOneWidget);
+      expect(find.textContaining('\u062F.\u064312,345.678'), findsOneWidget);
+      expect(find.textContaining(DateFormat.yMMMd().format(anchor)), findsOneWidget);
     },
   );
 }

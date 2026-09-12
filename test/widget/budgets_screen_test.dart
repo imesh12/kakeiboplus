@@ -247,4 +247,123 @@ void main() {
       fail('Narrow-screen (320px) budgets screen layout threw an exception:\n\n$overflowException');
     }
   });
+
+  // CP5.4b: `_CategoryBudgetTile`'s title/subtitle are already allowed
+  // to wrap (per the CP5.4 audit -- `ListTile` gives its title/subtitle
+  // column a flexible slot internally, so a long custom name just grows
+  // the row rather than overflowing or colliding with the fixed
+  // edit/delete trailing icons). This test pins down specifically that
+  // those trailing controls keep rendering next to a name long enough
+  // to wrap, at a narrow width and a large text scale -- not that the
+  // name stays on one line, which the locked text policy doesn't
+  // require.
+  testWidgets(
+      'CP5.4b: a long custom category name still renders its edit/delete controls at a narrow '
+      '320px width and a 1.6x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb();
+    const String longName = 'A rather long custom category name to stress narrow-width layout';
+    final String categoryId = await CategoryRepository(db).createCategory(
+      profileId: profileId,
+      name: longName,
+      type: 'expense',
+    );
+    final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+    final String budgetId = await BudgetRepository(db).setCategoryBudget(
+      profileId: profileId,
+      categoryId: categoryId,
+      month: month,
+      amount: Money.fromMinorUnits(20000, 'JPY'),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithBudgets(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(Key('categoryBudgetTile_${categoryId}_JPY')), findsOneWidget);
+    expect(find.text(longName), findsOneWidget);
+    expect(find.byKey(Key('editCategoryBudget_$budgetId')), findsOneWidget);
+    expect(find.byKey(Key('deleteCategoryBudget_$budgetId')), findsOneWidget);
+  });
+
+  // CP5.4b: precision-stress companion to the long-name test above --
+  // confirms a large 0-decimal (VND) overall budget and a large
+  // 3-decimal (KWD) category budget both keep every digit at the same
+  // narrow width/large text scale. This screen shows only the
+  // configured limit (not a "spent" figure) for either tile, so only
+  // the exact limit strings the current implementation actually
+  // renders are asserted here.
+  testWidgets(
+      'CP5.4b: large 0-decimal VND and 3-decimal KWD budget amounts keep every digit at a '
+      'narrow 320px width and a 1.6x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb();
+    final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+    await BudgetRepository(db).setOverallBudget(
+      profileId: profileId,
+      month: month,
+      // \u20AB999,999,999 -- VND has 0 minor units per
+      // `CurrencyRegistry`; same magnitude already verified correct by
+      // a real Windows run in CP5.2a.
+      amount: Money.fromMinorUnits(999999999, 'VND'),
+    );
+    final String categoryId = await CategoryRepository(db).createCategory(
+      profileId: profileId,
+      name: 'Precision Category',
+      type: 'expense',
+    );
+    await BudgetRepository(db).setCategoryBudget(
+      profileId: profileId,
+      categoryId: categoryId,
+      month: month,
+      // \u062F.\u064312,345.678 -- KWD has 3 minor units, not 0; same
+      // magnitude already verified correct by a real Windows run in
+      // CP5.2a/CP5.4a.
+      amount: Money.fromMinorUnits(12345678, 'KWD'),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithBudgets(container));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // Scoped to each tile's own key -- the overall-budget tile key is
+    // per-currency and the category-budget tile key is per-category, so
+    // there's no risk of these two exact strings colliding with
+    // anything else on screen even unscoped, but scoping keeps this
+    // resilient if more budgets are ever added to this fixture.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('overallBudgetTile_VND')),
+        matching: find.text('\u20AB999,999,999'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(Key('categoryBudgetTile_${categoryId}_KWD')),
+        matching: find.textContaining('\u062F.\u064312,345.678'),
+      ),
+      findsOneWidget,
+    );
+  });
 }
