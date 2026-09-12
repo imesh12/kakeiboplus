@@ -1,3 +1,4 @@
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,15 @@ void main() {
   // `test/support/rtl_harness.dart` for why that's the only place it can
   // be injected. Every existing call site keeps working unchanged
   // (`rtl` defaults to false).
-  Widget buildApp({bool rtl = false}) {
+  // CP6.1 (Localization Phase 1): `AppShell` now reads
+  // `AppLocalizations.of(context)` for its four destination labels, so
+  // every test app -- not just the new Japanese-locale ones -- must wire
+  // `AppLocalizations.localizationsDelegates`/`supportedLocales`, exactly
+  // like `international_preferences_screen_test.dart` already does for
+  // its own MaterialApp. `{Locale locale = const Locale('en')}` keeps
+  // every pre-existing call site passing (English is still the default),
+  // while the new Japanese-proof tests pass `locale: const Locale('ja')`.
+  Widget buildApp({bool rtl = false, Locale locale = const Locale('en')}) {
     final GoRouter router = GoRouter(
       initialLocation: '/home',
       routes: <RouteBase>[
@@ -30,56 +39,12 @@ void main() {
         ),
       ],
     );
-    return MaterialApp.router(routerConfig: router, builder: rtl ? rtlAppBuilder : null);
-  }
-
-  /// CP5.5 (AppShell / Bottom Navigation Text-Scale Validation): a
-  /// standalone `NavigationBar` mirroring the exact shape `AppShell`
-  /// builds (four destinations, `icon`/`selectedIcon` pairs, Material 3
-  /// theme) but with real Japanese labels -- the project's proof
-  /// localization -- substituted for the English ones.
-  ///
-  /// `AppShell`'s destination labels are literal English strings today;
-  /// there is no `AppLocalizations` wiring for the shell and no matching
-  /// keys in `lib/l10n/app_en.arb`/`app_ja.arb`. Broadening shell
-  /// localization is out of scope for this TEST-FIRST checkpoint (see
-  /// CP5.5 instructions, scenario E), so this does not claim `AppShell`
-  /// itself is localized -- it proves the underlying Material 3
-  /// `NavigationBar` layout mechanism `AppShell` relies on survives
-  /// longer/localized labels, as the smallest safe test seam available
-  /// without changing product behavior. `アクティビティ`
-  /// ("Activity") is a deliberately long katakana label to stress width.
-  Widget buildJapaneseLabelStressBar() {
-    return MaterialApp(
-      theme: ThemeData(useMaterial3: true),
-      home: Scaffold(
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: 0,
-          onDestinationSelected: (_) {},
-          destinations: const <NavigationDestination>[
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'ホーム',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined),
-              selectedIcon: Icon(Icons.receipt_long),
-              label: 'アクティビティ',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.add_circle_outline),
-              selectedIcon: Icon(Icons.add_circle),
-              label: '追加',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'プロフィール',
-            ),
-          ],
-        ),
-      ),
+    return MaterialApp.router(
+      routerConfig: router,
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: rtl ? rtlAppBuilder : null,
     );
   }
 
@@ -336,47 +301,6 @@ void main() {
   });
 
   testWidgets(
-      "CP5.5 E: the underlying Material 3 NavigationBar layout survives realistic "
-      "Japanese labels (the project's proof localization) at a narrow width and "
-      '1.6x text scale', (tester) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.view.physicalSize = const Size(320, 700);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
-
-    await tester.pumpWidget(buildJapaneseLabelStressBar());
-    await tester.pumpAndSettle();
-
-    expect(find.text('ホーム'), findsOneWidget);
-    expect(find.text('アクティビティ'), findsOneWidget);
-    expect(find.text('追加'), findsOneWidget);
-    expect(find.text('プロフィール'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-      'CP5.5 E: the underlying Material 3 NavigationBar layout survives realistic '
-      'Japanese labels at a narrow width and 2.0x text scale', (tester) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.view.physicalSize = const Size(320, 700);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
-
-    await tester.pumpWidget(buildJapaneseLabelStressBar());
-    await tester.pumpAndSettle();
-
-    expect(find.text('ホーム'), findsOneWidget);
-    expect(find.text('アクティビティ'), findsOneWidget);
-    expect(find.text('追加'), findsOneWidget);
-    expect(find.text('プロフィール'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
       'CP5.5 F: destinations remain discoverable via semantics at 2.0x text scale',
       (tester) async {
     final SemanticsHandle handle = tester.ensureSemantics();
@@ -511,5 +435,210 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     handle.dispose();
+  });
+
+  // ---------------------------------------------------------------------
+  // CP6.1 (Localization Phase 1): Japanese AppShell + Core Navigation
+  // Proof. AppShell now reads real ARB-backed strings via
+  // `AppLocalizations.of(context)` (see `lib/shared/widgets/app_shell.dart`)
+  // instead of literal English -- these tests exercise the REAL AppShell
+  // under the Japanese locale rather than a standalone stand-in
+  // NavigationBar (the old CP5.5 E `buildJapaneseLabelStressBar` proof is
+  // removed; this supersedes it now that the production widget itself is
+  // locale-aware).
+  // ---------------------------------------------------------------------
+
+  testWidgets(
+      'CP6.1 A: under the English locale, the real AppShell renders the '
+      'ARB-backed English destination labels with no exceptions', (tester) async {
+    await tester.pumpWidget(buildApp(locale: const Locale('en')));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(NavigationDestination, 'Home'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Activity'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Add'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Profile'), findsOneWidget);
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CP6.1 B: under the Japanese locale, the real AppShell renders the '
+      'ARB-backed Japanese destination labels with no exceptions', (tester) async {
+    await tester.pumpWidget(buildApp(locale: const Locale('ja')));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(NavigationDestination, 'ホーム'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'アクティビティ'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, '追加'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'プロフィール'), findsOneWidget);
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CP6.1 C: Japanese destination labels remain represented with no '
+      'overflow/render exceptions at 1.6x text scale', (tester) async {
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+
+    await tester.pumpWidget(buildApp(locale: const Locale('ja')));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(NavigationDestination, 'ホーム'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'アクティビティ'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, '追加'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'プロフィール'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CP6.1 D: at 2.0x text scale under Japanese, all destinations remain '
+      'represented and tappable, and Add opens the sheet with its localized '
+      'Japanese labels, with no exceptions', (tester) async {
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+
+    await tester.pumpWidget(buildApp(locale: const Locale('ja')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'アクティビティ'));
+    await tester.pumpAndSettle();
+    expect(find.text('Activity body'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'ホーム'));
+    await tester.pumpAndSettle();
+    expect(find.text('Home body'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(NavigationDestination, '追加'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, '支出'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, '収入'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, '振替'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CP6.1 E: at a narrow 320px width combined with 2.0x text scale under '
+      'Japanese, the shell remains renderable, destination semantics remain '
+      'available, and Add remains usable', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+
+    final SemanticsHandle handle = tester.ensureSemantics();
+    // See CP5.5's fix (reused throughout CP5.6/CP6.1): disposed explicitly
+    // at the end of the test body, not via addTearDown -- `_endOfTestVerifications`
+    // checks handle disposal before this test's own async callback returns.
+
+    await tester.pumpWidget(buildApp(locale: const Locale('ja')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    final Finder navBar = find.byType(NavigationBar);
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('ホーム'))),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('アクティビティ'))),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('追加'))),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: navBar, matching: find.bySemanticsLabel(RegExp('プロフィール'))),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(NavigationDestination, '追加'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, '支出'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, '収入'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, '振替'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    handle.dispose();
+  });
+
+  testWidgets(
+      "CP6.1 F: switching the locale from English to Japanese through the same "
+      "mechanism AppShell reads (MaterialApp.router's locale:) updates the "
+      'rendered labels without disturbing the underlying GoRouter/selection state',
+      (tester) async {
+    final ValueNotifier<Locale> localeNotifier = ValueNotifier<Locale>(const Locale('en'));
+    addTearDown(localeNotifier.dispose);
+    final GoRouter router = GoRouter(
+      initialLocation: '/home',
+      routes: <RouteBase>[
+        ShellRoute(
+          builder: (context, state, child) => AppShell(child: child),
+          routes: <RouteBase>[
+            GoRoute(path: '/home', builder: (context, state) => const Text('Home body')),
+            GoRoute(path: '/activity', builder: (context, state) => const Text('Activity body')),
+            GoRoute(path: '/profile', builder: (context, state) => const Text('Profile body')),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ValueListenableBuilder<Locale>(
+        valueListenable: localeNotifier,
+        builder: (BuildContext context, Locale locale, Widget? _) {
+          return MaterialApp.router(
+            routerConfig: router,
+            locale: locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(NavigationDestination, 'Home'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Activity'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Add'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Profile'), findsOneWidget);
+
+    // Same GoRouter instance throughout -- switching AppLocalizations
+    // through `locale:` alone, exactly the mechanism `appLocaleProvider`
+    // feeds `MaterialApp.router` in production (see `lib/app/app.dart`),
+    // never touches routing: current location/selection carries across
+    // the switch below unchanged.
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('Activity body'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1);
+
+    localeNotifier.value = const Locale('ja');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(NavigationDestination, 'ホーム'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'アクティビティ'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, '追加'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'プロフィール'), findsOneWidget);
+    // The pre-switch English labels are gone -- this really re-resolved
+    // AppLocalizations, not just left stale English text mounted.
+    expect(find.text('Home'), findsNothing);
+    expect(find.text('Activity'), findsNothing);
+    // Routing/selection state (still on Activity, still matchedLocation
+    // `/activity`) is exactly what it was before the locale switched --
+    // no persisted identifier or routing semantic changed, only display
+    // strings did.
+    expect(find.text('Activity body'), findsOneWidget);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1);
+    expect(tester.takeException(), isNull);
   });
 }

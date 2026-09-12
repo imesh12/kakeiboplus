@@ -46,4 +46,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get save => '保存';
+
+  @override
+  String get navHome => 'ホーム';
+
+  @override
+  String get navActivity => 'アクティビティ';
+
+  @override
+  String get navAdd => '追加';
+
+  @override
+  String get navProfile => 'プロフィール';
+
+  @override
+  String get transactionTypeExpense => '支出';
+
+  @override
+  String get transactionTypeIncome => '収入';
+
+  @override
+  String get transactionTypeTransfer => '振替';
 }

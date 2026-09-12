@@ -12,5 +12,12 @@
   "dateFormat": "Date format",
   "numberFormat": "Number format",
   "timezone": "Timezone",
-  "save": "Save"
+  "save": "Save",
+  "navHome": "Home",
+  "navActivity": "Activity",
+  "navAdd": "Add",
+  "navProfile": "Profile",
+  "transactionTypeExpense": "Expense",
+  "transactionTypeIncome": "Income",
+  "transactionTypeTransfer": "Transfer"
 }

@@ -12,5 +12,12 @@
   "dateFormat": "日付形式",
   "numberFormat": "数値形式",
   "timezone": "タイムゾーン",
-  "save": "保存"
+  "save": "保存",
+  "navHome": "ホーム",
+  "navActivity": "アクティビティ",
+  "navAdd": "追加",
+  "navProfile": "プロフィール",
+  "transactionTypeExpense": "支出",
+  "transactionTypeIncome": "収入",
+  "transactionTypeTransfer": "振替"
 }
