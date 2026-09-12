@@ -283,5 +283,64 @@
   },
   "noContributionsYetMessage": "No contributions yet.",
   "addContributionDialogTitle": "Add a contribution",
-  "addContributionButton": "Add"
+  "addContributionButton": "Add",
+  "couldNotLoadRecurringRules": "Could not load recurring rules: {error}",
+  "@couldNotLoadRecurringRules": {
+    "description": "couldNotLoadRecurringRules",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noRecurringRulesYetTapMessage": "No recurring rules yet. Tap + to add one.",
+  "deleteRecurringRuleConfirmTitle": "Delete this recurring rule?",
+  "deleteRecurringRuleConfirmMessage": "Its posted transactions and handled occurrence history are kept, but the rule itself will no longer be active.",
+  "deleteRuleTooltip": "Delete",
+  "skipButton": "Skip",
+  "postButton": "Post",
+  "editRecurringRuleTitle": "Edit recurring rule",
+  "newRecurringRuleTitle": "New recurring rule",
+  "recurringKindFieldLabel": "Type",
+  "recurringRuleNameLabel": "Name",
+  "enterRecurringRuleNameMessage": "Enter a name for this rule.",
+  "sourceAccountLabel": "Source account",
+  "destinationAccountLabel": "Destination account",
+  "noSameCurrencyDestinationMessage": "No same-currency destination accounts available.",
+  "noneOptionLabel": "None",
+  "frequencyLabel": "Frequency",
+  "recurrenceFrequencyDaily": "Daily",
+  "recurrenceFrequencyWeekly": "Weekly",
+  "recurrenceFrequencyMonthly": "Monthly",
+  "recurrenceFrequencyYearly": "Yearly",
+  "intervalLabel": "Every N (interval)",
+  "enterWholeNumberMessage": "Enter a whole number of 1 or more.",
+  "remindMeLabel": "Remind me",
+  "remindMeSubtitle": "Local notification when this is due -- never posts automatically.",
+  "notificationsPermissionDeniedMessage": "Notifications permission wasn't granted -- reminders stay off.",
+  "chooseStartDateMessage": "Choose a start date",
+  "startDateLabel": "Start date",
+  "noEndDateMessage": "No end date",
+  "endDateLabel": "End date",
+  "clearEndDateTooltip": "Clear end date",
+  "chooseAccountMessage": "Choose an account.",
+  "transfersCrossCurrencyNotSupportedMessage": "Transfers between different currencies aren't supported yet ({fromCurrency} → {toCurrency}).",
+  "@transfersCrossCurrencyNotSupportedMessage": {
+    "description": "transfersCrossCurrencyNotSupportedMessage",
+    "placeholders": {
+      "fromCurrency": {
+        "type": "String"
+      },
+      "toCurrency": {
+        "type": "String"
+      }
+    }
+  },
+  "categoriesScreenTitle": "Categories",
+  "noCategoriesYetMessage": "No categories yet.",
+  "systemCategoryIndicatorLabel": "System",
+  "addExpenseCategoryDialogTitle": "Add expense category",
+  "addIncomeCategoryDialogTitle": "Add income category",
+  "categoryNameLabel": "Name",
+  "addCategoryButton": "Add"
 }

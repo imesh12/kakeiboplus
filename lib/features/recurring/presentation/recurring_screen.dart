@@ -17,6 +17,7 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/notifications/notification_providers.dart';
 import '../../../core/notifications/notification_scheduler.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
@@ -25,6 +26,26 @@ import '../domain/recurring_rule_kind.dart';
 import 'recurring_providers.dart';
 
 const MoneyFormatter _formatter = MoneyFormatter();
+
+/// [kind]'s translated label -- reuses the same transaction-type words
+/// established for Add/Edit Transaction (`transactionTypeExpense/Income/
+/// Transfer`), since a recurring rule's `kind` is the same closed
+/// concept (see `RecurringRuleKind`'s own doc comment).
+String _kindLabel(AppLocalizations l10n, RecurringRuleKind kind) => switch (kind) {
+      RecurringRuleKind.expense => l10n.transactionTypeExpense,
+      RecurringRuleKind.income => l10n.transactionTypeIncome,
+      RecurringRuleKind.transfer => l10n.transactionTypeTransfer,
+    };
+
+/// [frequency]'s translated label. Purely a display concern -- the
+/// persisted value (`RecurringRuleRow.frequency`, written via
+/// `RecurrenceFrequency.name`) is never touched.
+String _frequencyLabel(AppLocalizations l10n, RecurrenceFrequency frequency) => switch (frequency) {
+      RecurrenceFrequency.daily => l10n.recurrenceFrequencyDaily,
+      RecurrenceFrequency.weekly => l10n.recurrenceFrequencyWeekly,
+      RecurrenceFrequency.monthly => l10n.recurrenceFrequencyMonthly,
+      RecurrenceFrequency.yearly => l10n.recurrenceFrequencyYearly,
+    };
 
 /// The Beta 1 Task 4A recurring screen: every pending item (overdue, due
 /// today, or upcoming) derived from the profile's active
@@ -37,21 +58,23 @@ class RecurringScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<RecurringPendingItem>> itemsAsync =
         ref.watch(recurringPendingItemsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Recurring')),
+      appBar: AppBar(title: Text(l10n.recurringTitle)),
       body: itemsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) => Center(child: Text('Could not load recurring rules: $e')),
+        error: (Object e, StackTrace st) =>
+            Center(child: Text(l10n.couldNotLoadRecurringRules(e.toString()))),
         data: (List<RecurringPendingItem> items) {
           if (items.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
-                  'No recurring rules yet. Tap + to add one.',
+                  l10n.noRecurringRulesYetTapMessage,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -68,15 +91,15 @@ class RecurringScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: <Widget>[
               if (overdue.isNotEmpty) ...<Widget>[
-                const _SectionHeader(key: Key('sectionOverdue'), title: 'Overdue'),
+                _SectionHeader(key: const Key('sectionOverdue'), title: l10n.overdueLabel),
                 for (final RecurringPendingItem item in overdue) _PendingItemTile(item: item),
               ],
               if (dueToday.isNotEmpty) ...<Widget>[
-                const _SectionHeader(key: Key('sectionDueToday'), title: 'Due today'),
+                _SectionHeader(key: const Key('sectionDueToday'), title: l10n.recurringStatusDueToday),
                 for (final RecurringPendingItem item in dueToday) _PendingItemTile(item: item),
               ],
               if (upcoming.isNotEmpty) ...<Widget>[
-                const _SectionHeader(key: Key('sectionUpcoming'), title: 'Upcoming'),
+                _SectionHeader(key: const Key('sectionUpcoming'), title: l10n.recurringStatusUpcoming),
                 for (final RecurringPendingItem item in upcoming) _PendingItemTile(item: item),
               ],
             ],
@@ -140,23 +163,23 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
   Future<void> _confirmDelete() async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Delete this recurring rule?'),
-        content: const Text(
-          'Its posted transactions and handled occurrence history are kept, but the rule '
-          'itself will no longer be active.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      builder: (BuildContext dialogContext) {
+        final AppLocalizations dialogL10n = AppLocalizations.of(dialogContext);
+        return AlertDialog(
+          title: Text(dialogL10n.deleteRecurringRuleConfirmTitle),
+          content: Text(dialogL10n.deleteRecurringRuleConfirmMessage),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(dialogL10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(dialogL10n.deleteButton),
+            ),
+          ],
+        );
+      },
     );
     if (confirmed == true) {
       await _handle(() => ref.read(recurringRuleRepositoryProvider).softDelete(widget.item.rule.id));
@@ -165,15 +188,16 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final RecurringRuleRow rule = widget.item.rule;
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
     final Money amount = Money.fromMinorUnits(rule.amountMinorUnits, rule.currencyCode);
 
     final (Color urgencyColor, String urgencyLabel) = switch (widget.item.urgency) {
-      RecurringItemUrgency.overdue => (colors.error, 'Overdue'),
-      RecurringItemUrgency.dueToday => (colors.primary, 'Due today'),
-      RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, 'Upcoming'),
+      RecurringItemUrgency.overdue => (colors.error, l10n.overdueLabel),
+      RecurringItemUrgency.dueToday => (colors.primary, l10n.recurringStatusDueToday),
+      RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, l10n.recurringStatusUpcoming),
     };
     final IconData kindIcon = switch (RecurringRuleKind.values.byName(rule.kind)) {
       RecurringRuleKind.expense => Icons.trending_down_rounded,
@@ -226,7 +250,7 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
               children: <Widget>[
                 IconButton(
                   key: Key('editRule_${rule.id}'),
-                  tooltip: 'Edit',
+                  tooltip: l10n.editTooltip,
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: _isBusy
                       ? null
@@ -237,7 +261,7 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
                 ),
                 IconButton(
                   key: Key('deleteRule_${rule.id}'),
-                  tooltip: 'Delete',
+                  tooltip: l10n.deleteRuleTooltip,
                   icon: const Icon(Icons.delete_outline),
                   onPressed: _isBusy ? null : _confirmDelete,
                 ),
@@ -251,7 +275,7 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
                                   scheduledDateUtc: widget.item.scheduledDateUtc,
                                 ),
                           ),
-                  child: const Text('Skip'),
+                  child: Text(l10n.skipButton),
                 ),
                 FilledButton(
                   key: Key('postOccurrence_${rule.id}_$_dateKey'),
@@ -263,7 +287,7 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
                                   scheduledDateUtc: widget.item.scheduledDateUtc,
                                 ),
                           ),
-                  child: const Text('Post'),
+                  child: Text(l10n.postButton),
                 ),
               ],
             ),
@@ -387,10 +411,9 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
       setState(() => _notificationsEnabled = true);
     } else {
       setState(() => _notificationsEnabled = false);
+      final AppLocalizations l10n = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Notifications permission wasn't granted -- reminders stay off."),
-        ),
+        SnackBar(content: Text(l10n.notificationsPermissionDeniedMessage)),
       );
     }
   }
@@ -425,6 +448,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
   }
 
   Future<void> _submit(List<AccountRow> accounts) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     setState(() => _errorMessage = null);
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final Money? amount = _parsedAmount;
@@ -432,7 +456,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
     final DateTime? startDate = _startDate;
     if (amount == null || accountId == null || startDate == null) return;
     if (_kind == RecurringRuleKind.transfer && _destinationAccountId == null) {
-      setState(() => _errorMessage = 'Choose a destination account.');
+      setState(() => _errorMessage = l10n.chooseDestinationAccount);
       return;
     }
     final int? interval = int.tryParse(_intervalController.text.trim());
@@ -489,8 +513,8 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
       // is exactly the bug manual Android testing found: Save appeared
       // unresponsive because this exception was previously unhandled.
       setState(() {
-        _errorMessage = "Transfers between different currencies aren't supported yet "
-            '(${e.currencyCodeA} → ${e.currencyCodeB}).';
+        _errorMessage =
+            l10n.transfersCrossCurrencyNotSupportedMessage(e.currencyCodeA, e.currencyCodeB);
       });
     } on InvalidRecurringRuleAmountException catch (e) {
       setState(() => _errorMessage = e.toString());
@@ -514,6 +538,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
     final List<AccountRow> accounts = accountsAsync.valueOrNull ?? const <AccountRow>[];
     final AccountRow? selectedAccount =
@@ -539,7 +564,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
             ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  'No same-currency destination accounts available.',
+                  l10n.noSameCurrencyDestinationMessage,
                   key: const Key('noEligibleDestinationMessage'),
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
@@ -550,7 +575,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                     ? _destinationAccountId
                     : null,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Destination account'),
+                decoration: InputDecoration(labelText: l10n.destinationAccountLabel),
                 items: <DropdownMenuItem<String>>[
                   for (final AccountRow account in eligibleDestinationAccounts)
                     DropdownMenuItem<String>(
@@ -562,11 +587,11 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                     ),
                 ],
                 onChanged: (String? v) => setState(() => _destinationAccountId = v),
-                validator: (String? v) => v == null ? 'Choose a destination account.' : null,
+                validator: (String? v) => v == null ? l10n.chooseDestinationAccount : null,
               );
 
     return AlertDialog(
-      title: Text(_isEditing ? 'Edit recurring rule' : 'New recurring rule'),
+      title: Text(_isEditing ? l10n.editRecurringRuleTitle : l10n.newRecurringRuleTitle),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -579,12 +604,12 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                   key: const Key('recurringKindDropdown'),
                   initialValue: _kind,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Type'),
+                  decoration: InputDecoration(labelText: l10n.recurringKindFieldLabel),
                   items: <DropdownMenuItem<RecurringRuleKind>>[
                     for (final RecurringRuleKind kind in RecurringRuleKind.values)
                       DropdownMenuItem<RecurringRuleKind>(
                         value: kind,
-                        child: Text(kind.name, overflow: TextOverflow.ellipsis),
+                        child: Text(_kindLabel(l10n, kind), overflow: TextOverflow.ellipsis),
                       ),
                   ],
                   onChanged: (RecurringRuleKind? v) => setState(() {
@@ -596,21 +621,25 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
               else
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('Type: ${_kind.name}', style: Theme.of(context).textTheme.bodyMedium),
+                  child: Text(
+                    '${l10n.recurringKindFieldLabel}: ${_kindLabel(l10n, _kind)}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ),
               TextFormField(
                 key: const Key('recurringNameField'),
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
+                decoration: InputDecoration(labelText: l10n.recurringRuleNameLabel),
                 validator: (String? v) =>
-                    (v == null || v.trim().isEmpty) ? 'Enter a name for this rule.' : null,
+                    (v == null || v.trim().isEmpty) ? l10n.enterRecurringRuleNameMessage : null,
               ),
               DropdownButtonFormField<String>(
                 key: const Key('recurringAccountDropdown'),
                 initialValue: accounts.any((a) => a.id == _accountId) ? _accountId : null,
                 isExpanded: true,
                 decoration: InputDecoration(
-                  labelText: _kind == RecurringRuleKind.transfer ? 'Source account' : 'Account',
+                  labelText:
+                      _kind == RecurringRuleKind.transfer ? l10n.sourceAccountLabel : l10n.accountLabel,
                 ),
                 items: <DropdownMenuItem<String>>[
                   for (final AccountRow account in accounts)
@@ -636,7 +665,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                     _destinationAccountId = null;
                   }
                 }),
-                validator: (String? v) => v == null ? 'Choose an account.' : null,
+                validator: (String? v) => v == null ? l10n.chooseAccountMessage : null,
               ),
               if (destinationField != null) destinationField,
               if (_kind != RecurringRuleKind.transfer)
@@ -647,9 +676,9 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                     key: const Key('recurringCategoryDropdown'),
                     initialValue: categories.any((c) => c.id == _categoryId) ? _categoryId : null,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Category (optional)'),
+                    decoration: InputDecoration(labelText: l10n.categoryOptionalLabel),
                     items: <DropdownMenuItem<String?>>[
-                      const DropdownMenuItem<String?>(value: null, child: Text('None')),
+                      DropdownMenuItem<String?>(value: null, child: Text(l10n.noneOptionLabel)),
                       for (final CategoryRow category in categories)
                         DropdownMenuItem<String?>(
                           value: category.id,
@@ -662,7 +691,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
               MoneyTextField(
                 key: const Key('recurringAmountField'),
                 currencyCode: amountCurrency,
-                label: 'Amount',
+                label: l10n.amountLabel,
                 initialValue: widget.existingRule == null
                     ? null
                     : Money.fromMinorUnits(widget.existingRule!.amountMinorUnits, amountCurrency)
@@ -673,12 +702,12 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                 key: const Key('recurringFrequencyDropdown'),
                 initialValue: _frequency,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Frequency'),
+                decoration: InputDecoration(labelText: l10n.frequencyLabel),
                 items: <DropdownMenuItem<RecurrenceFrequency>>[
                   for (final RecurrenceFrequency freq in RecurrenceFrequency.values)
                     DropdownMenuItem<RecurrenceFrequency>(
                       value: freq,
-                      child: Text(freq.name, overflow: TextOverflow.ellipsis),
+                      child: Text(_frequencyLabel(l10n, freq), overflow: TextOverflow.ellipsis),
                     ),
                 ],
                 onChanged: (RecurrenceFrequency? v) => setState(() => _frequency = v ?? _frequency),
@@ -687,18 +716,18 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                 key: const Key('recurringIntervalField'),
                 controller: _intervalController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Every N (interval)'),
+                decoration: InputDecoration(labelText: l10n.intervalLabel),
                 validator: (String? v) {
                   final int? parsed = int.tryParse((v ?? '').trim());
-                  if (parsed == null || parsed < 1) return 'Enter a whole number of 1 or more.';
+                  if (parsed == null || parsed < 1) return l10n.enterWholeNumberMessage;
                   return null;
                 },
               ),
               SwitchListTile(
                 key: const Key('recurringNotificationsToggle'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Remind me'),
-                subtitle: const Text('Local notification when this is due -- never posts automatically.'),
+                title: Text(l10n.remindMeLabel),
+                subtitle: Text(l10n.remindMeSubtitle),
                 value: _notificationsEnabled,
                 onChanged: (bool v) => unawaited(_onNotificationsToggled(v)),
               ),
@@ -708,8 +737,8 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   _startDate == null
-                      ? 'Choose a start date'
-                      : 'Start date: ${DateFormat.yMMMd().format(_startDate!)}',
+                      ? l10n.chooseStartDateMessage
+                      : '${l10n.startDateLabel}: ${DateFormat.yMMMd().format(_startDate!)}',
                 ),
                 trailing: const Icon(Icons.calendar_today_outlined),
                 onTap: () => _pickDate(isStart: true),
@@ -718,8 +747,8 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   _endDate == null
-                      ? 'No end date'
-                      : 'End date: ${DateFormat.yMMMd().format(_endDate!)}',
+                      ? l10n.noEndDateMessage
+                      : '${l10n.endDateLabel}: ${DateFormat.yMMMd().format(_endDate!)}',
                 ),
                 trailing: Wrap(
                   spacing: 4,
@@ -727,12 +756,12 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                     TextButton(
                       key: const Key('pickRecurringEndDate'),
                       onPressed: () => _pickDate(isStart: false),
-                      child: const Text('Choose'),
+                      child: Text(l10n.chooseButton),
                     ),
                     if (_endDate != null)
                       IconButton(
                         icon: const Icon(Icons.clear),
-                        tooltip: 'Clear end date',
+                        tooltip: l10n.clearEndDateTooltip,
                         onPressed: () => setState(() => _endDate = null),
                       ),
                   ],
@@ -740,7 +769,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
               ),
               TextFormField(
                 controller: _noteController,
-                decoration: const InputDecoration(labelText: 'Note (optional)'),
+                decoration: InputDecoration(labelText: l10n.noteOptionalLabel),
               ),
               if (_errorMessage != null) ...<Widget>[
                 const SizedBox(height: 12),
@@ -757,12 +786,12 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           key: const Key('saveRecurringRule'),
           onPressed: (_isSaving || noEligibleDestination) ? null : () => _submit(accounts),
-          child: const Text('Save'),
+          child: Text(l10n.save),
         ),
       ],
     );

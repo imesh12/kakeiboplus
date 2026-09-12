@@ -471,4 +471,131 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get addContributionButton => '追加';
+
+  @override
+  String couldNotLoadRecurringRules(String error) {
+    return '定期ルールを読み込めませんでした: $error';
+  }
+
+  @override
+  String get noRecurringRulesYetTapMessage => '定期ルールがまだありません。+ をタップして追加してください。';
+
+  @override
+  String get deleteRecurringRuleConfirmTitle => 'この定期ルールを削除しますか？';
+
+  @override
+  String get deleteRecurringRuleConfirmMessage =>
+      '記録済みの取引と処理済みの発生履歴は保持されますが、ルール自体は非アクティブになります。';
+
+  @override
+  String get deleteRuleTooltip => '削除';
+
+  @override
+  String get skipButton => 'スキップ';
+
+  @override
+  String get postButton => '記録';
+
+  @override
+  String get editRecurringRuleTitle => '定期ルールを編集';
+
+  @override
+  String get newRecurringRuleTitle => '新しい定期ルール';
+
+  @override
+  String get recurringKindFieldLabel => '種類';
+
+  @override
+  String get recurringRuleNameLabel => '名前';
+
+  @override
+  String get enterRecurringRuleNameMessage => 'このルールの名前を入力してください。';
+
+  @override
+  String get sourceAccountLabel => '元の口座';
+
+  @override
+  String get destinationAccountLabel => '送金先の口座';
+
+  @override
+  String get noSameCurrencyDestinationMessage => '同じ通貨の送金先口座がありません。';
+
+  @override
+  String get noneOptionLabel => 'なし';
+
+  @override
+  String get frequencyLabel => '頻度';
+
+  @override
+  String get recurrenceFrequencyDaily => '毎日';
+
+  @override
+  String get recurrenceFrequencyWeekly => '毎週';
+
+  @override
+  String get recurrenceFrequencyMonthly => '毎月';
+
+  @override
+  String get recurrenceFrequencyYearly => '毎年';
+
+  @override
+  String get intervalLabel => '間隔（N回ごと）';
+
+  @override
+  String get enterWholeNumberMessage => '1以上の整数を入力してください。';
+
+  @override
+  String get remindMeLabel => 'リマインドする';
+
+  @override
+  String get remindMeSubtitle => '期日になるとローカル通知が届きます。自動的に記録されることはありません。';
+
+  @override
+  String get notificationsPermissionDeniedMessage =>
+      '通知の許可が得られなかったため、リマインダーはオフのままです。';
+
+  @override
+  String get chooseStartDateMessage => '開始日を選択';
+
+  @override
+  String get startDateLabel => '開始日';
+
+  @override
+  String get noEndDateMessage => '終了日なし';
+
+  @override
+  String get endDateLabel => '終了日';
+
+  @override
+  String get clearEndDateTooltip => '終了日をクリア';
+
+  @override
+  String get chooseAccountMessage => '口座を選択してください。';
+
+  @override
+  String transfersCrossCurrencyNotSupportedMessage(
+      String fromCurrency, String toCurrency) {
+    return '異なる通貨間の振替はまだサポートされていません（$fromCurrency → $toCurrency）。';
+  }
+
+  @override
+  String get categoriesScreenTitle => 'カテゴリ';
+
+  @override
+  String get noCategoriesYetMessage => 'カテゴリがまだありません。';
+
+  @override
+  String get systemCategoryIndicatorLabel => 'システム';
+
+  @override
+  String get addExpenseCategoryDialogTitle => '支出カテゴリを追加';
+
+  @override
+  String get addIncomeCategoryDialogTitle => '収入カテゴリを追加';
+
+  @override
+  String get categoryNameLabel => '名前';
+
+  @override
+  String get addCategoryButton => '追加';
 }

@@ -3,6 +3,7 @@ import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/category_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/features/categories/presentation/categories_screen.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,10 +36,18 @@ void main() {
     return (db, profileId);
   }
 
-  Widget appWithCategories(ProviderContainer container) {
+  Widget appWithCategories(
+    ProviderContainer container, {
+    Locale locale = const Locale('en'),
+  }) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: CategoriesScreen()),
+      child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const CategoriesScreen(),
+      ),
     );
   }
 
@@ -231,5 +240,183 @@ void main() {
         find.ancestor(of: find.text('Freelance Work'), matching: find.byType(ListTile));
     expect(customTile, findsOneWidget);
     expect(find.descendant(of: customTile, matching: find.text('System')), findsNothing);
+  });
+
+  group('CP6.7 Japanese localization', () {
+    testWidgets(
+        'CP6.7 (A): the categories screen renders in Japanese -- app bar, tabs, and the System '
+        'indicator', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('カテゴリ'), findsOneWidget); // AppBar title
+      expect(find.text('支出'), findsOneWidget); // Expense tab
+      expect(find.text('収入'), findsOneWidget); // Income tab
+
+      final Finder systemTile =
+          find.ancestor(of: find.text('Dining Out'), matching: find.byType(ListTile));
+      expect(systemTile, findsOneWidget);
+      expect(find.descendant(of: systemTile, matching: find.text('システム')), findsOneWidget);
+    });
+
+    testWidgets('CP6.7 (B): tapping the Income tab under the Japanese locale switches to the '
+        'Income list', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('収入'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Salary'), findsOneWidget); // seeded system income category
+    });
+
+    testWidgets(
+        'CP6.7 (C): a Japanese-language custom category name renders exactly as entered, and a '
+        'system category name stays the untranslated English seed value', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      await CategoryRepository(db).createCategory(
+        profileId: profileId,
+        name: '推し活',
+        type: 'expense',
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('推し活'), findsOneWidget); // untouched user text, never translated
+      expect(find.text('Dining Out'), findsOneWidget); // untouched system seed name, never translated
+
+      final Finder customTile =
+          find.ancestor(of: find.text('推し活'), matching: find.byType(ListTile));
+      expect(find.descendant(of: customTile, matching: find.text('システム')), findsNothing);
+    });
+
+    testWidgets(
+        'CP6.7 (D): creating an expense category and an income category both work end-to-end '
+        'through the fully localized Japanese Add-category dialog', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      // Expense (the default tab).
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      expect(find.text('支出カテゴリを追加'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField), '交通費');
+      await tester.tap(find.text('追加')); // Add
+      await tester.pumpAndSettle();
+      expect(find.text('交通費'), findsOneWidget);
+
+      // Income.
+      await tester.tap(find.text('収入'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      expect(find.text('収入カテゴリを追加'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField), '副業');
+      await tester.tap(find.text('追加')); // Add
+      await tester.pumpAndSettle();
+      expect(find.text('副業'), findsOneWidget);
+
+      final List<CategoryRow> categories = await db.select(db.categories).get();
+      expect(categories.where((c) => c.name == '交通費' && c.type == 'expense'), hasLength(1));
+      expect(categories.where((c) => c.name == '副業' && c.type == 'income'), hasLength(1));
+    });
+
+    testWidgets(
+        'CP6.7 (E): the categories screen renders without overflow under the Japanese locale at '
+        'a 1.6x text scale', (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('カテゴリ'), findsOneWidget);
+    });
+
+    testWidgets(
+        'CP6.7 (F): the categories screen renders without overflow under the Japanese locale at '
+        'an extreme 2.0x text scale', (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('カテゴリ'), findsOneWidget);
+    });
+
+    testWidgets(
+        'CP6.7 (G): a long Japanese custom category name is still represented in full by its '
+        'Text widget at a narrow 320px width and a 1.6x text scale', (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const String longName = '狭い画面のレイアウトを検証するための、かなり長いカテゴリの名前';
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).createCategory(
+        profileId: profileId,
+        name: longName,
+        type: 'expense',
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(longName), findsOneWidget);
+    });
   });
 }

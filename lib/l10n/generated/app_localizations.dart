@@ -943,6 +943,247 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add'**
   String get addContributionButton;
+
+  /// couldNotLoadRecurringRules
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load recurring rules: {error}'**
+  String couldNotLoadRecurringRules(String error);
+
+  /// No description provided for @noRecurringRulesYetTapMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No recurring rules yet. Tap + to add one.'**
+  String get noRecurringRulesYetTapMessage;
+
+  /// No description provided for @deleteRecurringRuleConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this recurring rule?'**
+  String get deleteRecurringRuleConfirmTitle;
+
+  /// No description provided for @deleteRecurringRuleConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Its posted transactions and handled occurrence history are kept, but the rule itself will no longer be active.'**
+  String get deleteRecurringRuleConfirmMessage;
+
+  /// No description provided for @deleteRuleTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get deleteRuleTooltip;
+
+  /// No description provided for @skipButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get skipButton;
+
+  /// No description provided for @postButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Post'**
+  String get postButton;
+
+  /// No description provided for @editRecurringRuleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit recurring rule'**
+  String get editRecurringRuleTitle;
+
+  /// No description provided for @newRecurringRuleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New recurring rule'**
+  String get newRecurringRuleTitle;
+
+  /// No description provided for @recurringKindFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get recurringKindFieldLabel;
+
+  /// No description provided for @recurringRuleNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get recurringRuleNameLabel;
+
+  /// No description provided for @enterRecurringRuleNameMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name for this rule.'**
+  String get enterRecurringRuleNameMessage;
+
+  /// No description provided for @sourceAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Source account'**
+  String get sourceAccountLabel;
+
+  /// No description provided for @destinationAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Destination account'**
+  String get destinationAccountLabel;
+
+  /// No description provided for @noSameCurrencyDestinationMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No same-currency destination accounts available.'**
+  String get noSameCurrencyDestinationMessage;
+
+  /// No description provided for @noneOptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get noneOptionLabel;
+
+  /// No description provided for @frequencyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequency'**
+  String get frequencyLabel;
+
+  /// No description provided for @recurrenceFrequencyDaily.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily'**
+  String get recurrenceFrequencyDaily;
+
+  /// No description provided for @recurrenceFrequencyWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly'**
+  String get recurrenceFrequencyWeekly;
+
+  /// No description provided for @recurrenceFrequencyMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get recurrenceFrequencyMonthly;
+
+  /// No description provided for @recurrenceFrequencyYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get recurrenceFrequencyYearly;
+
+  /// No description provided for @intervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Every N (interval)'**
+  String get intervalLabel;
+
+  /// No description provided for @enterWholeNumberMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number of 1 or more.'**
+  String get enterWholeNumberMessage;
+
+  /// No description provided for @remindMeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me'**
+  String get remindMeLabel;
+
+  /// No description provided for @remindMeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local notification when this is due -- never posts automatically.'**
+  String get remindMeSubtitle;
+
+  /// No description provided for @notificationsPermissionDeniedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications permission wasn\'t granted -- reminders stay off.'**
+  String get notificationsPermissionDeniedMessage;
+
+  /// No description provided for @chooseStartDateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a start date'**
+  String get chooseStartDateMessage;
+
+  /// No description provided for @startDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Start date'**
+  String get startDateLabel;
+
+  /// No description provided for @noEndDateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No end date'**
+  String get noEndDateMessage;
+
+  /// No description provided for @endDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'End date'**
+  String get endDateLabel;
+
+  /// No description provided for @clearEndDateTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear end date'**
+  String get clearEndDateTooltip;
+
+  /// No description provided for @chooseAccountMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose an account.'**
+  String get chooseAccountMessage;
+
+  /// transfersCrossCurrencyNotSupportedMessage
+  ///
+  /// In en, this message translates to:
+  /// **'Transfers between different currencies aren\'t supported yet ({fromCurrency} → {toCurrency}).'**
+  String transfersCrossCurrencyNotSupportedMessage(
+      String fromCurrency, String toCurrency);
+
+  /// No description provided for @categoriesScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Categories'**
+  String get categoriesScreenTitle;
+
+  /// No description provided for @noCategoriesYetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No categories yet.'**
+  String get noCategoriesYetMessage;
+
+  /// No description provided for @systemCategoryIndicatorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get systemCategoryIndicatorLabel;
+
+  /// No description provided for @addExpenseCategoryDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add expense category'**
+  String get addExpenseCategoryDialogTitle;
+
+  /// No description provided for @addIncomeCategoryDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add income category'**
+  String get addIncomeCategoryDialogTitle;
+
+  /// No description provided for @categoryNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get categoryNameLabel;
+
+  /// No description provided for @addCategoryButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get addCategoryButton;
 }
 
 class _AppLocalizationsDelegate

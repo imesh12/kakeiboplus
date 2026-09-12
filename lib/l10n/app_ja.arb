@@ -283,5 +283,64 @@
   },
   "noContributionsYetMessage": "積立はまだありません。",
   "addContributionDialogTitle": "積立を追加",
-  "addContributionButton": "追加"
+  "addContributionButton": "追加",
+  "couldNotLoadRecurringRules": "定期ルールを読み込めませんでした: {error}",
+  "@couldNotLoadRecurringRules": {
+    "description": "couldNotLoadRecurringRules",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noRecurringRulesYetTapMessage": "定期ルールがまだありません。+ をタップして追加してください。",
+  "deleteRecurringRuleConfirmTitle": "この定期ルールを削除しますか？",
+  "deleteRecurringRuleConfirmMessage": "記録済みの取引と処理済みの発生履歴は保持されますが、ルール自体は非アクティブになります。",
+  "deleteRuleTooltip": "削除",
+  "skipButton": "スキップ",
+  "postButton": "記録",
+  "editRecurringRuleTitle": "定期ルールを編集",
+  "newRecurringRuleTitle": "新しい定期ルール",
+  "recurringKindFieldLabel": "種類",
+  "recurringRuleNameLabel": "名前",
+  "enterRecurringRuleNameMessage": "このルールの名前を入力してください。",
+  "sourceAccountLabel": "元の口座",
+  "destinationAccountLabel": "送金先の口座",
+  "noSameCurrencyDestinationMessage": "同じ通貨の送金先口座がありません。",
+  "noneOptionLabel": "なし",
+  "frequencyLabel": "頻度",
+  "recurrenceFrequencyDaily": "毎日",
+  "recurrenceFrequencyWeekly": "毎週",
+  "recurrenceFrequencyMonthly": "毎月",
+  "recurrenceFrequencyYearly": "毎年",
+  "intervalLabel": "間隔（N回ごと）",
+  "enterWholeNumberMessage": "1以上の整数を入力してください。",
+  "remindMeLabel": "リマインドする",
+  "remindMeSubtitle": "期日になるとローカル通知が届きます。自動的に記録されることはありません。",
+  "notificationsPermissionDeniedMessage": "通知の許可が得られなかったため、リマインダーはオフのままです。",
+  "chooseStartDateMessage": "開始日を選択",
+  "startDateLabel": "開始日",
+  "noEndDateMessage": "終了日なし",
+  "endDateLabel": "終了日",
+  "clearEndDateTooltip": "終了日をクリア",
+  "chooseAccountMessage": "口座を選択してください。",
+  "transfersCrossCurrencyNotSupportedMessage": "異なる通貨間の振替はまだサポートされていません（{fromCurrency} → {toCurrency}）。",
+  "@transfersCrossCurrencyNotSupportedMessage": {
+    "description": "transfersCrossCurrencyNotSupportedMessage",
+    "placeholders": {
+      "fromCurrency": {
+        "type": "String"
+      },
+      "toCurrency": {
+        "type": "String"
+      }
+    }
+  },
+  "categoriesScreenTitle": "カテゴリ",
+  "noCategoriesYetMessage": "カテゴリがまだありません。",
+  "systemCategoryIndicatorLabel": "システム",
+  "addExpenseCategoryDialogTitle": "支出カテゴリを追加",
+  "addIncomeCategoryDialogTitle": "収入カテゴリを追加",
+  "categoryNameLabel": "名前",
+  "addCategoryButton": "追加"
 }

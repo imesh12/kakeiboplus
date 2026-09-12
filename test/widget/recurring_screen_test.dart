@@ -11,6 +11,7 @@ import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequenc
 import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_schedule.dart';
 import 'package:ai_financial_coach/features/recurring/presentation/recurring_screen.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -70,10 +71,18 @@ void main() {
     return (db, profileId, created);
   }
 
-  Widget appWithRecurring(ProviderContainer container) {
+  Widget appWithRecurring(
+    ProviderContainer container, {
+    Locale locale = const Locale('en'),
+  }) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: RecurringScreen()),
+      child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const RecurringScreen(),
+      ),
     );
   }
 
@@ -205,7 +214,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('recurringKindDropdown')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('transfer').last);
+      await tester.tap(find.text('Transfer').last);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
@@ -250,7 +259,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('recurringKindDropdown')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('transfer').last);
+      await tester.tap(find.text('Transfer').last);
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byKey(const Key('recurringNameField')), 'Move to savings');
@@ -299,7 +308,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('recurringKindDropdown')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('transfer').last);
+      await tester.tap(find.text('Transfer').last);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
@@ -369,7 +378,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('recurringKindDropdown')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('transfer').last);
+      await tester.tap(find.text('Transfer').last);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
@@ -817,4 +826,393 @@ void main() {
       expect(find.textContaining(DateFormat.yMMMd().format(anchor)), findsOneWidget);
     },
   );
+
+  group('CP6.7 Japanese localization', () {
+    testWidgets(
+      'CP6.7 (A): the recurring screen renders in Japanese -- app bar, empty state, and the '
+      "new-rule dialog's labels",
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, _, _) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('定期'), findsOneWidget); // AppBar title
+        expect(find.textContaining('定期ルールがまだありません'), findsOneWidget); // empty state
+
+        await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('新しい定期ルール'), findsOneWidget); // dialog title
+        expect(find.text('名前'), findsOneWidget); // name field label
+        expect(find.text('口座'), findsOneWidget); // account label (non-transfer)
+        expect(find.text('金額'), findsOneWidget); // amount label
+        expect(find.text('頻度'), findsOneWidget); // frequency label
+        expect(find.text('リマインドする'), findsOneWidget); // remind-me switch title
+        expect(find.text('キャンセル'), findsOneWidget);
+        expect(find.text('保存'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (B): a Japanese-language user-entered rule name renders exactly as typed under '
+      'the Japanese locale',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('recurringNameField')), '家賃');
+        await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('recurringAmountField')), '80000');
+        await tester.tap(find.byKey(const Key('saveRecurringRule')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('家賃'), findsOneWidget); // untouched user text, never translated
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (C): the rule-kind dropdown shows localized Japanese labels while the persisted '
+      '`kind` value stays the untranslated English enum name',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('recurringKindDropdown')));
+        await tester.pumpAndSettle();
+        expect(find.text('支出'), findsWidgets); // Expense -- also the current selection
+        expect(find.text('収入'), findsOneWidget); // Income
+        expect(find.text('振替'), findsOneWidget); // Transfer
+        await tester.tap(find.text('収入').last);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byKey(const Key('recurringNameField')), '給与');
+        await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('recurringAmountField')), '300000');
+        await tester.tap(find.byKey(const Key('saveRecurringRule')));
+        await tester.pumpAndSettle();
+
+        final RecurringRuleRow saved = await db.select(db.recurringRules).getSingle();
+        expect(saved.kind, 'income'); // persisted value is the untranslated enum name
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (D): the frequency dropdown shows localized Japanese labels while the persisted '
+      '`frequency` value stays the untranslated English enum name',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('recurringFrequencyDropdown')));
+        await tester.pumpAndSettle();
+        expect(find.text('毎日'), findsOneWidget); // Daily
+        expect(find.text('毎週'), findsOneWidget); // Weekly
+        expect(find.text('毎年'), findsOneWidget); // Yearly
+        await tester.tap(find.text('毎週').last);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byKey(const Key('recurringNameField')), 'サブスク');
+        await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('recurringAmountField')), '1200');
+        await tester.tap(find.byKey(const Key('saveRecurringRule')));
+        await tester.pumpAndSettle();
+
+        final RecurringRuleRow saved = await db.select(db.recurringRules).getSingle();
+        expect(saved.frequency, 'weekly'); // persisted value is the untranslated enum name
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (E): a 2-decimal MMK recurring amount renders its registry-defined precision '
+      '(never 0) under the Japanese locale',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb(
+          accounts: const <_SeedAccount>[_SeedAccount(name: 'MMK Wallet', currencyCode: 'MMK')],
+        );
+        final DateTime todayUtc = DateTime.now().toUtc();
+        final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+        await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: 'Utility',
+          amount: Money.fromMinorUnits(500000, 'MMK'), // K5,000.00
+          accountId: accounts.first.id,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: today,
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('K5,000.00'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (F): a large 0-decimal VND recurring amount renders intact under the Japanese '
+      'locale',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb(
+          accounts: const <_SeedAccount>[_SeedAccount(name: 'VND Wallet', currencyCode: 'VND')],
+        );
+        final DateTime todayUtc = DateTime.now().toUtc();
+        final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+        await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: 'Rent',
+          amount: Money.fromMinorUnits(25000000, 'VND'), // ₫25,000,000 -- 0 decimals, never divided
+          accountId: accounts.first.id,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: today,
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('₫25,000,000'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (G): a 3-decimal KWD recurring amount renders its registry-defined precision '
+      'under the Japanese locale',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb(
+          accounts: const <_SeedAccount>[_SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD')],
+        );
+        final DateTime todayUtc = DateTime.now().toUtc();
+        final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+        await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: 'Rent',
+          amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+          accountId: accounts.first.id,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: today,
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('د.ك12,345.678'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (H): the recurring list renders without overflow under the Japanese locale at a '
+      '1.6x text scale',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(400, 2000);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+        final DateTime todayUtc = DateTime.now().toUtc();
+        await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: '家賃',
+          amount: Money.fromMinorUnits(80000, 'JPY'),
+          accountId: accounts.first.id,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('家賃'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (I): the recurring list renders without overflow under the Japanese locale at an '
+      'extreme 2.0x text scale',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(400, 2000);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+        final DateTime todayUtc = DateTime.now().toUtc();
+        await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: '家賃',
+          amount: Money.fromMinorUnits(80000, 'JPY'),
+          accountId: accounts.first.id,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('家賃'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (J): a long Japanese rule name and a 3-decimal KWD amount survive intact at a '
+      'narrow 320px width and a 1.6x text scale',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const String longName = '狭い画面のレイアウトを検証するための、かなり長い定期ルールの名前';
+        final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb(
+          accounts: const <_SeedAccount>[_SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD')],
+        );
+        final DateTime todayUtc = DateTime.now().toUtc();
+        final DateTime anchor = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+        await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: longName,
+          amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+          accountId: accounts.first.id,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: anchor,
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text(longName), findsOneWidget);
+        expect(find.textContaining('د.ك12,345.678'), findsOneWidget);
+        expect(find.textContaining(DateFormat.yMMMd().format(anchor)), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'CP6.7 (K): creating and then deleting a rule works end-to-end through the fully '
+      'localized Japanese dialogs',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        // Create via the localized "new rule" dialog.
+        await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('recurringNameField')), '定期購読');
+        await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('recurringAmountField')), '1500');
+        await tester.tap(find.text('保存')); // Save
+        await tester.pumpAndSettle();
+
+        expect(find.text('新しい定期ルール'), findsNothing); // dialog closed
+        expect(find.text('定期購読'), findsOneWidget);
+
+        final RecurringRuleRow created = await db.select(db.recurringRules).getSingle();
+
+        // Delete via the localized confirmation dialog.
+        await tester.tap(find.byKey(Key('deleteRule_${created.id}')));
+        await tester.pumpAndSettle();
+        expect(find.text('この定期ルールを削除しますか？'), findsOneWidget);
+        await tester.tap(find.widgetWithText(FilledButton, '削除')); // Delete
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('定期ルールがまだありません'), findsOneWidget);
+        final RecurringRuleRow row = await (db.select(db.recurringRules)
+              ..where((tbl) => tbl.id.equals(created.id)))
+            .getSingle();
+        expect(row.deletedAt, isNotNull); // soft-deleted, never hard-deleted
+      },
+    );
+  });
 }

@@ -485,4 +485,134 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addContributionButton => 'Add';
+
+  @override
+  String couldNotLoadRecurringRules(String error) {
+    return 'Could not load recurring rules: $error';
+  }
+
+  @override
+  String get noRecurringRulesYetTapMessage =>
+      'No recurring rules yet. Tap + to add one.';
+
+  @override
+  String get deleteRecurringRuleConfirmTitle => 'Delete this recurring rule?';
+
+  @override
+  String get deleteRecurringRuleConfirmMessage =>
+      'Its posted transactions and handled occurrence history are kept, but the rule itself will no longer be active.';
+
+  @override
+  String get deleteRuleTooltip => 'Delete';
+
+  @override
+  String get skipButton => 'Skip';
+
+  @override
+  String get postButton => 'Post';
+
+  @override
+  String get editRecurringRuleTitle => 'Edit recurring rule';
+
+  @override
+  String get newRecurringRuleTitle => 'New recurring rule';
+
+  @override
+  String get recurringKindFieldLabel => 'Type';
+
+  @override
+  String get recurringRuleNameLabel => 'Name';
+
+  @override
+  String get enterRecurringRuleNameMessage => 'Enter a name for this rule.';
+
+  @override
+  String get sourceAccountLabel => 'Source account';
+
+  @override
+  String get destinationAccountLabel => 'Destination account';
+
+  @override
+  String get noSameCurrencyDestinationMessage =>
+      'No same-currency destination accounts available.';
+
+  @override
+  String get noneOptionLabel => 'None';
+
+  @override
+  String get frequencyLabel => 'Frequency';
+
+  @override
+  String get recurrenceFrequencyDaily => 'Daily';
+
+  @override
+  String get recurrenceFrequencyWeekly => 'Weekly';
+
+  @override
+  String get recurrenceFrequencyMonthly => 'Monthly';
+
+  @override
+  String get recurrenceFrequencyYearly => 'Yearly';
+
+  @override
+  String get intervalLabel => 'Every N (interval)';
+
+  @override
+  String get enterWholeNumberMessage => 'Enter a whole number of 1 or more.';
+
+  @override
+  String get remindMeLabel => 'Remind me';
+
+  @override
+  String get remindMeSubtitle =>
+      'Local notification when this is due -- never posts automatically.';
+
+  @override
+  String get notificationsPermissionDeniedMessage =>
+      'Notifications permission wasn\'t granted -- reminders stay off.';
+
+  @override
+  String get chooseStartDateMessage => 'Choose a start date';
+
+  @override
+  String get startDateLabel => 'Start date';
+
+  @override
+  String get noEndDateMessage => 'No end date';
+
+  @override
+  String get endDateLabel => 'End date';
+
+  @override
+  String get clearEndDateTooltip => 'Clear end date';
+
+  @override
+  String get chooseAccountMessage => 'Choose an account.';
+
+  @override
+  String transfersCrossCurrencyNotSupportedMessage(
+      String fromCurrency, String toCurrency) {
+    return 'Transfers between different currencies aren\'t supported yet ($fromCurrency → $toCurrency).';
+  }
+
+  @override
+  String get categoriesScreenTitle => 'Categories';
+
+  @override
+  String get noCategoriesYetMessage => 'No categories yet.';
+
+  @override
+  String get systemCategoryIndicatorLabel => 'System';
+
+  @override
+  String get addExpenseCategoryDialogTitle => 'Add expense category';
+
+  @override
+  String get addIncomeCategoryDialogTitle => 'Add income category';
+
+  @override
+  String get categoryNameLabel => 'Name';
+
+  @override
+  String get addCategoryButton => 'Add';
 }
