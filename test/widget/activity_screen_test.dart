@@ -9,6 +9,7 @@ import 'package:ai_financial_coach/core/money/money_formatter.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/activity_screen.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/transaction_detail_screen.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,7 +125,18 @@ void main() {
   // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
   // `MaterialApp.router`'s own `builder:` -- see
   // `test/support/rtl_harness.dart`.
-  Widget appWithRouter(ProviderContainer container, {bool rtl = false}) {
+  // CP6.4: `ActivityScreen` now reads `AppLocalizations.of(context)`, so
+  // this harness needs the same localization wiring already established
+  // in `add_transaction_screen_test.dart`'s `appWithPushedScreen()` and
+  // `app_shell_test.dart`'s `buildApp()` -- `{Locale locale = const
+  // Locale('en')}` keeps every pre-existing English test passing
+  // unchanged, while the new Japanese-proof tests pass `locale: const
+  // Locale('ja')`.
+  Widget appWithRouter(
+    ProviderContainer container, {
+    bool rtl = false,
+    Locale locale = const Locale('en'),
+  }) {
     final GoRouter router = GoRouter(
       initialLocation: AppRoutes.activity,
       routes: <RouteBase>[
@@ -138,7 +150,13 @@ void main() {
     );
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router, builder: rtl ? rtlAppBuilder : null),
+      child: MaterialApp.router(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+        builder: rtl ? rtlAppBuilder : null,
+      ),
     );
   }
 
@@ -147,7 +165,12 @@ void main() {
   /// [ActivityScreen] and back without needing anything from the real
   /// route table -- returns the [GoRouter] itself so the test can drive
   /// navigation directly (`router.go(...)`) rather than simulating taps.
-  (Widget, GoRouter) appWithNavigableRouter(ProviderContainer container) {
+  // CP6.4: same localization wiring as `appWithRouter` above -- see its
+  // comment for why.
+  (Widget, GoRouter) appWithNavigableRouter(
+    ProviderContainer container, {
+    Locale locale = const Locale('en'),
+  }) {
     final GoRouter router = GoRouter(
       initialLocation: AppRoutes.activity,
       routes: <RouteBase>[
@@ -159,7 +182,15 @@ void main() {
       ],
     );
     return (
-      UncontrolledProviderScope(container: container, child: MaterialApp.router(routerConfig: router)),
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
+      ),
       router,
     );
   }
@@ -1213,6 +1244,352 @@ void main() {
       reason: "expected the amount to hug the stacked row's reading-end edge "
           "(the row's left edge under RTL), matching how the horizontal layout's "
           'trailing amount already mirrors',
+    );
+  });
+
+  // ============================================================
+  // CP6.4 (Localization Phase 1, Activity): exercises the REAL
+  // `ActivityScreen` under a real Japanese locale -- same pattern
+  // established in CP6.1-6.3. Every existing test above this point
+  // keeps its default `locale: const Locale('en')`, so all pre-existing
+  // English assertions -- including the CP5.6 RTL test just above --
+  // are unaffected by this section.
+  // ============================================================
+
+  group('CP6.4 Japanese localization', () {
+    testWidgets(
+      'A: standard Japanese Activity -- principal labels render in Japanese, no render '
+      'exceptions',
+      (tester) async {
+        final (AppDatabase db, String _, String _, String _) = await seededDbWithSearchFixtures();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('アクティビティ'), findsOneWidget); // AppBar title (reuses navActivity)
+        expect(find.widgetWithText(FilterChip, '支出'), findsOneWidget);
+        expect(find.widgetWithText(FilterChip, '収入'), findsOneWidget);
+        expect(find.widgetWithText(FilterChip, '振替'), findsOneWidget);
+        // User/database content (category and account names) renders
+        // exactly as stored, in English, under the Japanese UI.
+        expect(find.text('Dining Out'), findsOneWidget);
+        expect(find.text('Salary'), findsOneWidget);
+        expect(find.text('Wallet → Savings'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'B: the Japanese-labeled filter chips still select the correct transactions, and '
+      'clearing filters via the localized button restores the full list -- the underlying '
+      'TransactionType enum values never change',
+      (tester) async {
+        final (AppDatabase db, String _, String _, String _) = await seededDbWithSearchFixtures();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        // Tap the Japanese "支出" (Expense) chip -- narrows to just the
+        // expense row, exactly like the existing English-locale
+        // "Expense-only filter" test, proving the filter predicate is
+        // still keyed by `TransactionType.expense`, not by the chip's
+        // visible text.
+        await tester.tap(find.widgetWithText(FilterChip, '支出'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Dining Out'), findsOneWidget);
+        expect(find.text('Salary'), findsNothing);
+        expect(find.text('Wallet → Savings'), findsNothing);
+
+        await tester.tap(find.widgetWithText(TextButton, 'フィルターをクリア'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Dining Out'), findsOneWidget);
+        expect(find.text('Salary'), findsOneWidget);
+        expect(find.text('Wallet → Savings'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'C: Japanese date-group headers ("today"/"yesterday") render correctly and preserve '
+      'the same grouping/order behavior as the English-locale equivalent',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        final DateTime now = DateTime.now();
+
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(500, 'JPY'),
+          categoryId: 'sys-dining',
+          note: 'today-a',
+          occurredAtUtc: now.toUtc(),
+        );
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(600, 'JPY'),
+          categoryId: 'sys-dining',
+          note: 'today-b',
+          occurredAtUtc: now.toUtc(),
+        );
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(700, 'JPY'),
+          categoryId: 'sys-dining',
+          note: 'yesterday-a',
+          occurredAtUtc: now.subtract(const Duration(days: 1)).toUtc(),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Same one-section-per-day grouping as the English-locale test --
+        // the two "today" transactions still share a single section
+        // (grouping is keyed by `dateKey`, never by the displayed label).
+        expect(find.text('今日'), findsOneWidget);
+        expect(find.text('昨日'), findsOneWidget);
+        expect(find.textContaining('today-a'), findsOneWidget);
+        expect(find.textContaining('today-b'), findsOneWidget);
+        expect(find.textContaining('yesterday-a'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'D: Japanese Activity renders a large MMK (2-decimal) expense amount in full, with no '
+      'ellipsis/clipping/dropped digits and no render exceptions',
+      (tester) async {
+        final (AppDatabase db, String profileId, String _) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String mmkAccountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Myanmar Wallet',
+          type: 'cash',
+          currencyCode: 'MMK',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final Money amount = Money.fromMinorUnits(987654321, 'MMK'); // 9,876,543.21 MMK
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: mmkAccountId,
+          amount: amount,
+          categoryId: 'sys-dining',
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Every digit (and MMK's registry-defined 2 decimal places --
+        // never 0) still renders in full alongside the Japanese UI.
+        expect(find.text('-${formatter.format(amount)}'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'E: Japanese Activity keeps a large KWD amount fully intact alongside long account '
+      'names, ellipsizing only the descriptive title -- never the amount',
+      (tester) async {
+        final (AppDatabase db, String profileId, String _) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String sourceId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'International Kuwaiti Dinar Primary Household Wallet',
+          type: 'cash',
+          currencyCode: 'KWD',
+        );
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Overseas Long Term Kuwaiti Dinar Savings Reserve Account',
+          type: 'cash',
+          currencyCode: 'KWD',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final Money amount = Money.fromMinorUnits(987654321, 'KWD'); // 987,654.321 KWD
+        await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: sourceId,
+          destinationAccountId: destinationId,
+          amount: amount,
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final String expectedAmount = formatter.format(amount);
+        expect(find.text(expectedAmount), findsOneWidget);
+
+        const String fullTransferTitle =
+            'International Kuwaiti Dinar Primary Household Wallet → '
+            'Overseas Long Term Kuwaiti Dinar Savings Reserve Account';
+        final Finder titleFinder = find.text(fullTransferTitle);
+        expect(titleFinder, findsOneWidget);
+        final Text titleText = tester.widget<Text>(titleFinder);
+        expect(titleText.maxLines, 1);
+        expect(titleText.overflow, TextOverflow.ellipsis);
+      },
+    );
+
+    testWidgets(
+      'F: Japanese Activity at 1.6x text scale remains renderable, and the localized filter '
+      'chips remain usable, with no overflow/render exceptions',
+      (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final (AppDatabase db, String _, String _, String _) = await seededDbWithSearchFixtures();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.widgetWithText(FilterChip, '支出'), findsOneWidget);
+        expect(find.widgetWithText(FilterChip, '収入'), findsOneWidget);
+        expect(find.widgetWithText(FilterChip, '振替'), findsOneWidget);
+
+        await tester.tap(find.widgetWithText(FilterChip, '収入'));
+        await tester.pumpAndSettle();
+        expect(find.text('Salary'), findsOneWidget);
+        expect(find.text('Dining Out'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'G: Japanese Activity at 2.0x text scale keeps key content usable/readable, with no '
+      'overflow/render exceptions',
+      (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          categoryId: 'sys-dining',
+          note: 'Lunch with team',
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('今日'), findsOneWidget);
+        expect(find.text('Dining Out'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'H: Japanese Activity at 320px width with enlarged text keeps a large VND amount fully '
+      'intact alongside a long note, using the stacked row arrangement',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 700);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final (AppDatabase db, String profileId, String _) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String vndAccountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Vietnam Wallet',
+          type: 'cash',
+          currencyCode: 'VND',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final Money amount = Money.fromMinorUnits(987654321, 'VND'); // ₫987,654,321
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: vndAccountId,
+          amount: amount,
+          categoryId: 'sys-dining',
+          note: 'A rather long note to stress narrow-width description content',
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final Finder rowLayout = find.byKey(const Key('transactionRowStacked'));
+        expect(rowLayout, findsOneWidget);
+        expect(
+          find.descendant(of: rowLayout, matching: find.textContaining('987,654,321')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: rowLayout, matching: find.textContaining('Dining Out')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'I: navigation regression -- tapping a transaction row still navigates to transaction '
+      'detail under the Japanese locale',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          categoryId: 'sys-dining',
+          note: 'Lunch with team',
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Dining Out'));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('editTransaction')), findsOneWidget);
+      },
     );
   });
 }

@@ -155,5 +155,45 @@
   "noRecurringMessage": "No recurring bills or income set up yet.",
   "setUpRecurringButton": "Set up recurring",
   "recurringStatusDueToday": "Due today",
-  "recurringStatusUpcoming": "Upcoming"
+  "recurringStatusUpcoming": "Upcoming",
+  "couldNotLoadTransactions": "Could not load transactions: {error}",
+  "@couldNotLoadTransactions": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noTransactionsYetMessage": "No transactions yet. Tap Add to record one.",
+  "searchTransactionsLabel": "Search transactions",
+  "searchTransactionsHint": "Search by category, account, note, or amount",
+  "clearSearchTooltip": "Clear search",
+  "clearFilters": "Clear filters",
+  "noMatchingTransactions": "No matching transactions",
+  "dateGroupToday": "Today",
+  "dateGroupYesterday": "Yesterday",
+  "dateGroupSemanticLabel": "{group} transactions",
+  "@dateGroupSemanticLabel": {
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "spokenPlusAmount": "plus {amount}",
+  "@spokenPlusAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "spokenMinusAmount": "minus {amount}",
+  "@spokenMinusAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  }
 }

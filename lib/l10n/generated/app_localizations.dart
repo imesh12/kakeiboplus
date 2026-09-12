@@ -553,6 +553,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Upcoming'**
   String get recurringStatusUpcoming;
+
+  /// No description provided for @couldNotLoadTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load transactions: {error}'**
+  String couldNotLoadTransactions(String error);
+
+  /// No description provided for @noTransactionsYetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No transactions yet. Tap Add to record one.'**
+  String get noTransactionsYetMessage;
+
+  /// No description provided for @searchTransactionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search transactions'**
+  String get searchTransactionsLabel;
+
+  /// No description provided for @searchTransactionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by category, account, note, or amount'**
+  String get searchTransactionsHint;
+
+  /// No description provided for @clearSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get clearSearchTooltip;
+
+  /// No description provided for @clearFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filters'**
+  String get clearFilters;
+
+  /// No description provided for @noMatchingTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching transactions'**
+  String get noMatchingTransactions;
+
+  /// No description provided for @dateGroupToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get dateGroupToday;
+
+  /// No description provided for @dateGroupYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get dateGroupYesterday;
+
+  /// No description provided for @dateGroupSemanticLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{group} transactions'**
+  String dateGroupSemanticLabel(String group);
+
+  /// No description provided for @spokenPlusAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'plus {amount}'**
+  String spokenPlusAmount(String amount);
+
+  /// No description provided for @spokenMinusAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'minus {amount}'**
+  String spokenMinusAmount(String amount);
 }
 
 class _AppLocalizationsDelegate

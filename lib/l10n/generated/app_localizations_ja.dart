@@ -257,4 +257,48 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recurringStatusUpcoming => '今後の予定';
+
+  @override
+  String couldNotLoadTransactions(String error) {
+    return '取引を読み込めませんでした: $error';
+  }
+
+  @override
+  String get noTransactionsYetMessage => 'まだ取引がありません。「追加」をタップして記録しましょう。';
+
+  @override
+  String get searchTransactionsLabel => '取引を検索';
+
+  @override
+  String get searchTransactionsHint => 'カテゴリ・口座・メモ・金額で検索';
+
+  @override
+  String get clearSearchTooltip => '検索をクリア';
+
+  @override
+  String get clearFilters => 'フィルターをクリア';
+
+  @override
+  String get noMatchingTransactions => '一致する取引がありません';
+
+  @override
+  String get dateGroupToday => '今日';
+
+  @override
+  String get dateGroupYesterday => '昨日';
+
+  @override
+  String dateGroupSemanticLabel(String group) {
+    return '$groupの取引';
+  }
+
+  @override
+  String spokenPlusAmount(String amount) {
+    return 'プラス$amount';
+  }
+
+  @override
+  String spokenMinusAmount(String amount) {
+    return 'マイナス$amount';
+  }
 }

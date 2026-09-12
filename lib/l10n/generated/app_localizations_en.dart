@@ -264,4 +264,50 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recurringStatusUpcoming => 'Upcoming';
+
+  @override
+  String couldNotLoadTransactions(String error) {
+    return 'Could not load transactions: $error';
+  }
+
+  @override
+  String get noTransactionsYetMessage =>
+      'No transactions yet. Tap Add to record one.';
+
+  @override
+  String get searchTransactionsLabel => 'Search transactions';
+
+  @override
+  String get searchTransactionsHint =>
+      'Search by category, account, note, or amount';
+
+  @override
+  String get clearSearchTooltip => 'Clear search';
+
+  @override
+  String get clearFilters => 'Clear filters';
+
+  @override
+  String get noMatchingTransactions => 'No matching transactions';
+
+  @override
+  String get dateGroupToday => 'Today';
+
+  @override
+  String get dateGroupYesterday => 'Yesterday';
+
+  @override
+  String dateGroupSemanticLabel(String group) {
+    return '$group transactions';
+  }
+
+  @override
+  String spokenPlusAmount(String amount) {
+    return 'plus $amount';
+  }
+
+  @override
+  String spokenMinusAmount(String amount) {
+    return 'minus $amount';
+  }
 }

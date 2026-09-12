@@ -155,5 +155,45 @@
   "noRecurringMessage": "定期的な支払いや収入がまだ設定されていません。",
   "setUpRecurringButton": "定期を設定",
   "recurringStatusDueToday": "今日が期限",
-  "recurringStatusUpcoming": "今後の予定"
+  "recurringStatusUpcoming": "今後の予定",
+  "couldNotLoadTransactions": "取引を読み込めませんでした: {error}",
+  "@couldNotLoadTransactions": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noTransactionsYetMessage": "まだ取引がありません。「追加」をタップして記録しましょう。",
+  "searchTransactionsLabel": "取引を検索",
+  "searchTransactionsHint": "カテゴリ・口座・メモ・金額で検索",
+  "clearSearchTooltip": "検索をクリア",
+  "clearFilters": "フィルターをクリア",
+  "noMatchingTransactions": "一致する取引がありません",
+  "dateGroupToday": "今日",
+  "dateGroupYesterday": "昨日",
+  "dateGroupSemanticLabel": "{group}の取引",
+  "@dateGroupSemanticLabel": {
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "spokenPlusAmount": "プラス{amount}",
+  "@spokenPlusAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "spokenMinusAmount": "マイナス{amount}",
+  "@spokenMinusAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  }
 }

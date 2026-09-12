@@ -7,6 +7,7 @@ import '../../../core/finance/transaction_type.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../domain/activity_date_group.dart';
@@ -86,6 +87,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final AsyncValue<List<CategoryRow>> incomeCategoriesAsync =
         ref.watch(categoriesForTypeProvider('income'));
     final ActivityFilterState filter = ref.watch(activityFilterProvider);
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     final Map<String, String> accountNames = <String, String>{
       for (final AccountRow a in accountsAsync.valueOrNull ?? const <AccountRow>[]) a.id: a.name,
@@ -100,10 +102,11 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Activity')),
+      appBar: AppBar(title: Text(l10n.navActivity)),
       body: transactionsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) => Center(child: Text('Could not load transactions: $e')),
+        error: (Object e, StackTrace st) =>
+            Center(child: Text(l10n.couldNotLoadTransactions(e.toString()))),
         data: (List<Transaction> transactions) {
           if (transactions.isEmpty) {
             // Activity's true empty state (zero transactions ever) --
@@ -111,7 +114,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             // all: search is meaningless when there's nothing to search,
             // and this keeps that state byte-for-byte what it was before
             // Checkpoint 3.
-            return const Center(child: Text('No transactions yet. Tap Add to record one.'));
+            return Center(child: Text(l10n.noTransactionsYetMessage));
           }
 
           // Resolve each transaction into Checkpoint 1's
@@ -192,6 +195,7 @@ class _SearchAndFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Column(
@@ -201,13 +205,13 @@ class _SearchAndFilterBar extends StatelessWidget {
             controller: controller,
             onChanged: onQueryChanged,
             decoration: InputDecoration(
-              labelText: 'Search transactions',
-              hintText: 'Search by category, account, note, or amount',
+              labelText: l10n.searchTransactionsLabel,
+              hintText: l10n.searchTransactionsHint,
               prefixIcon: const Icon(Icons.search),
               suffixIcon: filter.query.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear),
-                      tooltip: 'Clear search',
+                      tooltip: l10n.clearSearchTooltip,
                       onPressed: onClearSearch,
                     )
                   : null,
@@ -221,19 +225,19 @@ class _SearchAndFilterBar extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
               _TypeFilterChip(
-                label: 'Expense',
+                label: l10n.transactionTypeExpense,
                 type: TransactionType.expense,
                 selected: filter.types.contains(TransactionType.expense),
                 onSelected: onToggleType,
               ),
               _TypeFilterChip(
-                label: 'Income',
+                label: l10n.transactionTypeIncome,
                 type: TransactionType.income,
                 selected: filter.types.contains(TransactionType.income),
                 onSelected: onToggleType,
               ),
               _TypeFilterChip(
-                label: 'Transfer',
+                label: l10n.transactionTypeTransfer,
                 type: TransactionType.transfer,
                 selected: filter.types.contains(TransactionType.transfer),
                 onSelected: onToggleType,
@@ -241,7 +245,7 @@ class _SearchAndFilterBar extends StatelessWidget {
               if (filter.isActive)
                 TextButton(
                   onPressed: onClearFilters,
-                  child: const Text('Clear filters'),
+                  child: Text(l10n.clearFilters),
                 ),
             ],
           ),
@@ -292,17 +296,18 @@ class _NoMatchingTransactions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Icon(Icons.search_off, size: 40, color: colors.onSurfaceVariant),
           const SizedBox(height: 12),
-          const Text('No matching transactions'),
+          Text(l10n.noMatchingTransactions),
           const SizedBox(height: 8),
           TextButton(
             onPressed: onClearFilters,
-            child: const Text('Clear filters'),
+            child: Text(l10n.clearFilters),
           ),
         ],
       ),
@@ -378,14 +383,32 @@ class _DateSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    // CP6.4: only the two exact-regardless-of-locale labels (`kind` ==
+    // today/yesterday) are localized here. `group.label` for
+    // `thisWeek`/`thisYear`/`older` groups comes from `DateFormat.EEEE()`/
+    // `DateFormat.MMMd()`/`DateFormat.yMMMd()` in `activity_date_group.dart`
+    // -- those already follow whatever locale `intl`'s default is
+    // configured with, independent of this screen's own
+    // `AppLocalizations`, and wiring them to the app's chosen locale is a
+    // broader date-formatting policy decision deferred to a future
+    // checkpoint (see CP6.4 report section J) -- not redesigned here.
+    // `dateKey`, not `label`, is what actually drives grouping (see
+    // `ActivityDateGroup`'s own doc comment), so this presentation-only
+    // substitution cannot affect which transactions share a section.
+    final String displayLabel = switch (group.kind) {
+      ActivityDateGroupKind.today => l10n.dateGroupToday,
+      ActivityDateGroupKind.yesterday => l10n.dateGroupYesterday,
+      _ => group.label,
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Semantics(
         header: true,
         excludeSemantics: true,
-        label: '${group.label} transactions',
+        label: l10n.dateGroupSemanticLabel(displayLabel),
         child: Text(
-          group.label.toUpperCase(),
+          displayLabel.toUpperCase(),
           style: text.labelSmall?.copyWith(
             color: colors.onSurfaceVariant,
             fontWeight: FontWeight.w600,
@@ -473,6 +496,7 @@ class _TransactionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final Money amount = Money.fromMinorUnits(tx.amountMinorUnits, tx.currencyCode);
     final bool isTransfer = tx.type == 'transfer';
 
@@ -492,9 +516,9 @@ class _TransactionRow extends StatelessWidget {
       _ => colors.error,
     };
     final String typeWord = switch (tx.type) {
-      'income' => 'Income',
-      'transfer' => 'Transfer',
-      _ => 'Expense',
+      'income' => l10n.transactionTypeIncome,
+      'transfer' => l10n.transactionTypeTransfer,
+      _ => l10n.transactionTypeExpense,
     };
 
     final String title = switch (tx.type) {
@@ -512,9 +536,9 @@ class _TransactionRow extends StatelessWidget {
     // Spoken sign, independent of the visual '+'/'-'/none prefix and of
     // amountColor -- part of "don't rely on color alone".
     final String spokenAmount = switch (tx.type) {
-      'income' => 'plus $formattedAmount',
+      'income' => l10n.spokenPlusAmount(formattedAmount),
       'transfer' => formattedAmount,
-      _ => 'minus $formattedAmount',
+      _ => l10n.spokenMinusAmount(formattedAmount),
     };
     final String amountString = '$amountPrefix$formattedAmount';
 
