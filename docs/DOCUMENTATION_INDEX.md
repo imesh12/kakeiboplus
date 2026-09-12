@@ -45,6 +45,7 @@ This repository contains the final project blueprint for AI Financial Coach.
 |---|---|
 | 18_BLUEPRINT_V2_CHANGELOG.md | Changes from original blueprint to international-first V2 |
 | 19_PRIVATE_BETA_BUILD_PLAN.md | Ordered friends-and-family implementation/test plan |
+| 20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md | Expanded accounts/assets/liabilities/cards architecture and V2 household/family sharing specification |
 
 ### V2 precedence
 

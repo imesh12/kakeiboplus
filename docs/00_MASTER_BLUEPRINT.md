@@ -807,6 +807,8 @@ Future feature.
 
 Privacy controls must prevent unnecessary exposure of individual transactions.
 
+See `20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` for the full household/family sharing specification (V2 — not implemented).
+
 ---
 
 # 22. Multi-Currency and FX
