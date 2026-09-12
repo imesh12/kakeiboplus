@@ -195,5 +195,16 @@
         "type": "String"
       }
     }
-  }
+  },
+  "noAccountsYetTapToAddMessage": "口座がまだありません。+ をタップして追加してください。",
+  "accountTypeCash": "現金",
+  "accountTypeBank": "銀行",
+  "accountTypeCard": "カード",
+  "accountTypeWallet": "ウォレット",
+  "addAccountDialogTitle": "口座を追加",
+  "accountNameLabel": "名前",
+  "enterAccountNameMessage": "名前を入力してください。",
+  "accountTypeLabel": "種類",
+  "cancel": "キャンセル",
+  "addAccountButton": "追加"
 }

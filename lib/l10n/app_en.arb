@@ -195,5 +195,16 @@
         "type": "String"
       }
     }
-  }
+  },
+  "noAccountsYetTapToAddMessage": "No accounts yet. Tap + to add one.",
+  "accountTypeCash": "cash",
+  "accountTypeBank": "bank",
+  "accountTypeCard": "card",
+  "accountTypeWallet": "wallet",
+  "addAccountDialogTitle": "Add account",
+  "accountNameLabel": "Name",
+  "enterAccountNameMessage": "Enter a name.",
+  "accountTypeLabel": "Type",
+  "cancel": "Cancel",
+  "addAccountButton": "Add"
 }

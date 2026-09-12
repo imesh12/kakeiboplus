@@ -4,6 +4,7 @@ import 'package:ai_financial_coach/core/database/repositories/account_repository
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/accounts_screen.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -26,11 +27,20 @@ import '../support/rtl_harness.dart';
 // assumption.
 
 class _SeedAccount {
-  const _SeedAccount({required this.name, required this.currencyCode, this.openingBalance});
+  const _SeedAccount({
+    required this.name,
+    required this.currencyCode,
+    this.openingBalance,
+    this.type = 'cash',
+  });
 
   final String name;
   final String currencyCode;
   final Money? openingBalance;
+
+  /// CP6.5: defaults to 'cash' so every pre-existing seed call (none of
+  /// which passes `type`) keeps seeding exactly what it always seeded.
+  final String type;
 }
 
 void main() {
@@ -57,7 +67,7 @@ void main() {
       await accountRepo.createAccount(
         profileId: profileId,
         name: account.name,
-        type: 'cash',
+        type: account.type,
         currencyCode: account.currencyCode,
         openingBalance: account.openingBalance,
       );
@@ -75,10 +85,20 @@ void main() {
 
   // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
   // `MaterialApp`'s own `builder:` -- see `test/support/rtl_harness.dart`.
-  Widget appWithAccounts(ProviderContainer container, {bool rtl = false}) {
+  Widget appWithAccounts(
+    ProviderContainer container, {
+    bool rtl = false,
+    Locale locale = const Locale('en'),
+  }) {
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(home: const AccountsScreen(), builder: rtl ? rtlAppBuilder : null),
+      child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const AccountsScreen(),
+        builder: rtl ? rtlAppBuilder : null,
+      ),
     );
   }
 
@@ -403,6 +423,350 @@ void main() {
       closeTo(rowRight, 1.0),
       reason: "expected the balance to hug the stacked block's reading-start edge "
           "(the row's right edge under RTL), matching the account name above it",
+    );
+  });
+
+  // CP6.5: Accounts screen Japanese localization. Re-uses the CP5.2b/5.6
+  // seeding and layout-key helpers above unchanged; only `appWithAccounts`
+  // grew a `locale` parameter (default 'en', so every test above this
+  // point is unaffected) and `_SeedAccount` grew a `type` field (default
+  // 'cash', same reason).
+  group('CP6.5 Japanese localization', () {
+    testWidgets(
+      'A: standard Japanese Accounts renders a localized AppBar title, a localized account-'
+      'type label, an untouched currency code, and the full balance',
+      (tester) async {
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            _SeedAccount(
+              name: 'Main Wallet',
+              currencyCode: 'JPY',
+              openingBalance: Money.fromMinorUnits(50000, 'JPY'), // ¥50,000
+            ),
+          ],
+        );
+        final AccountRow account = await soleAccount(db);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('口座'), findsOneWidget); // AppBar title (accountsSectionTitle)
+        final Finder rowLayout = find.byKey(Key('accountsRowHorizontal_${account.id}'));
+        expect(rowLayout, findsOneWidget);
+        // Account name is user data -- untouched by localization even
+        // though it happens to be in English under the Japanese locale.
+        expect(
+          find.descendant(of: rowLayout, matching: find.text('Main Wallet')),
+          findsOneWidget,
+        );
+        expect(find.descendant(of: rowLayout, matching: find.text('現金 · JPY')), findsOneWidget);
+        expect(find.descendant(of: rowLayout, matching: find.text('¥50,000')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'B: a user-entered account name renders exactly as stored under the Japanese locale, '
+      'including when the name itself is Japanese text -- only the type label translates',
+      (tester) async {
+        const String japaneseName = '生活費用の口座';
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            _SeedAccount(
+              name: japaneseName,
+              currencyCode: 'USD',
+              openingBalance: Money.fromMinorUnits(2500, 'USD'), // \$25.00
+            ),
+          ],
+        );
+        final AccountRow account = await soleAccount(db);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final Finder rowLayout = find.byKey(Key('accountsRowHorizontal_${account.id}'));
+        expect(rowLayout, findsOneWidget);
+        // The stored name is reproduced verbatim -- no l10n lookup ever
+        // runs against user data, so a Japanese-language name is neither
+        // mistranslated nor duplicated.
+        expect(
+          find.descendant(of: rowLayout, matching: find.text(japaneseName)),
+          findsOneWidget,
+        );
+        expect(find.descendant(of: rowLayout, matching: find.text('現金 · USD')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      "C: bank/card/wallet account-type labels localize for display, while each account's "
+      'persisted `type` column keeps its original English enum-style value',
+      (tester) async {
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            const _SeedAccount(name: 'Bank Account', currencyCode: 'USD', type: 'bank'),
+            const _SeedAccount(name: 'Card Account', currencyCode: 'USD', type: 'card'),
+            const _SeedAccount(name: 'Wallet Account', currencyCode: 'USD', type: 'wallet'),
+          ],
+        );
+        final List<AccountRow> accounts = await db.select(db.accounts).get();
+        AccountRow byName(String name) => accounts.firstWhere((a) => a.name == name);
+        final AccountRow bank = byName('Bank Account');
+        final AccountRow card = byName('Card Account');
+        final AccountRow wallet = byName('Wallet Account');
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.descendant(
+            of: find.byKey(Key('accountsRowHorizontal_${bank.id}')),
+            matching: find.text('銀行 · USD'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(Key('accountsRowHorizontal_${card.id}')),
+            matching: find.text('カード · USD'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(Key('accountsRowHorizontal_${wallet.id}')),
+            matching: find.text('ウォレット · USD'),
+          ),
+          findsOneWidget,
+        );
+        // The persisted column itself never changed -- only its display
+        // label did.
+        expect(bank.type, 'bank');
+        expect(card.type, 'card');
+        expect(wallet.type, 'wallet');
+      },
+    );
+
+    testWidgets(
+      'D: Japanese + MMK renders its registry-defined 2 decimal places (never 0) at normal '
+      'width and text scale',
+      (tester) async {
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            _SeedAccount(
+              name: 'Yangon Wallet',
+              currencyCode: 'MMK',
+              openingBalance: Money.fromMinorUnits(150075, 'MMK'), // K1,500.75
+            ),
+          ],
+        );
+        final AccountRow account = await soleAccount(db);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        final Finder rowLayout = find.byKey(Key('accountsRowHorizontal_${account.id}'));
+        expect(tester.takeException(), isNull);
+        expect(rowLayout, findsOneWidget);
+        expect(find.descendant(of: rowLayout, matching: find.text('K1,500.75')), findsOneWidget);
+        expect(find.byKey(Key('accountsRowStacked_${account.id}')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'E: Japanese + a large 0-decimal VND balance keeps every digit at 320px width and a '
+      '1.6x text scale, with a long Japanese account name squeezed instead',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const String longJapaneseName = '狭い画面でのレイアウトを確認するための、かなり長い口座名';
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            _SeedAccount(
+              name: longJapaneseName,
+              currencyCode: 'VND',
+              openingBalance: Money.fromMinorUnits(999999999, 'VND'), // ₫999,999,999
+            ),
+          ],
+        );
+        final AccountRow account = await soleAccount(db);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        // Not asserting which layout branch this renders as, matching
+        // the reasoning in the equivalent English CP5.2b test above --
+        // scoped to whichever of this account's own two layout keys
+        // actually rendered.
+        final Finder rowLayout = find.byWidgetPredicate(
+          (Widget widget) =>
+              widget.key == Key('accountsRowHorizontal_${account.id}') ||
+              widget.key == Key('accountsRowStacked_${account.id}'),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(rowLayout, findsOneWidget);
+        expect(
+          find.descendant(of: rowLayout, matching: find.text('₫999,999,999')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'F: Japanese + a large 3-decimal KWD balance keeps every digit at 320px width and a '
+      '1.6x text scale, with a long Japanese account name squeezed instead',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const String longJapaneseName = '狭い画面でのレイアウトを確認するための、かなり長い口座名';
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            _SeedAccount(
+              name: longJapaneseName,
+              currencyCode: 'KWD',
+              openingBalance: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+            ),
+          ],
+        );
+        final AccountRow account = await soleAccount(db);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        final Finder rowLayout = find.byWidgetPredicate(
+          (Widget widget) =>
+              widget.key == Key('accountsRowHorizontal_${account.id}') ||
+              widget.key == Key('accountsRowStacked_${account.id}'),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(rowLayout, findsOneWidget);
+        expect(
+          find.descendant(of: rowLayout, matching: find.text('د.ك12,345.678')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'G: Japanese + a large MMK balance switches to the stacked layout at 320px width and a '
+      '2.0x text scale, never clipping a digit, with a long Japanese account name above it',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const String longJapaneseName = '狭い画面でのレイアウトを確認するための、かなり長い口座名';
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            _SeedAccount(
+              name: longJapaneseName,
+              currencyCode: 'MMK',
+              openingBalance: Money.fromMinorUnits(999999999, 'MMK'), // K9,999,999.99
+            ),
+          ],
+        );
+        final AccountRow account = await soleAccount(db);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        final Finder rowLayout = find.byKey(Key('accountsRowStacked_${account.id}'));
+        expect(tester.takeException(), isNull);
+        expect(rowLayout, findsOneWidget);
+        expect(
+          find.descendant(of: rowLayout, matching: find.text('K9,999,999.99')),
+          findsOneWidget,
+        );
+        expect(find.byKey(Key('accountsRowHorizontal_${account.id}')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'H: navigation/action regression -- opening Add Account under the Japanese locale shows '
+      'a fully localized dialog, and submitting it still creates a real account that appears '
+      'in the (still Japanese) list',
+      (tester) async {
+        final AppDatabase db = await seededDb(accounts: const <_SeedAccount>[]);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        // Empty state is itself localized -- confirms this dialog test
+        // starts from a real "no accounts yet" condition, not a stale
+        // fixture.
+        expect(find.text('口座がまだありません。+ をタップして追加してください。'), findsOneWidget);
+
+        await tester.tap(find.byType(FloatingActionButton));
+        await tester.pumpAndSettle();
+
+        expect(find.text('口座を追加'), findsOneWidget); // dialog title
+        expect(find.text('名前'), findsOneWidget); // Name field label
+        expect(find.text('種類'), findsOneWidget); // Type field label
+        expect(find.text('通貨'), findsOneWidget); // Currency field label
+        expect(find.text('キャンセル'), findsOneWidget); // Cancel button
+        expect(find.text('追加'), findsOneWidget); // Add button
+
+        await tester.enterText(find.byType(TextFormField), 'New JPY Wallet');
+        await tester.tap(find.text('追加'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Dialog closed and the real, persisted account now renders in
+        // the still-Japanese list with its (default) type localized.
+        expect(find.text('口座を追加'), findsNothing);
+        expect(find.text('New JPY Wallet'), findsOneWidget);
+        expect(find.textContaining('現金 ·'), findsOneWidget);
+        final List<AccountRow> accounts = await db.select(db.accounts).get();
+        expect(accounts.where((a) => a.name == 'New JPY Wallet'), hasLength(1));
+      },
     );
   });
 }

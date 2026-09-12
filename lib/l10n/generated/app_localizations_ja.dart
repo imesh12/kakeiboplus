@@ -301,4 +301,37 @@ class AppLocalizationsJa extends AppLocalizations {
   String spokenMinusAmount(String amount) {
     return 'マイナス$amount';
   }
+
+  @override
+  String get noAccountsYetTapToAddMessage => '口座がまだありません。+ をタップして追加してください。';
+
+  @override
+  String get accountTypeCash => '現金';
+
+  @override
+  String get accountTypeBank => '銀行';
+
+  @override
+  String get accountTypeCard => 'カード';
+
+  @override
+  String get accountTypeWallet => 'ウォレット';
+
+  @override
+  String get addAccountDialogTitle => '口座を追加';
+
+  @override
+  String get accountNameLabel => '名前';
+
+  @override
+  String get enterAccountNameMessage => '名前を入力してください。';
+
+  @override
+  String get accountTypeLabel => '種類';
+
+  @override
+  String get cancel => 'キャンセル';
+
+  @override
+  String get addAccountButton => '追加';
 }

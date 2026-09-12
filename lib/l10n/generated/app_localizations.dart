@@ -625,6 +625,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'minus {amount}'**
   String spokenMinusAmount(String amount);
+
+  /// No description provided for @noAccountsYetTapToAddMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No accounts yet. Tap + to add one.'**
+  String get noAccountsYetTapToAddMessage;
+
+  /// No description provided for @accountTypeCash.
+  ///
+  /// In en, this message translates to:
+  /// **'cash'**
+  String get accountTypeCash;
+
+  /// No description provided for @accountTypeBank.
+  ///
+  /// In en, this message translates to:
+  /// **'bank'**
+  String get accountTypeBank;
+
+  /// No description provided for @accountTypeCard.
+  ///
+  /// In en, this message translates to:
+  /// **'card'**
+  String get accountTypeCard;
+
+  /// No description provided for @accountTypeWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'wallet'**
+  String get accountTypeWallet;
+
+  /// No description provided for @addAccountDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add account'**
+  String get addAccountDialogTitle;
+
+  /// No description provided for @accountNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get accountNameLabel;
+
+  /// No description provided for @enterAccountNameMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name.'**
+  String get enterAccountNameMessage;
+
+  /// No description provided for @accountTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get accountTypeLabel;
+
+  /// No description provided for @cancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancel;
+
+  /// No description provided for @addAccountButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get addAccountButton;
 }
 
 class _AppLocalizationsDelegate

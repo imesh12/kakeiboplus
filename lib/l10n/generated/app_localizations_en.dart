@@ -310,4 +310,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String spokenMinusAmount(String amount) {
     return 'minus $amount';
   }
+
+  @override
+  String get noAccountsYetTapToAddMessage =>
+      'No accounts yet. Tap + to add one.';
+
+  @override
+  String get accountTypeCash => 'cash';
+
+  @override
+  String get accountTypeBank => 'bank';
+
+  @override
+  String get accountTypeCard => 'card';
+
+  @override
+  String get accountTypeWallet => 'wallet';
+
+  @override
+  String get addAccountDialogTitle => 'Add account';
+
+  @override
+  String get accountNameLabel => 'Name';
+
+  @override
+  String get enterAccountNameMessage => 'Enter a name.';
+
+  @override
+  String get accountTypeLabel => 'Type';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get addAccountButton => 'Add';
 }
