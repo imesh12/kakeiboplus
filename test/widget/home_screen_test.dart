@@ -1002,4 +1002,304 @@ void main() {
       expect(find.byKey(const Key('recurringAmountSideBySide')), findsNothing);
     },
   );
+
+  testWidgets(
+    'CP5.2a: an account tile renders name, currency code, and full balance side by side under '
+    'normal width and text scale',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'JPY',
+        home: 'JPY',
+        accounts: <_SeedAccount>[
+          _SeedAccount(
+            name: 'Main Wallet',
+            currencyCode: 'JPY',
+            openingBalance: Money.fromMinorUnits(50000, 'JPY'), // ¥50,000
+          ),
+        ],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow account = (await accountQuery.get()).first;
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithHome(container));
+      await tester.pumpAndSettle();
+
+      // At normal width/text scale the horizontal branch is guaranteed, so
+      // it's safe to scope both the name and the balance to specifically
+      // this account's tile rather than just anywhere on screen.
+      final Finder accountLayout = find.byKey(Key('accountTileHorizontal_${account.id}'));
+
+      expect(tester.takeException(), isNull);
+      expect(accountLayout, findsOneWidget);
+      expect(find.descendant(of: accountLayout, matching: find.text('Main Wallet')), findsOneWidget);
+      expect(find.descendant(of: accountLayout, matching: find.text('¥50,000')), findsOneWidget);
+      expect(find.byKey(Key('accountTileStacked_${account.id}')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.2a: an account tile keeps every digit of a large 0-decimal VND balance at 320px '
+    'width and a 1.6x text scale, with a long account name squeezed instead',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      // Widened from the usual 320x900 narrow-stress fixture: the
+      // Accounts section is the deepest section on Home, and at 900px
+      // tall `scrollUntilVisible` below could bring the account name
+      // into view while the balance itself (below it if stacked, or
+      // simply further down the tile) was still outside the viewport
+      // and therefore not rendered -- confirmed by this test actually
+      // failing to find the balance text at 900px on a real run.
+      tester.view.physicalSize = const Size(320, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const String longName = 'A rather long account name to stress narrow-width layout';
+      final AppDatabase db = await seededDb(
+        living: 'VND',
+        home: 'VND',
+        accounts: <_SeedAccount>[
+          _SeedAccount(
+            name: longName,
+            currencyCode: 'VND',
+            openingBalance: Money.fromMinorUnits(999999999, 'VND'), // ₫999,999,999
+          ),
+        ],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow account = (await accountQuery.get()).first;
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithHome(container));
+      await tester.pumpAndSettle();
+      // The Accounts section sits below the currency summary, budget,
+      // savings goals, and upcoming-commitments cards -- deeper than
+      // anything else on Home -- so a fixed narrow `physicalSize` alone
+      // doesn't guarantee it's mounted; scroll to the account's own name
+      // text deterministically, the same technique the recurring card's
+      // narrow-width test above relies on.
+      await tester.scrollUntilVisible(find.text(longName), 300.0);
+      await tester.pumpAndSettle();
+
+      // Not asserting which layout branch this renders as -- at 1.6x
+      // this 0-decimal balance may legitimately land in either one, and
+      // that isn't the point of this test. But a plain page-wide
+      // `find.text(...)` isn't enough either: when living/home currency
+      // match the account's currency (as here), the hero currency-
+      // summary card at the top of Home shows this exact same total,
+      // so the same string legitimately appears twice on screen. Scope
+      // to whichever of this account's own two layout keys actually
+      // rendered, so the assertion is about *this tile*, not the page.
+      final Finder accountLayout = find.byWidgetPredicate(
+        (Widget widget) =>
+            widget.key == Key('accountTileHorizontal_${account.id}') ||
+            widget.key == Key('accountTileStacked_${account.id}'),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(accountLayout, findsOneWidget);
+      expect(
+        find.descendant(of: accountLayout, matching: find.text('₫999,999,999')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'CP5.2a: an account tile keeps every digit of a large 3-decimal KWD balance at 320px '
+    'width and a 1.6x text scale, with a long account name squeezed instead',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      // Widened from the usual 320x900 narrow-stress fixture: the
+      // Accounts section is the deepest section on Home, and at 900px
+      // tall `scrollUntilVisible` below could bring the account name
+      // into view while the balance itself (below it if stacked, or
+      // simply further down the tile) was still outside the viewport
+      // and therefore not rendered -- confirmed by this test actually
+      // failing to find the balance text at 900px on a real run.
+      tester.view.physicalSize = const Size(320, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const String longName = 'A rather long account name to stress narrow-width layout';
+      final AppDatabase db = await seededDb(
+        living: 'KWD',
+        home: 'KWD',
+        accounts: <_SeedAccount>[
+          _SeedAccount(
+            name: longName,
+            currencyCode: 'KWD',
+            openingBalance: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+          ),
+        ],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow account = (await accountQuery.get()).first;
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithHome(container));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text(longName), 300.0);
+      await tester.pumpAndSettle();
+
+      // Same reasoning as the VND test above: not asserting which
+      // layout branch this renders as, but scoped to whichever of this
+      // account's own two layout keys actually rendered, since the
+      // hero currency-summary card shows this same total too (living
+      // and home currency both match the account's currency here).
+      final Finder accountLayout = find.byWidgetPredicate(
+        (Widget widget) =>
+            widget.key == Key('accountTileHorizontal_${account.id}') ||
+            widget.key == Key('accountTileStacked_${account.id}'),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(accountLayout, findsOneWidget);
+      expect(
+        find.descendant(of: accountLayout, matching: find.text('د.ك12,345.678')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'CP5.2a: an account tile switches to a stacked layout and keeps every digit of a large '
+    'MMK balance at 320px width and a 2.0x text scale, never clipping it',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      const String longName = 'A rather long account name to stress narrow-width layout';
+      final AppDatabase db = await seededDb(
+        living: 'MMK',
+        home: 'MMK',
+        accounts: <_SeedAccount>[
+          _SeedAccount(
+            name: longName,
+            currencyCode: 'MMK',
+            // K9,999,999.99 -- MMK has 2 minor units per `CurrencyRegistry`,
+            // not 0; this exact value was measured in a prior CP5.1
+            // diagnostic run to exceed a narrow card's available width at
+            // 2.0x text scale, so it's reused here to reliably force the
+            // stacked layout rather than guessing a value.
+            openingBalance: Money.fromMinorUnits(999999999, 'MMK'),
+          ),
+        ],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow account = (await accountQuery.get()).first;
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithHome(container));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text(longName), 300.0);
+      await tester.pumpAndSettle();
+
+      // This value is specifically chosen to force the stacked branch, so
+      // it's safe to scope the balance assertion to that specific key.
+      final Finder accountLayout = find.byKey(Key('accountTileStacked_${account.id}'));
+
+      expect(tester.takeException(), isNull);
+      expect(accountLayout, findsOneWidget);
+      expect(
+        find.descendant(of: accountLayout, matching: find.text('K9,999,999.99')),
+        findsOneWidget,
+      );
+      expect(find.byKey(Key('accountTileHorizontal_${account.id}')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CP5.2a: an account tile renders an MMK balance with its registry-defined 2 decimal '
+    'places, not 0, under normal width and text scale',
+    (tester) async {
+      useTallSurface(tester);
+      final AppDatabase db = await seededDb(
+        living: 'MMK',
+        home: 'MMK',
+        accounts: <_SeedAccount>[
+          _SeedAccount(
+            name: 'Yangon Wallet',
+            currencyCode: 'MMK',
+            openingBalance: Money.fromMinorUnits(150075, 'MMK'), // K1,500.75
+          ),
+        ],
+      );
+      final ProfileRow? profile = await ProfileRepository(db).getProfile();
+      final accountQuery = db.select(db.accounts)
+        ..where(
+          (tbl) =>
+              tbl.profileId.equals(profile!.id) &
+              tbl.isActive.equals(true) &
+              tbl.deletedAt.isNull(),
+        );
+      final AccountRow account = (await accountQuery.get()).first;
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithHome(container));
+      await tester.pumpAndSettle();
+
+      // Normal width/text scale -- horizontal branch is guaranteed.
+      final Finder accountLayout = find.byKey(Key('accountTileHorizontal_${account.id}'));
+
+      expect(tester.takeException(), isNull);
+      expect(accountLayout, findsOneWidget);
+      expect(
+        find.descendant(of: accountLayout, matching: find.text('K1,500.75')),
+        findsOneWidget,
+      );
+    },
+  );
 }

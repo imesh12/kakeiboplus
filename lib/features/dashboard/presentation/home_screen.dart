@@ -1221,22 +1221,194 @@ class _AccountTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<Money> balanceAsync = ref.watch(accountBalanceProvider(account.id));
+    final TextStyle? moneyStyle = Theme.of(context).textTheme.titleMedium;
+
+    // CP5.2a: was a bare `Card(ListTile(title:, subtitle:, trailing:))`.
+    // `ListTile` gives no guarantee that a long account name and a
+    // large/high-precision balance can coexist -- its `trailing` slot is
+    // sized independently of `title`/`subtitle`, so the balance could
+    // end up silently clipped (`DefaultTextStyle`'s default
+    // `TextOverflow.clip`) with no thrown error and no visible sign a
+    // digit went missing. `_AdaptiveAccountRow` replaces it with a
+    // measurement-based row that guarantees the balance always renders
+    // in full -- see its doc comment. No `onTap` existed before this
+    // change and none is added here.
     return Card(
-      child: ListTile(
-        title: Text(account.name),
-        subtitle: Text(account.currencyCode),
-        trailing: balanceAsync.when(
-          loading: () => const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: balanceAsync.when(
+          loading: () => _AdaptiveAccountRow(
+            accountId: account.id,
+            name: account.name,
+            currencyCode: account.currencyCode,
+            money: const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           ),
-          error: (Object e, StackTrace st) => const Icon(Icons.error_outline),
-          data: (Money balance) => Text(
-            _formatter.format(balance),
-            style: Theme.of(context).textTheme.titleMedium,
+          error: (Object e, StackTrace st) => _AdaptiveAccountRow(
+            accountId: account.id,
+            name: account.name,
+            currencyCode: account.currencyCode,
+            money: const Icon(Icons.error_outline),
           ),
+          data: (Money balance) {
+            final String formatted = _formatter.format(balance);
+            return _AdaptiveAccountRow(
+              accountId: account.id,
+              name: account.name,
+              currencyCode: account.currencyCode,
+              money: Text(formatted, style: moneyStyle),
+              moneyMeasureText: formatted,
+              moneyStyle: moneyStyle,
+            );
+          },
         ),
+      ),
+    );
+  }
+}
+
+/// Arranges an account tile's descriptive content (name + currency
+/// code) against its authoritative balance -- International /
+/// Localization Foundation Checkpoint 5.2a. See `_AccountTile`'s doc
+/// comment for why a bare `ListTile` wasn't safe here.
+///
+/// This measures the balance's own natural (single-line) width at the
+/// current text style and text scale ([MediaQuery.textScalerOf])
+/// against the row's actual available width ([LayoutBuilder]). The
+/// descriptive column (name + currency code) is always allowed to
+/// ellipsize down to almost nothing, so the only real question is
+/// whether the balance ALONE fits the row: when it does, this renders
+/// name/currency and the balance side by side -- unchanged in spirit
+/// from the previous `ListTile` arrangement, keyed
+/// `'accountTileHorizontal_<accountId>'`. When the balance alone would
+/// not fit even with the descriptive column squeezed to nothing (a
+/// long account name plus a large/high-precision balance at narrow
+/// width and large text scale), the balance instead moves onto its own
+/// line below the descriptive content, given the card's full content
+/// width rather than whatever a row would have left over -- keyed
+/// `'accountTileStacked_<accountId>'`.
+///
+/// The balance is never wrapped in `FittedBox`, never ellipsized, and
+/// never has `maxLines` capped in either arrangement -- every digit
+/// `MoneyFormatter` produced always renders. In the rare case where
+/// even the full stacked width isn't enough for one line, it simply
+/// wraps onto a second line rather than losing a digit. Only the
+/// account name and currency code may ellipsize (each capped to one
+/// line) -- they are never the authoritative figure. While the balance
+/// is still loading or errored, [moneyMeasureText] is left null and
+/// this always renders horizontally -- a small spinner or icon never
+/// needs to stack.
+///
+/// Deliberately does not branch on currency code -- the decision
+/// depends only on the balance string's own measured width, so it
+/// applies identically regardless of what produced it.
+class _AdaptiveAccountRow extends StatelessWidget {
+  const _AdaptiveAccountRow({
+    required this.accountId,
+    required this.name,
+    required this.currencyCode,
+    required this.money,
+    this.moneyMeasureText,
+    this.moneyStyle,
+  });
+
+  /// Distinguishes this tile's layout-mode keys from every other
+  /// account tile on the same screen -- tests assert on
+  /// `Key('accountTileHorizontal_<accountId>')`/
+  /// `Key('accountTileStacked_<accountId>')` to confirm which
+  /// arrangement actually rendered for a specific seeded account.
+  final String accountId;
+  final String name;
+  final String currencyCode;
+
+  /// The trailing content: the formatted balance `Text` once loaded, or
+  /// a small fixed-size loading spinner / error icon otherwise.
+  final Widget money;
+
+  /// The exact string [money] renders when it's the formatted balance,
+  /// used only to measure whether it fits the row. Null while
+  /// loading/erroring.
+  final String? moneyMeasureText;
+  final TextStyle? moneyStyle;
+
+  static const double _gap = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    final Widget descriptive = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyLarge),
+        Text(
+          currencyCode,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+        ),
+      ],
+    );
+
+    final String? measureText = moneyMeasureText;
+    if (measureText == null) {
+      // Loading/error: nothing to stack -- the trailing widget is small
+      // and fixed-size.
+      return MergeSemantics(
+        child: Row(
+          key: Key('accountTileHorizontal_$accountId'),
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(child: descriptive),
+            const SizedBox(width: _gap),
+            money,
+          ],
+        ),
+      );
+    }
+
+    return MergeSemantics(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final TextScaler scaler = MediaQuery.textScalerOf(context);
+          final direction = Directionality.of(context);
+          final double moneyWidth = (TextPainter(
+            text: TextSpan(text: measureText, style: moneyStyle),
+            textDirection: direction,
+            textScaler: scaler,
+          )..layout())
+              .width;
+
+          final bool fitsHorizontal = moneyWidth + _gap <= constraints.maxWidth;
+
+          if (fitsHorizontal) {
+            return Row(
+              key: Key('accountTileHorizontal_$accountId'),
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Expanded(child: descriptive),
+                const SizedBox(width: _gap),
+                money,
+              ],
+            );
+          }
+
+          return Column(
+            key: Key('accountTileStacked_$accountId'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              descriptive,
+              const SizedBox(height: 6),
+              Align(alignment: Alignment.centerLeft, child: money),
+            ],
+          );
+        },
       ),
     );
   }
