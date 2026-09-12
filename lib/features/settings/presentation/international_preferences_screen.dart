@@ -294,15 +294,36 @@ List<DropdownMenuItem<String>> _itemsPreservingCurrentValue({
   required String Function(String) labelFor,
 }) {
   final List<DropdownMenuItem<String>> items = <DropdownMenuItem<String>>[
-    for (final String v in knownValues) DropdownMenuItem<String>(value: v, child: Text(labelFor(v))),
+    for (final String v in knownValues) _dropdownItem(v, labelFor(v)),
   ];
   if (!knownValues.contains(currentValue)) {
-    items.insert(
-      0,
-      DropdownMenuItem<String>(value: currentValue, child: Text(labelFor(currentValue))),
-    );
+    items.insert(0, _dropdownItem(currentValue, labelFor(currentValue)));
   }
   return items;
+}
+
+/// Builds one dropdown item whose label is protected against overflow --
+/// International / Localization Foundation Checkpoint 5.3. A plain
+/// `Text` here would render with the default `TextOverflow.clip`, so a
+/// long localized display name (a future language's country/timezone
+/// name, or a synthetic "Unknown (...)" label for an unrecognized
+/// persisted value) could silently overflow this dropdown's bounded
+/// width at narrow screens or large text scales -- both when this item
+/// is shown inside the open menu and when it's the one currently
+/// selected and shown inside the closed field itself (`DropdownButton`
+/// reuses the same item widget for both roles here; `_DropdownField`
+/// below supplies no separate `selectedItemBuilder`). `maxLines: 1` +
+/// `TextOverflow.ellipsis` lets the label yield gracefully instead --
+/// nothing about the *persisted* `value` changes, only how its label is
+/// presented when there isn't room for all of it. Used uniformly for
+/// every known item and the synthetic current-value item alike, so the
+/// unknown-value display path gets the exact same protection as every
+/// other one, with no per-field or per-registry branching.
+DropdownMenuItem<String> _dropdownItem(String value, String label) {
+  return DropdownMenuItem<String>(
+    value: value,
+    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
+  );
 }
 
 /// English display name for a known ISO country code; a safe
@@ -414,6 +435,15 @@ class _DropdownField extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: DropdownButtonFormField<String>(
         initialValue: value,
+        // CP5.3: without `isExpanded`, this button sizes itself to the
+        // intrinsic width of its widest item -- forcing the field itself
+        // to grow rather than letting a long label yield -- which is
+        // exactly backwards for narrow screens/large text scales. With
+        // `isExpanded: true`, the button instead fills the available
+        // width the surrounding `InputDecorator` already gives it, so
+        // each item's own `maxLines: 1` + `TextOverflow.ellipsis` (see
+        // `_dropdownItem`) can actually take effect.
+        isExpanded: true,
         decoration: InputDecoration(labelText: label),
         items: items,
         onChanged: (String? v) {

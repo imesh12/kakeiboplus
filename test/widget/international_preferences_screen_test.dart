@@ -799,4 +799,168 @@ void main() {
     expect(after.numberFormat, before.numberFormat);
     expect(after.updatedAt, before.updatedAt);
   });
+
+  // CP5.3: International Preferences dropdown overflow hardening. These
+  // tests are additive to the CP3B/CP4.3 coverage above -- they don't
+  // re-check normal-regression persistence behavior (already covered by
+  // "the screen initially reflects all 8 persisted values" and the
+  // per-field "changing ... persists it" tests above) or the Japanese
+  // language path (already covered by the three Japanese-specific tests
+  // above); nothing about `isExpanded`/label-overflow wrapping changes
+  // localization or persistence, so that existing coverage stands as the
+  // regression guard for both. What's new here is narrow-width/large-
+  // text-scale robustness for `_DropdownField`'s selected-value and
+  // menu-item text, including the unknown-raw-value display path (which
+  // renders through the exact same `_dropdownItem` helper as every known
+  // value, so it needs the same overflow protection).
+  //
+  // A long *unknown* country code (rather than a real registry entry) is
+  // used to stress "long label" scenarios below: none of
+  // `CountryRegistry`/`TimezoneRegistry`'s current curated entries are
+  // actually long enough to meaningfully stress this, and inventing one
+  // would mean touching a registry file, which this checkpoint's scope
+  // excludes. A long unknown value exercises the identical
+  // `_itemsPreservingCurrentValue` synthetic-item code path a long
+  // *known* label would, without touching any registry.
+  const String longUnknownCountryCode =
+      'ZZ-LEGACY-COUNTRY-CODE-FROM-A-DISCONTINUED-REGION-USED-FOR-STRESS-TESTING';
+
+  testWidgets(
+      'CP5.3: a long unknown-country label renders without an overflow exception at a narrow '
+      '320px width, and merely opening the screen does not rewrite it', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+
+    final (AppDatabase db, String profileId) =
+        await seededDb(homeCountry: longUnknownCountryCode);
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    final ProfileRow before = (await ProfileRepository(db).getProfile())!;
+
+    await openScreen(tester, container);
+    expect(tester.takeException(), isNull);
+    expect(await fieldValue(tester, homeCountryKey), longUnknownCountryCode);
+    await ensureFieldVisible(tester, homeCountryKey);
+    // Scoped to this specific field's own subtree -- not a page-wide
+    // `find.text(...)` -- since a page-wide search would be ambiguous if
+    // any other field ever happened to render the same unknown label.
+    expect(
+      find.descendant(
+        of: find.byKey(homeCountryKey),
+        matching: find.text('Unknown ($longUnknownCountryCode)'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    // Merely opening the screen must not have written anything, even for
+    // a field whose value is unknown to the registry -- same "no write
+    // on open" guarantee the pre-existing "opening and leaving the
+    // screen without Save performs no repository write" test proves for
+    // known values, checked here specifically for the unknown-value/
+    // overflow-hardened path.
+    final ProfileRow afterOpenOnly = (await ProfileRepository(db).getProfile())!;
+    expect(afterOpenOnly.homeCountry, before.homeCountry);
+    expect(afterOpenOnly.currentCountry, before.currentCountry);
+    expect(afterOpenOnly.homeCurrency, before.homeCurrency);
+    expect(afterOpenOnly.livingCurrency, before.livingCurrency);
+    expect(afterOpenOnly.preferredLanguage, before.preferredLanguage);
+    expect(afterOpenOnly.timezone, before.timezone);
+    expect(afterOpenOnly.dateFormat, before.dateFormat);
+    expect(afterOpenOnly.numberFormat, before.numberFormat);
+    expect(afterOpenOnly.updatedAt, before.updatedAt);
+  });
+
+  testWidgets(
+      'CP5.3: a long unknown-country label renders without an overflow exception at a narrow '
+      '320px width and a 1.6x text scale, and its raw value survives an unrelated Save',
+      (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) =
+        await seededDb(homeCountry: longUnknownCountryCode);
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container);
+    expect(tester.takeException(), isNull);
+    expect(await fieldValue(tester, homeCountryKey), longUnknownCountryCode);
+    await ensureFieldVisible(tester, homeCountryKey);
+    expect(
+      find.descendant(
+        of: find.byKey(homeCountryKey),
+        matching: find.text('Unknown ($longUnknownCountryCode)'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    // Change a different field and Save -- the long unknown value must
+    // survive completely unchanged, exercising the "unknown raw value"
+    // preservation policy at this narrow/large-text-scale condition
+    // specifically (the equivalent normal-width case is already covered
+    // by "an unknown country renders safely and survives Save unchanged
+    // when another field changes" above).
+    await selectItem(tester, key: currentCountryKey, itemValue: 'CA', itemLabel: 'Canada');
+    await save(tester);
+    expect(tester.takeException(), isNull);
+
+    final ProfileRow? profile = await ProfileRepository(db).getProfile();
+    expect(profile!.homeCountry, longUnknownCountryCode); // preserved raw, unchanged
+    expect(profile.currentCountry, 'CA'); // the field actually changed
+  });
+
+  testWidgets(
+      'CP5.3: the screen renders without an overflow exception and remains fully usable at a '
+      'narrow 320px width and an extreme 2.0x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb();
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container);
+    expect(tester.takeException(), isNull);
+
+    // At this extreme condition every field is checked, not just the
+    // first: `isExpanded`/label-overflow protection applies uniformly
+    // via the one shared `_DropdownField`/`_dropdownItem` code path, but
+    // this confirms none of the 8 fields individually throws while being
+    // scrolled to and read at 2.0x scale.
+    expect(await fieldValue(tester, homeCountryKey), 'LK');
+    expect(await fieldValue(tester, currentCountryKey), 'JP');
+    expect(await fieldValue(tester, homeCurrencyKey), 'LKR');
+    expect(await fieldValue(tester, livingCurrencyKey), 'JPY');
+    expect(await fieldValue(tester, languageKey), 'en');
+    expect(await fieldValue(tester, dateFormatKey), 'yyyy-MM-dd');
+    expect(await fieldValue(tester, numberFormatKey), '#,##0.##');
+    expect(await fieldValue(tester, timezoneKey), 'Asia/Tokyo');
+    expect(tester.takeException(), isNull);
+
+    // Vertical scrolling still reaches and successfully taps Save at
+    // this scale -- explicitly allowed by this checkpoint's spec ("no
+    // horizontal scrolling dropdown hacks", vertical scrolling is fine).
+    await selectItem(tester, key: homeCountryKey, itemValue: 'US', itemLabel: 'United States');
+    await save(tester);
+    expect(tester.takeException(), isNull);
+
+    final ProfileRow? profile = await ProfileRepository(db).getProfile();
+    expect(profile!.homeCountry, 'US');
+  });
 }
