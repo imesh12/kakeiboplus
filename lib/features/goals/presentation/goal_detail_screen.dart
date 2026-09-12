@@ -150,24 +150,12 @@ class _GoalDetailBody extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                _formatter.format(calc.saved),
-                key: const Key('goalSavedAmount'),
-                style: text.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(statusLabel, style: text.labelMedium?.copyWith(color: statusColor)),
-            ),
-          ],
+        _GoalHeroAmountRow(
+          savedText: _formatter.format(calc.saved),
+          savedStyle: text.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+          statusLabel: statusLabel,
+          statusStyle: text.labelMedium?.copyWith(color: statusColor),
+          statusColor: statusColor,
         ),
         Text(
           'of ${_formatter.format(calc.target)} · ${calc.wholePercentSaved}%',
@@ -229,6 +217,117 @@ class _GoalDetailBody extends ConsumerWidget {
         const SizedBox(height: 4),
         _ContributionHistory(goalId: summary.id),
       ],
+    );
+  }
+}
+
+/// CP5.4a: the goal detail hero row -- the authoritative saved amount
+/// (`MoneyFormatter`'s exact output, [savedText]) next to the status
+/// chip (Completed/Overdue/In progress, [statusLabel]/[statusColor]).
+///
+/// The saved amount must always render in full -- never ellipsized,
+/// clipped, or shrunk in a `FittedBox` -- while the status chip is
+/// short, fixed-content, and free to move below the amount when there
+/// isn't room for both on one line. Measures both pieces' actual
+/// rendered widths ([TextPainter], respecting
+/// [MediaQuery.textScalerOf] and [Directionality.of]) against the row's
+/// real available width ([LayoutBuilder]) rather than guessing from
+/// string length or branching on currency -- the same technique
+/// `_AdaptiveAmountLine` already uses on the Home dashboard (CP5.1).
+///
+/// Side by side (`Key('goalHeroHorizontal')`): amount on the left in an
+/// `Expanded` (the measurement already proved the full string fits, so
+/// this never forces a mid-number wrap), chip on the right -- visually
+/// the same arrangement this row always had, now reached only when it
+/// actually fits.
+///
+/// Stacked (`Key('goalHeroStacked')`): amount first at full width, chip
+/// below it -- both keep their existing styling and colors; only the
+/// arrangement changes. Status semantics/logic are computed by the
+/// caller and passed straight through -- this widget never alters them.
+class _GoalHeroAmountRow extends StatelessWidget {
+  const _GoalHeroAmountRow({
+    required this.savedText,
+    required this.savedStyle,
+    required this.statusLabel,
+    required this.statusStyle,
+    required this.statusColor,
+  });
+
+  final String savedText;
+  final TextStyle? savedStyle;
+  final String statusLabel;
+  final TextStyle? statusStyle;
+  final Color statusColor;
+
+  /// Deliberate minimum breathing room between the amount and the chip
+  /// in the side-by-side arrangement -- the previous unconditional `Row`
+  /// had no explicit gap here (whatever space was left over after the
+  /// `Expanded` text simply wasn't occupied), so this is a small,
+  /// intentional addition rather than a behavior change worth flagging
+  /// as a regression.
+  static const double _gap = 12;
+  static const EdgeInsets _chipPadding = EdgeInsets.symmetric(horizontal: 10, vertical: 4);
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget money = Text(
+      savedText,
+      key: const Key('goalSavedAmount'),
+      style: savedStyle,
+    );
+    final Widget chip = Container(
+      padding: _chipPadding,
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(statusLabel, style: statusStyle),
+    );
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final TextScaler scaler = MediaQuery.textScalerOf(context);
+        final direction = Directionality.of(context);
+        final double moneyWidth = (TextPainter(
+          text: TextSpan(text: savedText, style: savedStyle),
+          textDirection: direction,
+          textScaler: scaler,
+        )..layout())
+            .width;
+        final double chipTextWidth = (TextPainter(
+          text: TextSpan(text: statusLabel, style: statusStyle),
+          textDirection: direction,
+          textScaler: scaler,
+        )..layout())
+            .width;
+        final double chipWidth = chipTextWidth + _chipPadding.horizontal;
+
+        final bool fitsHorizontal = moneyWidth + _gap + chipWidth <= constraints.maxWidth;
+
+        if (fitsHorizontal) {
+          return Row(
+            key: const Key('goalHeroHorizontal'),
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Expanded(child: money),
+              const SizedBox(width: _gap),
+              chip,
+            ],
+          );
+        }
+
+        return Column(
+          key: const Key('goalHeroStacked'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            money,
+            const SizedBox(height: 8),
+            chip,
+          ],
+        );
+      },
     );
   }
 }

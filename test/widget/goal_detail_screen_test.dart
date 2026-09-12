@@ -227,4 +227,182 @@ void main() {
       fail('Narrow-screen (320px) goal detail layout threw an exception:\n\n$overflowException');
     }
   });
+
+  // CP5.4a: hero saved-amount/status-chip adaptive layout hardening.
+  // These are additive to the coverage above -- they don't re-check
+  // normal-regression persistence behavior (already covered by the
+  // tests above) or the unavailable-goal state; what's new here is
+  // narrow-width/large-text-scale robustness for `_GoalHeroAmountRow`,
+  // the `goalHeroHorizontal`/`goalHeroStacked` layout switch it
+  // introduces, and confirmation that the authoritative saved amount
+  // always renders in full regardless of which arrangement is chosen.
+
+  testWidgets(
+      'CP5.4a: an ordinary saved amount and status chip render side by side at normal width '
+      'and text scale', (tester) async {
+    final (AppDatabase db, String profileId) = await seededDb();
+    final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+    final String goalId = await goalRepo.createGoal(
+      profileId: profileId,
+      name: 'Emergency Fund',
+      targetAmount: Money.fromMinorUnits(200000, 'JPY'),
+    );
+    final SavingsGoalContributionRepository contributionRepo =
+        SavingsGoalContributionRepository(db, goalRepo);
+    await contributionRepo.addContribution(goalId: goalId, amount: Money.fromMinorUnits(80000, 'JPY'));
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithGoalDetail(container, goalId));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // At the test harness's default (non-narrow) surface size, the hero
+    // amount and status chip are guaranteed to fit side by side.
+    expect(find.byKey(const Key('goalHeroHorizontal')), findsOneWidget);
+    expect(find.byKey(const Key('goalHeroStacked')), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+      '\u00A580,000', // ¥80,000
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('goalHeroHorizontal')),
+        matching: find.text('In progress'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'CP5.4a: a large 0-decimal VND saved amount keeps every digit at a narrow 320px width '
+      'and a 1.6x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb();
+    final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+    final String goalId = await goalRepo.createGoal(
+      profileId: profileId,
+      name: 'Large VND Goal',
+      targetAmount: Money.fromMinorUnits(1999999998, 'VND'),
+    );
+    final SavingsGoalContributionRepository contributionRepo =
+        SavingsGoalContributionRepository(db, goalRepo);
+    await contributionRepo.addContribution(
+      goalId: goalId,
+      amount: Money.fromMinorUnits(999999999, 'VND'),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithGoalDetail(container, goalId));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // Deliberately not scoped to a specific goalHeroHorizontal/
+    // goalHeroStacked key here -- at this width/scale the layout may
+    // legitimately land in either branch; only that every digit of the
+    // saved amount survives intact is being asserted (the next test
+    // pins a specific branch, using a magnitude pre-measured to force
+    // it).
+    expect(
+      tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+      '\u20AB999,999,999', // ₫999,999,999
+    );
+  });
+
+  testWidgets(
+      'CP5.4a: the hero row switches to a stacked layout and keeps every digit of a large MMK '
+      'saved amount at a narrow 320px width and an extreme 2.0x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb();
+    final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+    final String goalId = await goalRepo.createGoal(
+      profileId: profileId,
+      name: 'Large MMK Goal',
+      targetAmount: Money.fromMinorUnits(2000000000, 'MMK'),
+    );
+    final SavingsGoalContributionRepository contributionRepo =
+        SavingsGoalContributionRepository(db, goalRepo);
+    await contributionRepo.addContribution(
+      goalId: goalId,
+      // K9,999,999.99 -- MMK has 2 minor units per `CurrencyRegistry`,
+      // not 0; this exact value was measured in a prior CP5.1/CP5.2a
+      // diagnostic run to exceed a narrow card's available width at
+      // 2.0x text scale against competing fixed-width content, so it's
+      // reused here -- alongside "In progress" (the default status for
+      // an under-target goal with no target date, and the longest of
+      // the three status labels) -- to reliably force the stacked
+      // branch rather than guessing a value.
+      amount: Money.fromMinorUnits(999999999, 'MMK'),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithGoalDetail(container, goalId));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('goalHeroStacked')), findsOneWidget);
+    expect(find.byKey(const Key('goalHeroHorizontal')), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+      'K9,999,999.99',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('goalHeroStacked')),
+        matching: find.text('In progress'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+      'CP5.4a: a 3-decimal KWD saved amount renders with its registry-defined precision, not 0, '
+      'in the hero row under normal width and text scale', (tester) async {
+    final (AppDatabase db, String profileId) = await seededDb();
+    final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+    final String goalId = await goalRepo.createGoal(
+      profileId: profileId,
+      name: 'KWD Precision Goal',
+      targetAmount: Money.fromMinorUnits(99999999, 'KWD'),
+    );
+    final SavingsGoalContributionRepository contributionRepo =
+        SavingsGoalContributionRepository(db, goalRepo);
+    await contributionRepo.addContribution(
+      goalId: goalId,
+      amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithGoalDetail(container, goalId));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+      '\u062F.\u064312,345.678', // د.ك12,345.678
+    );
+  });
 }
