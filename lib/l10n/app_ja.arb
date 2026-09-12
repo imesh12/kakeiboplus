@@ -78,5 +78,82 @@
   "addIncomeTitle": "収入を追加",
   "editExpenseTitle": "支出を編集",
   "editIncomeTitle": "収入を編集",
-  "editTransferTitle": "振替を編集"
+  "editTransferTitle": "振替を編集",
+  "homeGreeting": "{name}さん、こんにちは",
+  "@homeGreeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountsSectionTitle": "口座",
+  "manage": "管理",
+  "couldNotLoadBalances": "残高を読み込めませんでした: {error}",
+  "@couldNotLoadBalances": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addAccountToSeeBalance": "口座を追加すると、残高・収入・支出がここに表示されます。",
+  "noAccountsYetMessage": "口座がまだありません。追加して記録を始めましょう。",
+  "somethingWentWrong": "問題が発生しました: {error}",
+  "@somethingWentWrong": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "totalAvailableBalance": "利用可能残高の合計",
+  "incomeThisMonth": "今月の収入",
+  "spentThisMonth": "今月の支出",
+  "dailySpendingPace": "1日あたりの支出ペース",
+  "dailySpendingPaceDetail": "今月これまでの1日あたりの平均支出",
+  "remainingMonthlyBudget": "今月の残り予算",
+  "noBudgetSetMessage": "まだ今月の予算を設定していません。設定すると、使える残り金額がここに表示されます。",
+  "setMonthlyBudgetButton": "今月の予算を設定",
+  "budgetStatusOnTrack": "順調",
+  "budgetStatusAheadOfPace": "ペースより早い",
+  "budgetStatusOverBudget": "予算超過",
+  "budgetStatusThisMonth": "今月",
+  "ofAmount": "{amount}のうち",
+  "@ofAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "percentUsedLabel": "{percent}%使用",
+  "@percentUsedLabel": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "recommendedDailySpend": "おすすめ: 今月の残り期間は1日{amount}",
+  "@recommendedDailySpend": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "savingsGoalsTitle": "貯蓄目標",
+  "viewAll": "すべて表示",
+  "noSavingsGoalMessage": "まだ貯蓄目標を設定していません。",
+  "setSavingsGoalButton": "貯蓄目標を設定",
+  "allGoalsCompletedMessage": "すべての貯蓄目標を達成しました。",
+  "overdueLabel": "期限超過",
+  "goalStatusInProgress": "進行中",
+  "goalStatusCompleted": "達成",
+  "recurringTitle": "定期",
+  "noRecurringMessage": "定期的な支払いや収入がまだ設定されていません。",
+  "setUpRecurringButton": "定期を設定",
+  "recurringStatusDueToday": "今日が期限",
+  "recurringStatusUpcoming": "今後の予定"
 }

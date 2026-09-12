@@ -140,4 +140,121 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get editTransferTitle => '振替を編集';
+
+  @override
+  String homeGreeting(String name) {
+    return '$nameさん、こんにちは';
+  }
+
+  @override
+  String get accountsSectionTitle => '口座';
+
+  @override
+  String get manage => '管理';
+
+  @override
+  String couldNotLoadBalances(String error) {
+    return '残高を読み込めませんでした: $error';
+  }
+
+  @override
+  String get addAccountToSeeBalance => '口座を追加すると、残高・収入・支出がここに表示されます。';
+
+  @override
+  String get noAccountsYetMessage => '口座がまだありません。追加して記録を始めましょう。';
+
+  @override
+  String somethingWentWrong(String error) {
+    return '問題が発生しました: $error';
+  }
+
+  @override
+  String get totalAvailableBalance => '利用可能残高の合計';
+
+  @override
+  String get incomeThisMonth => '今月の収入';
+
+  @override
+  String get spentThisMonth => '今月の支出';
+
+  @override
+  String get dailySpendingPace => '1日あたりの支出ペース';
+
+  @override
+  String get dailySpendingPaceDetail => '今月これまでの1日あたりの平均支出';
+
+  @override
+  String get remainingMonthlyBudget => '今月の残り予算';
+
+  @override
+  String get noBudgetSetMessage => 'まだ今月の予算を設定していません。設定すると、使える残り金額がここに表示されます。';
+
+  @override
+  String get setMonthlyBudgetButton => '今月の予算を設定';
+
+  @override
+  String get budgetStatusOnTrack => '順調';
+
+  @override
+  String get budgetStatusAheadOfPace => 'ペースより早い';
+
+  @override
+  String get budgetStatusOverBudget => '予算超過';
+
+  @override
+  String get budgetStatusThisMonth => '今月';
+
+  @override
+  String ofAmount(String amount) {
+    return '$amountのうち';
+  }
+
+  @override
+  String percentUsedLabel(String percent) {
+    return '$percent%使用';
+  }
+
+  @override
+  String recommendedDailySpend(String amount) {
+    return 'おすすめ: 今月の残り期間は1日$amount';
+  }
+
+  @override
+  String get savingsGoalsTitle => '貯蓄目標';
+
+  @override
+  String get viewAll => 'すべて表示';
+
+  @override
+  String get noSavingsGoalMessage => 'まだ貯蓄目標を設定していません。';
+
+  @override
+  String get setSavingsGoalButton => '貯蓄目標を設定';
+
+  @override
+  String get allGoalsCompletedMessage => 'すべての貯蓄目標を達成しました。';
+
+  @override
+  String get overdueLabel => '期限超過';
+
+  @override
+  String get goalStatusInProgress => '進行中';
+
+  @override
+  String get goalStatusCompleted => '達成';
+
+  @override
+  String get recurringTitle => '定期';
+
+  @override
+  String get noRecurringMessage => '定期的な支払いや収入がまだ設定されていません。';
+
+  @override
+  String get setUpRecurringButton => '定期を設定';
+
+  @override
+  String get recurringStatusDueToday => '今日が期限';
+
+  @override
+  String get recurringStatusUpcoming => '今後の予定';
 }

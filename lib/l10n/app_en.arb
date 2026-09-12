@@ -78,5 +78,82 @@
   "addIncomeTitle": "Add income",
   "editExpenseTitle": "Edit expense",
   "editIncomeTitle": "Edit income",
-  "editTransferTitle": "Edit transfer"
+  "editTransferTitle": "Edit transfer",
+  "homeGreeting": "Hi, {name}",
+  "@homeGreeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountsSectionTitle": "Accounts",
+  "manage": "Manage",
+  "couldNotLoadBalances": "Could not load your balances: {error}",
+  "@couldNotLoadBalances": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addAccountToSeeBalance": "Add an account to see your balance, income, and spending here.",
+  "noAccountsYetMessage": "No accounts yet. Add one to start tracking.",
+  "somethingWentWrong": "Something went wrong: {error}",
+  "@somethingWentWrong": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "totalAvailableBalance": "Total available balance",
+  "incomeThisMonth": "Income this month",
+  "spentThisMonth": "Spent this month",
+  "dailySpendingPace": "Daily spending pace",
+  "dailySpendingPaceDetail": "Average spend per day so far this month",
+  "remainingMonthlyBudget": "Remaining monthly budget",
+  "noBudgetSetMessage": "You haven't set a monthly budget yet. Set one to see how much you have left to spend.",
+  "setMonthlyBudgetButton": "Set a monthly budget",
+  "budgetStatusOnTrack": "On track",
+  "budgetStatusAheadOfPace": "Ahead of pace",
+  "budgetStatusOverBudget": "Over budget",
+  "budgetStatusThisMonth": "This month",
+  "ofAmount": "of {amount}",
+  "@ofAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "percentUsedLabel": "{percent}% used",
+  "@percentUsedLabel": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "recommendedDailySpend": "Recommended: {amount} / day for the rest of the month",
+  "@recommendedDailySpend": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "savingsGoalsTitle": "Savings Goals",
+  "viewAll": "View all",
+  "noSavingsGoalMessage": "You haven't set a savings goal yet.",
+  "setSavingsGoalButton": "Set a savings goal",
+  "allGoalsCompletedMessage": "All your savings goals are completed.",
+  "overdueLabel": "Overdue",
+  "goalStatusInProgress": "In progress",
+  "goalStatusCompleted": "Completed",
+  "recurringTitle": "Recurring",
+  "noRecurringMessage": "No recurring bills or income set up yet.",
+  "setUpRecurringButton": "Set up recurring",
+  "recurringStatusDueToday": "Due today",
+  "recurringStatusUpcoming": "Upcoming"
 }

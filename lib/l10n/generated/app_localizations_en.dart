@@ -142,4 +142,126 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editTransferTitle => 'Edit transfer';
+
+  @override
+  String homeGreeting(String name) {
+    return 'Hi, $name';
+  }
+
+  @override
+  String get accountsSectionTitle => 'Accounts';
+
+  @override
+  String get manage => 'Manage';
+
+  @override
+  String couldNotLoadBalances(String error) {
+    return 'Could not load your balances: $error';
+  }
+
+  @override
+  String get addAccountToSeeBalance =>
+      'Add an account to see your balance, income, and spending here.';
+
+  @override
+  String get noAccountsYetMessage =>
+      'No accounts yet. Add one to start tracking.';
+
+  @override
+  String somethingWentWrong(String error) {
+    return 'Something went wrong: $error';
+  }
+
+  @override
+  String get totalAvailableBalance => 'Total available balance';
+
+  @override
+  String get incomeThisMonth => 'Income this month';
+
+  @override
+  String get spentThisMonth => 'Spent this month';
+
+  @override
+  String get dailySpendingPace => 'Daily spending pace';
+
+  @override
+  String get dailySpendingPaceDetail =>
+      'Average spend per day so far this month';
+
+  @override
+  String get remainingMonthlyBudget => 'Remaining monthly budget';
+
+  @override
+  String get noBudgetSetMessage =>
+      'You haven\'t set a monthly budget yet. Set one to see how much you have left to spend.';
+
+  @override
+  String get setMonthlyBudgetButton => 'Set a monthly budget';
+
+  @override
+  String get budgetStatusOnTrack => 'On track';
+
+  @override
+  String get budgetStatusAheadOfPace => 'Ahead of pace';
+
+  @override
+  String get budgetStatusOverBudget => 'Over budget';
+
+  @override
+  String get budgetStatusThisMonth => 'This month';
+
+  @override
+  String ofAmount(String amount) {
+    return 'of $amount';
+  }
+
+  @override
+  String percentUsedLabel(String percent) {
+    return '$percent% used';
+  }
+
+  @override
+  String recommendedDailySpend(String amount) {
+    return 'Recommended: $amount / day for the rest of the month';
+  }
+
+  @override
+  String get savingsGoalsTitle => 'Savings Goals';
+
+  @override
+  String get viewAll => 'View all';
+
+  @override
+  String get noSavingsGoalMessage => 'You haven\'t set a savings goal yet.';
+
+  @override
+  String get setSavingsGoalButton => 'Set a savings goal';
+
+  @override
+  String get allGoalsCompletedMessage =>
+      'All your savings goals are completed.';
+
+  @override
+  String get overdueLabel => 'Overdue';
+
+  @override
+  String get goalStatusInProgress => 'In progress';
+
+  @override
+  String get goalStatusCompleted => 'Completed';
+
+  @override
+  String get recurringTitle => 'Recurring';
+
+  @override
+  String get noRecurringMessage => 'No recurring bills or income set up yet.';
+
+  @override
+  String get setUpRecurringButton => 'Set up recurring';
+
+  @override
+  String get recurringStatusDueToday => 'Due today';
+
+  @override
+  String get recurringStatusUpcoming => 'Upcoming';
 }

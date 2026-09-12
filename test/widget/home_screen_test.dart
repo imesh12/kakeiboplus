@@ -12,6 +12,7 @@ import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
 import 'package:ai_financial_coach/features/dashboard/presentation/home_screen.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequency.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -79,10 +80,27 @@ void main() {
   /// placeholder-route harness `add_transaction_screen_test.dart` uses.
   // CP5.6: `{bool rtl = false}` threads an RTL `Directionality` through
   // `MaterialApp`'s own `builder:` -- see `test/support/rtl_harness.dart`.
-  Widget appWithHome(ProviderContainer container, {bool rtl = false}) {
+  // CP6.3: `HomeScreen` now reads `AppLocalizations.of(context)`, so this
+  // harness needs the same localization wiring already established in
+  // `add_transaction_screen_test.dart`'s `appWithPushedScreen()` and
+  // `app_shell_test.dart`'s `buildApp()` -- `{Locale locale = const
+  // Locale('en')}` keeps every pre-existing English test passing
+  // unchanged, while the new Japanese-proof tests pass `locale: const
+  // Locale('ja')`.
+  Widget appWithHome(
+    ProviderContainer container, {
+    bool rtl = false,
+    Locale locale = const Locale('en'),
+  }) {
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(home: const HomeScreen(), builder: rtl ? rtlAppBuilder : null),
+      child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const HomeScreen(),
+        builder: rtl ? rtlAppBuilder : null,
+      ),
     );
   }
 
@@ -94,7 +112,9 @@ void main() {
   /// `BudgetsScreen` -- these tests are about *HomeScreen* triggering
   /// navigation, not about what the budgets screen itself renders (that
   /// belongs to `test/widget/budgets_screen_test.dart`).
-  Widget appWithRouter(ProviderContainer container) {
+  // CP6.3: same localization wiring as `appWithHome` above -- see its
+  // comment for why.
+  Widget appWithRouter(ProviderContainer container, {Locale locale = const Locale('en')}) {
     final GoRouter router = GoRouter(
       initialLocation: '/home',
       routes: <RouteBase>[
@@ -115,7 +135,12 @@ void main() {
     );
     return UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     );
   }
 
@@ -1371,6 +1396,238 @@ void main() {
       closeTo(rowRight, 1.0),
       reason: "expected the balance to hug the stacked tile's reading-start edge "
           "(the tile's right edge under RTL), matching the account name above it",
+    );
+  });
+
+  // ============================================================
+  // CP6.3 (Localization Phase 1, Home Dashboard): exercises the REAL
+  // `HomeScreen` under a real Japanese locale -- same pattern
+  // established in CP6.1 (`app_shell_test.dart`) and CP6.2
+  // (`add_transaction_screen_test.dart`). Every existing test above
+  // this point keeps its default `locale: const Locale('en')`, so all
+  // pre-existing English assertions are unaffected by this section.
+  // ============================================================
+
+  group('CP6.3 Japanese localization', () {
+    testWidgets(
+      'A: standard Japanese Home -- principal labels render in Japanese, no render exceptions',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('ホーム'), findsOneWidget); // AppBar title (reuses navHome)
+        expect(find.text('Test Userさん、こんにちは'), findsOneWidget); // greeting placeholder
+        expect(find.text('口座'), findsOneWidget); // Accounts section heading
+        expect(find.text('管理'), findsOneWidget); // Accounts section "Manage" button
+        expect(find.text('利用可能残高の合計'), findsOneWidget);
+        expect(find.text('今月の収入'), findsOneWidget);
+        expect(find.text('今月の支出'), findsOneWidget);
+        expect(find.text('1日あたりの支出ペース'), findsOneWidget);
+        expect(find.text('今月の残り予算'), findsOneWidget); // budget card title, empty state
+        expect(find.text('貯蓄目標'), findsOneWidget); // savings goals card title, empty state
+        expect(find.text('定期'), findsOneWidget); // recurring card title, empty state
+      },
+    );
+
+    testWidgets(
+      'B: Japanese Home renders the full KWD (3-decimal) remaining-budget figure alongside '
+      'localized descriptive text, with no exceptions and no clipped digits',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'KWD',
+          home: 'KWD',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD')],
+        );
+        final ProfileRow? profile = await ProfileRepository(db).getProfile();
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profile!.id,
+          month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+          amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Every digit of the KWD remaining amount still renders in full --
+        // the localized descriptive text never forces the money to
+        // shrink, clip, or ellipsize (same CP5.1 guarantee, now checked
+        // together with Japanese labels for the first time).
+        expect(find.text('د.ك12,345.678'), findsOneWidget);
+        expect(find.text('د.ك12,345.678のうち'), findsOneWidget); // localized "of <budgeted>"
+        expect(find.textContaining('%使用'), findsOneWidget); // localized "<percent>% used"
+        expect(find.text('今月の残り予算'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'C: Japanese Home at 1.6x text scale -- principal dashboard content remains renderable, '
+      'no overflow/render exceptions',
+      (tester) async {
+        useTallSurface(tester);
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'LKR',
+          accounts: <_SeedAccount>[
+            const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY'),
+            const _SeedAccount(name: 'LKR Wallet', currencyCode: 'LKR'),
+          ],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('生活通貨'), findsOneWidget); // livingCurrency badge (reused key)
+        expect(find.text('基準通貨'), findsOneWidget); // homeCurrency badge (reused key)
+        expect(find.text('今月の収入'), findsWidgets); // one per currency card
+        expect(find.text('今月の支出'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'D: Japanese Home at 2.0x text scale -- budget and savings goal sections remain '
+      'usable/readable, no overflow/render exceptions',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 2600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProfileRow? profile = await ProfileRepository(db).getProfile();
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profile!.id,
+          month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+          amount: Money.fromMinorUnits(120000, 'JPY'),
+        );
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        // A Japanese, user-entered goal name -- never translated by the
+        // app (classification B: user/database content), included here to
+        // also confirm it renders untouched alongside the localized UI
+        // copy around it.
+        final String goalId = await goalRepo.createGoal(
+          // `flutter analyze` flags a second `profile!.id` here as an
+          // unnecessary_non_null_assertion: `profile` is promoted to
+          // non-nullable after the `setOverallBudget` call above already
+          // asserted it non-null, and it's never reassigned in between.
+          profileId: profile.id,
+          name: '緊急資金',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        await SavingsGoalContributionRepository(db, goalRepo).addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(30000, 'JPY'),
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('今月の残り予算'), findsOneWidget);
+        expect(find.byKey(const Key('budgetStatusChip')), findsOneWidget);
+        expect(find.text('貯蓄目標'), findsOneWidget);
+        expect(find.text('緊急資金'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'E: Japanese Home at 320px width with enlarged text keeps every digit of a large MMK '
+      'remaining amount, stacking it below its localized "of <budgeted>" line',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final AppDatabase db = await seededDb(
+          living: 'MMK',
+          home: 'MMK',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'MMK Wallet', currencyCode: 'MMK')],
+        );
+        final ProfileRow? profile = await ProfileRepository(db).getProfile();
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profile!.id,
+          month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+          amount: Money.fromMinorUnits(999999999, 'MMK'), // K9,999,999.99
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('K9,999,999.99'), findsOneWidget);
+        expect(find.text('K9,999,999.99のうち'), findsOneWidget);
+        expect(find.byKey(const Key('budgetAmountStacked')), findsOneWidget);
+        expect(find.byKey(const Key('budgetAmountSideBySide')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'F: navigation regression -- tapping the localized budget call-to-action still routes '
+      'to the budgets screen under the Japanese locale',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+        await tester.pumpAndSettle();
+
+        final Finder ctaFinder = find.widgetWithText(OutlinedButton, '今月の予算を設定');
+        expect(ctaFinder, findsOneWidget);
+
+        await tester.tap(ctaFinder);
+        await tester.pumpAndSettle();
+        expect(find.text('BUDGETS_SCREEN_STUB'), findsOneWidget);
+      },
     );
   });
 }

@@ -343,6 +343,216 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Edit transfer'**
   String get editTransferTitle;
+
+  /// No description provided for @homeGreeting.
+  ///
+  /// In en, this message translates to:
+  /// **'Hi, {name}'**
+  String homeGreeting(String name);
+
+  /// No description provided for @accountsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get accountsSectionTitle;
+
+  /// No description provided for @manage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get manage;
+
+  /// No description provided for @couldNotLoadBalances.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your balances: {error}'**
+  String couldNotLoadBalances(String error);
+
+  /// No description provided for @addAccountToSeeBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an account to see your balance, income, and spending here.'**
+  String get addAccountToSeeBalance;
+
+  /// No description provided for @noAccountsYetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No accounts yet. Add one to start tracking.'**
+  String get noAccountsYetMessage;
+
+  /// No description provided for @somethingWentWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong: {error}'**
+  String somethingWentWrong(String error);
+
+  /// No description provided for @totalAvailableBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Total available balance'**
+  String get totalAvailableBalance;
+
+  /// No description provided for @incomeThisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Income this month'**
+  String get incomeThisMonth;
+
+  /// No description provided for @spentThisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Spent this month'**
+  String get spentThisMonth;
+
+  /// No description provided for @dailySpendingPace.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily spending pace'**
+  String get dailySpendingPace;
+
+  /// No description provided for @dailySpendingPaceDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Average spend per day so far this month'**
+  String get dailySpendingPaceDetail;
+
+  /// No description provided for @remainingMonthlyBudget.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining monthly budget'**
+  String get remainingMonthlyBudget;
+
+  /// No description provided for @noBudgetSetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t set a monthly budget yet. Set one to see how much you have left to spend.'**
+  String get noBudgetSetMessage;
+
+  /// No description provided for @setMonthlyBudgetButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a monthly budget'**
+  String get setMonthlyBudgetButton;
+
+  /// No description provided for @budgetStatusOnTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'On track'**
+  String get budgetStatusOnTrack;
+
+  /// No description provided for @budgetStatusAheadOfPace.
+  ///
+  /// In en, this message translates to:
+  /// **'Ahead of pace'**
+  String get budgetStatusAheadOfPace;
+
+  /// No description provided for @budgetStatusOverBudget.
+  ///
+  /// In en, this message translates to:
+  /// **'Over budget'**
+  String get budgetStatusOverBudget;
+
+  /// No description provided for @budgetStatusThisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'This month'**
+  String get budgetStatusThisMonth;
+
+  /// No description provided for @ofAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'of {amount}'**
+  String ofAmount(String amount);
+
+  /// No description provided for @percentUsedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% used'**
+  String percentUsedLabel(String percent);
+
+  /// No description provided for @recommendedDailySpend.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended: {amount} / day for the rest of the month'**
+  String recommendedDailySpend(String amount);
+
+  /// No description provided for @savingsGoalsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Savings Goals'**
+  String get savingsGoalsTitle;
+
+  /// No description provided for @viewAll.
+  ///
+  /// In en, this message translates to:
+  /// **'View all'**
+  String get viewAll;
+
+  /// No description provided for @noSavingsGoalMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t set a savings goal yet.'**
+  String get noSavingsGoalMessage;
+
+  /// No description provided for @setSavingsGoalButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a savings goal'**
+  String get setSavingsGoalButton;
+
+  /// No description provided for @allGoalsCompletedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'All your savings goals are completed.'**
+  String get allGoalsCompletedMessage;
+
+  /// No description provided for @overdueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get overdueLabel;
+
+  /// No description provided for @goalStatusInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get goalStatusInProgress;
+
+  /// No description provided for @goalStatusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get goalStatusCompleted;
+
+  /// No description provided for @recurringTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring'**
+  String get recurringTitle;
+
+  /// No description provided for @noRecurringMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No recurring bills or income set up yet.'**
+  String get noRecurringMessage;
+
+  /// No description provided for @setUpRecurringButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up recurring'**
+  String get setUpRecurringButton;
+
+  /// No description provided for @recurringStatusDueToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Due today'**
+  String get recurringStatusDueToday;
+
+  /// No description provided for @recurringStatusUpcoming.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming'**
+  String get recurringStatusUpcoming;
 }
 
 class _AppLocalizationsDelegate

@@ -7,6 +7,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../budgets/domain/budget_calculation.dart';
 import '../../budgets/domain/budget_status.dart';
@@ -45,12 +46,14 @@ class HomeScreen extends ConsumerWidget {
     final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
     final AsyncValue<List<CurrencyDashboardSummary>> summariesAsync =
         ref.watch(dashboardCurrencySummariesProvider);
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
+      appBar: AppBar(title: Text(l10n.navHome)),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) => Center(child: Text('Something went wrong: $e')),
+        error: (Object e, StackTrace st) =>
+            Center(child: Text(l10n.somethingWentWrong(e.toString()))),
         data: (ProfileRow? profile) {
           if (profile == null) {
             // Router redirect should prevent this, but keep the screen
@@ -66,7 +69,7 @@ class HomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
               children: <Widget>[
                 Text(
-                  'Hi, ${profile.displayName}',
+                  l10n.homeGreeting(profile.displayName),
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 20),
@@ -96,7 +99,7 @@ class HomeScreen extends ConsumerWidget {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        'Accounts',
+                        l10n.accountsSectionTitle,
                         style: Theme.of(context).textTheme.titleMedium,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -104,7 +107,7 @@ class HomeScreen extends ConsumerWidget {
                     ),
                     TextButton(
                       onPressed: () => context.push(AppRoutes.accounts),
-                      child: const Text('Manage'),
+                      child: Text(l10n.manage),
                     ),
                   ],
                 ),
@@ -114,12 +117,13 @@ class HomeScreen extends ConsumerWidget {
                     padding: EdgeInsets.symmetric(vertical: 16),
                     child: Center(child: CircularProgressIndicator()),
                   ),
-                  error: (Object e, StackTrace st) => Text('Could not load accounts: $e'),
+                  error: (Object e, StackTrace st) =>
+                      Text(l10n.couldNotLoadAccounts(e.toString())),
                   data: (List<AccountRow> accounts) {
                     if (accounts.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text('No accounts yet. Add one to start tracking.'),
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(l10n.noAccountsYetMessage),
                       );
                     }
                     return Column(
@@ -156,15 +160,20 @@ class _CurrencySummarySection extends StatelessWidget {
   final String livingCurrency;
   final String homeCurrency;
 
-  String? _badgeFor(CurrencyDashboardSummary summary) {
-    if (summary.currencyCode == livingCurrency) return 'Living currency';
-    if (summary.currencyCode == homeCurrency) return 'Home currency';
+  // CP6.3: reuses the existing `livingCurrency`/`homeCurrency` ARB keys
+  // (already used as field labels on the International Preferences
+  // screen) rather than adding near-duplicate ones -- both contexts mean
+  // exactly the same thing: "this is the profile's living/home currency".
+  String? _badgeFor(AppLocalizations l10n, CurrencyDashboardSummary summary) {
+    if (summary.currencyCode == livingCurrency) return l10n.livingCurrency;
+    if (summary.currencyCode == homeCurrency) return l10n.homeCurrency;
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return summariesAsync.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
@@ -173,7 +182,7 @@ class _CurrencySummarySection extends StatelessWidget {
       error: (Object e, StackTrace st) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('Could not load your balances: $e'),
+          child: Text(l10n.couldNotLoadBalances(e.toString())),
         ),
       ),
       data: (List<CurrencyDashboardSummary> summaries) {
@@ -188,8 +197,8 @@ class _CurrencySummarySection extends StatelessWidget {
                 children: <Widget>[
                   Icon(Icons.account_balance_wallet_outlined, color: colors.primary),
                   const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text('Add an account to see your balance, income, and spending here.'),
+                  Expanded(
+                    child: Text(l10n.addAccountToSeeBalance),
                   ),
                 ],
               ),
@@ -200,11 +209,11 @@ class _CurrencySummarySection extends StatelessWidget {
         final List<CurrencyDashboardSummary> secondary = summaries.skip(1).toList();
         return Column(
           children: <Widget>[
-            _HeroCurrencyCard(summary: primary, badge: _badgeFor(primary)),
+            _HeroCurrencyCard(summary: primary, badge: _badgeFor(l10n, primary)),
             for (final CurrencyDashboardSummary summary in secondary)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: _SecondaryCurrencyCard(summary: summary, badge: _badgeFor(summary)),
+                child: _SecondaryCurrencyCard(summary: summary, badge: _badgeFor(l10n, summary)),
               ),
           ],
         );
@@ -262,6 +271,7 @@ class _HeroCurrencyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool isNegative = summary.balance.isNegative;
 
     return Stack(
@@ -337,7 +347,7 @@ class _HeroCurrencyCard extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  'Total available balance',
+                  l10n.totalAvailableBalance,
                   style: text.bodyMedium?.copyWith(color: colors.onPrimaryContainer),
                 ),
                 const SizedBox(height: 18),
@@ -368,6 +378,7 @@ class _SecondaryCurrencyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool isNegative = summary.balance.isNegative;
 
     return Card(
@@ -416,7 +427,7 @@ class _SecondaryCurrencyCard extends StatelessWidget {
                 ),
               ],
             ),
-            Text('Total available balance', style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            Text(l10n.totalAvailableBalance, style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
             const SizedBox(height: 12),
             _MonthlyMetricsSection(summary: summary, emphasize: false),
           ],
@@ -449,6 +460,7 @@ class _MonthlyMetricsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final TextStyle? valueStyle = (emphasize ? textTheme.titleLarge : textTheme.titleMedium)
         ?.copyWith(fontWeight: FontWeight.w700, color: tint);
     final TextStyle? labelStyle = textTheme.bodySmall?.copyWith(
@@ -458,7 +470,7 @@ class _MonthlyMetricsSection extends StatelessWidget {
     final Widget incomeTile = _MetricTile(
       icon: Icons.trending_up_rounded,
       iconColor: tint ?? colors.primary,
-      label: 'Income this month',
+      label: l10n.incomeThisMonth,
       value: summary.income,
       valueStyle: valueStyle,
       labelStyle: labelStyle,
@@ -466,7 +478,7 @@ class _MonthlyMetricsSection extends StatelessWidget {
     final Widget spendTile = _MetricTile(
       icon: Icons.trending_down_rounded,
       iconColor: tint ?? colors.error,
-      label: 'Spent this month',
+      label: l10n.spentThisMonth,
       value: summary.expense,
       valueStyle: valueStyle,
       labelStyle: labelStyle,
@@ -505,8 +517,8 @@ class _MonthlyMetricsSection extends StatelessWidget {
             _MetricTile(
               icon: Icons.calendar_today_rounded,
               iconColor: tint ?? colors.tertiary,
-              label: 'Daily spending pace',
-              secondaryLabel: 'Average spend per day so far this month',
+              label: l10n.dailySpendingPace,
+              secondaryLabel: l10n.dailySpendingPaceDetail,
               value: summary.dailyPace,
               valueStyle: valueStyle,
               labelStyle: labelStyle,
@@ -595,6 +607,7 @@ class _BudgetCard extends ConsumerWidget {
     final MonthlyBudgetSummary budget = ref.watch(monthlyBudgetSummaryProvider);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final BudgetCalculation? calculation = budget.calculation;
 
     return Card(
@@ -612,7 +625,7 @@ class _BudgetCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Remaining monthly budget',
+                    l10n.remainingMonthlyBudget,
                     style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -621,21 +634,21 @@ class _BudgetCard extends ConsumerWidget {
                   TextButton(
                     key: const Key('manageBudgetsButton'),
                     onPressed: () => context.push(AppRoutes.budgets),
-                    child: const Text('Manage'),
+                    child: Text(l10n.manage),
                   ),
               ],
             ),
             const SizedBox(height: 10),
             if (calculation == null) ...<Widget>[
               Text(
-                "You haven't set a monthly budget yet. Set one to see how much you have left to spend.",
+                l10n.noBudgetSetMessage,
                 style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () => context.push(AppRoutes.budgets),
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Set a monthly budget'),
+                label: Text(l10n.setMonthlyBudgetButton),
               ),
             ] else
               _ConfiguredBudget(calculation: calculation),
@@ -781,6 +794,7 @@ class _ConfiguredBudget extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     final Money remaining = calculation.remaining;
     final Money budgeted = calculation.budgeted;
@@ -795,10 +809,10 @@ class _ConfiguredBudget extends StatelessWidget {
     final int percentUsed = (ratio * 100).round();
 
     final (Color statusColor, String statusLabel) = switch (status) {
-      BudgetStatus.healthy => (colors.primary, 'On track'),
-      BudgetStatus.caution => (colors.tertiary, 'Ahead of pace'),
-      BudgetStatus.overBudget => (colors.error, 'Over budget'),
-      null => (colors.onSurfaceVariant, 'This month'),
+      BudgetStatus.healthy => (colors.primary, l10n.budgetStatusOnTrack),
+      BudgetStatus.caution => (colors.tertiary, l10n.budgetStatusAheadOfPace),
+      BudgetStatus.overBudget => (colors.error, l10n.budgetStatusOverBudget),
+      null => (colors.onSurfaceVariant, l10n.budgetStatusThisMonth),
     };
 
     return Column(
@@ -817,7 +831,7 @@ class _ConfiguredBudget extends StatelessWidget {
             fontWeight: FontWeight.bold,
             color: remaining.isNegative ? colors.error : null,
           ),
-          secondaryText: 'of ${_formatter.format(budgeted)}',
+          secondaryText: l10n.ofAmount(_formatter.format(budgeted)),
           secondaryStyle: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
@@ -863,7 +877,7 @@ class _ConfiguredBudget extends StatelessWidget {
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                '$percentUsed% used',
+                l10n.percentUsedLabel('$percentUsed'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.right,
@@ -875,8 +889,7 @@ class _ConfiguredBudget extends StatelessWidget {
         if (calculation.dailyRecommendedSpend != null) ...<Widget>[
           const SizedBox(height: 10),
           Text(
-            'Recommended: ${_formatter.format(calculation.dailyRecommendedSpend!)} / day '
-            'for the rest of the month',
+            l10n.recommendedDailySpend(_formatter.format(calculation.dailyRecommendedSpend!)),
             style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
           ),
         ],
@@ -900,6 +913,7 @@ class _SavingsGoalsCard extends ConsumerWidget {
     final AsyncValue<GoalHomeSelection> selectionAsync = ref.watch(homeGoalSelectionProvider);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final GoalHomeSelection? selection = selectionAsync.valueOrNull;
 
     return Card(
@@ -917,7 +931,7 @@ class _SavingsGoalsCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Savings Goals',
+                    l10n.savingsGoalsTitle,
                     style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -926,7 +940,7 @@ class _SavingsGoalsCard extends ConsumerWidget {
                   TextButton(
                     key: const Key('viewAllGoalsButton'),
                     onPressed: () => context.push(AppRoutes.goals),
-                    child: const Text('View all'),
+                    child: Text(l10n.viewAll),
                   ),
               ],
             ),
@@ -940,7 +954,7 @@ class _SavingsGoalsCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      "You haven't set a savings goal yet.",
+                      l10n.noSavingsGoalMessage,
                       style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
                     ),
                     const SizedBox(height: 12),
@@ -948,12 +962,12 @@ class _SavingsGoalsCard extends ConsumerWidget {
                       key: const Key('setSavingsGoalButton'),
                       onPressed: () => context.push(AppRoutes.goals),
                       icon: const Icon(Icons.add_rounded),
-                      label: const Text('Set a savings goal'),
+                      label: Text(l10n.setSavingsGoalButton),
                     ),
                   ],
                 ),
               GoalHomeSelectionKind.allCompleted => Text(
-                  'All your savings goals are completed.',
+                  l10n.allGoalsCompletedMessage,
                   style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
                 ),
               GoalHomeSelectionKind.priorityGoal => _PriorityGoalSummary(summary: selection!.summary!),
@@ -980,12 +994,13 @@ class _PriorityGoalSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final SavingsGoalCalculation calc = summary.calculation;
 
     final (Color statusColor, String statusLabel) = switch (calc.status) {
-      SavingsGoalStatus.overdue => (colors.error, 'Overdue'),
-      SavingsGoalStatus.inProgress => (colors.primary, 'In progress'),
-      SavingsGoalStatus.completed => (colors.primary, 'Completed'), // not reached via this card
+      SavingsGoalStatus.overdue => (colors.error, l10n.overdueLabel),
+      SavingsGoalStatus.inProgress => (colors.primary, l10n.goalStatusInProgress),
+      SavingsGoalStatus.completed => (colors.primary, l10n.goalStatusCompleted), // not reached via this card
     };
 
     final double ratio =
@@ -1002,7 +1017,7 @@ class _PriorityGoalSummary extends StatelessWidget {
           keyPrefix: 'goalAmount',
           primaryText: _formatter.format(calc.saved),
           primaryStyle: text.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-          secondaryText: 'of ${_formatter.format(calc.target)}',
+          secondaryText: l10n.ofAmount(_formatter.format(calc.target)),
           secondaryStyle: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
@@ -1081,6 +1096,7 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
         ref.watch(homeRecurringSelectionProvider);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final RecurringHomeSelection? selection = selectionAsync.valueOrNull;
 
     return Card(
@@ -1098,7 +1114,7 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Recurring',
+                    l10n.recurringTitle,
                     style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1107,7 +1123,7 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
                   TextButton(
                     key: const Key('viewAllRecurringButton'),
                     onPressed: () => context.push(AppRoutes.recurring),
-                    child: const Text('View all'),
+                    child: Text(l10n.viewAll),
                   ),
               ],
             ),
@@ -1121,7 +1137,7 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'No recurring bills or income set up yet.',
+                      l10n.noRecurringMessage,
                       style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
                     ),
                     const SizedBox(height: 12),
@@ -1129,7 +1145,7 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
                       key: const Key('setRecurringRuleButton'),
                       onPressed: () => context.push(AppRoutes.recurring),
                       icon: const Icon(Icons.add_rounded),
-                      label: const Text('Set up recurring'),
+                      label: Text(l10n.setUpRecurringButton),
                     ),
                   ],
                 ),
@@ -1155,12 +1171,13 @@ class _RecurringItemSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final RecurringRuleRow rule = item.rule;
 
     final (Color urgencyColor, String urgencyLabel) = switch (item.urgency) {
-      RecurringItemUrgency.overdue => (colors.error, 'Overdue'),
-      RecurringItemUrgency.dueToday => (colors.primary, 'Due today'),
-      RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, 'Upcoming'),
+      RecurringItemUrgency.overdue => (colors.error, l10n.overdueLabel),
+      RecurringItemUrgency.dueToday => (colors.primary, l10n.recurringStatusDueToday),
+      RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, l10n.recurringStatusUpcoming),
     };
     final IconData kindIcon = switch (RecurringRuleKind.values.byName(rule.kind)) {
       RecurringRuleKind.expense => Icons.arrow_upward_rounded,
