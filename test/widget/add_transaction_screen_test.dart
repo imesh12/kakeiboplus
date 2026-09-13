@@ -1183,19 +1183,26 @@ void main() {
 
   // -----------------------------------------------------------------------
   // Visual System Convergence Checkpoint 7.7: locks in the Account/Category
-  // section's and the Amount field's new bordered-card visual treatment
-  // (`AppCard(bordered: true)`) via the same shape/side/color contract
-  // `app_card_test.dart`/`goal_detail_screen_test.dart` (CP7.4) already
-  // assert for `AppCard` -- never a pixel value. This screen is shared by
-  // Add and Edit (see `AddTransactionScreen`'s own doc comment -- Edit
-  // reaches it via `EditTransactionScreen`), so this test doubles as Edit
-  // Transaction's own visual regression coverage; `edit_transaction_screen_
-  // test.dart` deliberately does not re-test this screen's own rendering
-  // (see that file's header comment).
+  // section's bordered-card visual treatment (`AppCard(bordered: true)`)
+  // via the same shape/side/color contract `app_card_test.dart`/
+  // `goal_detail_screen_test.dart` (CP7.4) already assert for `AppCard` --
+  // never a pixel value. This screen is shared by Add and Edit (see
+  // `AddTransactionScreen`'s own doc comment -- Edit reaches it via
+  // `EditTransactionScreen`), so this test doubles as Edit Transaction's
+  // own visual regression coverage; `edit_transaction_screen_test.dart`
+  // deliberately does not re-test this screen's own rendering (see that
+  // file's header comment).
+  //
+  // CP7.8 follow-up: this test originally covered the Amount field's card
+  // too, but CP7.8 removed that one card's outer border (see
+  // `add_transaction_screen.dart`'s Amount section comment) after finding
+  // it drew a second, same-colored border immediately outside
+  // `MoneyTextField`'s own themed input outline. The Amount field's
+  // (corrected) contract is covered by its own CP7.8 test below instead.
   // -----------------------------------------------------------------------
   testWidgets(
-      'CP7.7: the Account/Category section and the Amount field each render inside a '
-      'bordered, near-white card matching the converged visual system', (tester) async {
+      'CP7.7: the Account/Category section renders inside a bordered, near-white card '
+      'matching the converged visual system', (tester) async {
     final AppDatabase db = await seededDb();
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
@@ -1212,22 +1219,67 @@ void main() {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final AppTokens tokens = context.appTokens;
 
-    void expectBorderedCard(Finder anchor) {
-      final Card cardWidget = tester.widget<Card>(
-        find.ancestor(of: anchor, matching: find.byType(Card)).first,
-      );
-      expect(cardWidget.color, colors.surface);
-      expect(cardWidget.elevation, 0);
-      final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
-      expect(shape.side.color, tokens.colors.subtleBorder);
-    }
-
     // The account dropdown defaults to the first seeded account (JPY
     // Wallet) -- same display string ("Name (CURRENCY)") the account
     // dropdown's own existing tests already key off.
-    expectBorderedCard(
-      find.widgetWithText(DropdownButtonFormField<String>, 'JPY Wallet (JPY)'),
+    final Card cardWidget = tester.widget<Card>(
+      find
+          .ancestor(
+            of: find.widgetWithText(DropdownButtonFormField<String>, 'JPY Wallet (JPY)'),
+            matching: find.byType(Card),
+          )
+          .first,
     );
-    expectBorderedCard(find.byType(MoneyTextField));
+    expect(cardWidget.color, colors.surface);
+    expect(cardWidget.elevation, 0);
+    final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+    expect(shape.side.color, tokens.colors.subtleBorder);
+  });
+
+  // -----------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.8: the Amount field's card is a
+  // flat, near-white surface at the same `radii.large` corner radius as
+  // before, but -- unlike the Account/Category and Note/Date sections --
+  // draws no border of its own. `MoneyTextField`'s inner `TextFormField`
+  // already renders its own themed `OutlineInputBorder` (see
+  // `app_theme.dart`'s `inputDecorationTheme`); wrapping it in a second,
+  // same-colored `subtleBorder` outline at a different corner radius
+  // (CP7.7's original `AppCard(bordered: true, radius: radii.large)`)
+  // produced a visibly redundant "double border" specifically here,
+  // because this card holds a single field at much tighter (8) padding
+  // and a much larger radius mismatch (20 vs. the field's own 8) than the
+  // Account/Category card, which made the nesting obvious rather than
+  // incidental. See `add_transaction_screen.dart`'s Amount section
+  // comment for the fix itself.
+  // -----------------------------------------------------------------------
+  testWidgets(
+      'CP7.8: the Amount field renders inside a flat, near-white card with no border of '
+      "its own, so it doesn't double up with MoneyTextField's own input outline", (tester) async {
+    final AppDatabase db = await seededDb();
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(
+      appWithPushedScreen(container, const AddTransactionScreen(initialType: 'expense')),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final BuildContext context = tester.element(find.byType(MoneyTextField));
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    final Card cardWidget = tester.widget<Card>(
+      find.ancestor(of: find.byType(MoneyTextField), matching: find.byType(Card)).first,
+    );
+    expect(cardWidget.color, colors.surface);
+    expect(cardWidget.elevation, 0);
+    final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+    // No border of its own -- MoneyTextField's own themed
+    // OutlineInputBorder is the only border the Amount field shows (see
+    // the class-level comment above for why the CP7.7 outer border was
+    // removed).
+    expect(shape.side.style, BorderStyle.none);
   });
 }

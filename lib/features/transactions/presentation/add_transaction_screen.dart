@@ -53,6 +53,16 @@ import '../../../l10n/generated/app_localizations.dart';
 /// design (see above), add mode picks up the exact same visual refresh as
 /// a byproduct -- every field, provider/repository call, and validation
 /// path is unchanged either way.
+///
+/// Visual System Convergence Checkpoint 7.8 (Add Transaction final
+/// convergence audit) found one genuine remaining gap from CP7.7: giving
+/// the Amount section's `AppCard` the same `bordered: true` treatment as
+/// every other section drew a second, same-colored `subtleBorder` outline
+/// immediately outside `MoneyTextField`'s own themed input outline --
+/// visibly redundant specifically there (see the Amount section's own
+/// comment below for why this one call site is different from Account/
+/// Category's). CP7.8 removed only that one outer border -- no other
+/// section, and no shared primitive, changed.
 class AddTransactionScreen extends ConsumerStatefulWidget {
   const AddTransactionScreen({super.key, this.initialType, this.existingTransaction});
 
@@ -282,18 +292,32 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 
                   // B. Amount emphasis -- the exact same MoneyTextField
                   // widget, callbacks, and position relative to the
-                  // other fields. Checkpoint 7.7 replaces the previous ad
-                  // hoc alpha-tinted `Container` backdrop with the same
-                  // bordered `AppCard` treatment the rest of this form (and
-                  // the rest of the converged app) uses, at the larger
-                  // `radii.large` corner radius `AppCard`'s own doc comment
-                  // documents for a hero-style emphasis card -- still a
-                  // flat, restrained, white/bordered surface, not a change
-                  // to the field itself or its position relative to the
-                  // other sections.
+                  // other fields. Checkpoint 7.7 replaced the previous ad
+                  // hoc alpha-tinted `Container` backdrop with a bordered
+                  // `AppCard` at the larger `radii.large` corner radius
+                  // `AppCard`'s own doc comment documents for a hero-style
+                  // emphasis card.
+                  //
+                  // Checkpoint 7.8: that `bordered: true` outline is
+                  // removed again here (an explicit `color: colors.surface`
+                  // keeps the same flat, near-white fill and large radius
+                  // for hierarchy) because it drew a second `subtleBorder`
+                  // outline immediately outside `MoneyTextField`'s own
+                  // themed `OutlineInputBorder` -- same color, 8dp apart,
+                  // at a visibly mismatched radius (20 vs. the field's own
+                  // 8). This card holds exactly one field at tight (8)
+                  // padding, unlike Account/Category's multi-field, more
+                  // generously padded (16) card, where the same
+                  // dropdown-inside-bordered-card pattern reads as an
+                  // ordinary grouped section rather than a doubled
+                  // outline -- so only this one call site drops its own
+                  // border; every other section's `AppCard(bordered:
+                  // true)` is unchanged, and `MoneyTextField` itself is
+                  // unchanged (still used unmodified everywhere else, e.g.
+                  // budgets/recurring/goals' amount fields).
                   if (selectedAccount != null)
                     AppCard(
-                      bordered: true,
+                      color: colors.surface,
                       radius: context.appTokens.radii.large,
                       padding: const EdgeInsets.all(8),
                       child: MoneyTextField(
