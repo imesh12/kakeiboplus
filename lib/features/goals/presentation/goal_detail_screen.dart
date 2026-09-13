@@ -11,6 +11,10 @@ import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_money_text.dart';
+import '../../../shared/widgets/app_section_header.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../domain/savings_goal_calculation.dart';
 import '../domain/savings_goal_milestones.dart';
@@ -160,73 +164,81 @@ class _GoalDetailBody extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
-        _GoalHeroAmountRow(
-          savedText: _formatter.format(calc.saved),
-          savedStyle: text.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-          statusLabel: statusLabel,
-          statusStyle: text.labelMedium?.copyWith(color: statusColor),
-          statusColor: statusColor,
-        ),
-        Text(
-          // Same `ofAmount` reuse as the goals list -- see that file's
-          // comment.
-          '${l10n.ofAmount(_formatter.format(calc.target))} · ${calc.wholePercentSaved}%',
-          style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-        ),
-        const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LinearProgressIndicator(
-            value: ratio.clamp(0.0, 1.0),
-            minHeight: 8,
-            backgroundColor: colors.surfaceContainerHighest,
-            color: statusColor,
-          ),
-        ),
-        const SizedBox(height: 16),
-        _DetailRow(
-          label: l10n.remainingLabel,
-          value: _formatter.format(calc.remaining),
-        ),
-        if (summary.goal.targetDate != null)
-          _DetailRow(
-            label: l10n.targetDateLabel,
-            // `targetDate` is a calendar-only UTC-midnight value -- see
-            // `goal_target_date.dart`. Formatting it directly (never
-            // `.toLocal()`) is deliberate: converting it to local time
-            // could shift which calendar day it displays as, exactly the
-            // bug `normalizeCalendarDateToUtc` exists to prevent at
-            // write time. Contrast `_ContributionTile` below, where
-            // `contributedAt` IS a genuine instant and `.toLocal()` is
-            // correct there. Only the row's label is localized; the
-            // date-format policy itself is untouched by CP6.6.
-            value: DateFormat.yMMMd().format(summary.goal.targetDate!),
-          ),
-        if (calc.recommendedDailyContribution != null)
-          _DetailRow(
-            label: l10n.recommendedDailyContributionLabel,
-            value: _formatter.format(calc.recommendedDailyContribution!),
-          ),
-        if (calc.reachedMilestones.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
+        AppCard(
+          bordered: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              for (final int milestone in savingsGoalMilestoneThresholds)
-                Chip(
-                  label: Text('$milestone%'),
-                  avatar: calc.reachedMilestones.contains(milestone)
-                      ? const Icon(Icons.check, size: 16)
-                      : null,
-                  backgroundColor: calc.reachedMilestones.contains(milestone)
-                      ? colors.primaryContainer
-                      : colors.surfaceContainerHighest,
+              _GoalHeroAmountRow(
+                savedText: _formatter.format(calc.saved),
+                savedStyle: context.appTypography.largeMoney,
+                statusLabel: statusLabel,
+                statusStyle: text.labelMedium?.copyWith(color: statusColor),
+                statusColor: statusColor,
+              ),
+              Text(
+                // Same `ofAmount` reuse as the goals list -- see that file's
+                // comment.
+                '${l10n.ofAmount(_formatter.format(calc.target))} · ${calc.wholePercentSaved}%',
+                style: context.appTypography.secondaryBody,
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: ratio.clamp(0.0, 1.0),
+                  minHeight: 8,
+                  backgroundColor: colors.surfaceContainerHighest,
+                  color: statusColor,
                 ),
+              ),
+              const SizedBox(height: 16),
+              _DetailRow(
+                label: l10n.remainingLabel,
+                value: _formatter.format(calc.remaining),
+              ),
+              if (summary.goal.targetDate != null)
+                _DetailRow(
+                  label: l10n.targetDateLabel,
+                  // `targetDate` is a calendar-only UTC-midnight value -- see
+                  // `goal_target_date.dart`. Formatting it directly (never
+                  // `.toLocal()`) is deliberate: converting it to local time
+                  // could shift which calendar day it displays as, exactly the
+                  // bug `normalizeCalendarDateToUtc` exists to prevent at
+                  // write time. Contrast `_ContributionTile` below, where
+                  // `contributedAt` IS a genuine instant and `.toLocal()` is
+                  // correct there. Only the row's label is localized; the
+                  // date-format policy itself is untouched by CP6.6.
+                  value: DateFormat.yMMMd().format(summary.goal.targetDate!),
+                ),
+              if (calc.recommendedDailyContribution != null)
+                _DetailRow(
+                  label: l10n.recommendedDailyContributionLabel,
+                  value: _formatter.format(calc.recommendedDailyContribution!),
+                ),
+              if (calc.reachedMilestones.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: <Widget>[
+                    for (final int milestone in savingsGoalMilestoneThresholds)
+                      Chip(
+                        label: Text('$milestone%'),
+                        avatar: calc.reachedMilestones.contains(milestone)
+                            ? const Icon(Icons.check, size: 16)
+                            : null,
+                        backgroundColor: calc.reachedMilestones.contains(milestone)
+                            ? colors.primaryContainer
+                            : colors.surfaceContainerHighest,
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
-        ],
+        ),
         const SizedBox(height: 24),
-        Text(l10n.contributionHistoryTitle, style: text.titleMedium),
+        AppSectionHeader(title: l10n.contributionHistoryTitle, eyebrow: true),
         const SizedBox(height: 4),
         _ContributionHistory(goalId: summary.id),
       ],
@@ -352,8 +364,6 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme text = Theme.of(context).textTheme;
-    final ColorScheme colors = Theme.of(context).colorScheme;
     // `label`/`value` each get a flexible share of the row's width
     // (rather than sizing to their own intrinsic width) so a long
     // label (e.g. "Recommended daily contribution") or a long
@@ -366,14 +376,14 @@ class _DetailRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Expanded(
-            child: Text(label, style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+            child: Text(label, style: context.appTypography.secondaryBody),
           ),
           const SizedBox(width: 12),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: context.appTypography.body?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -426,22 +436,29 @@ class _ContributionTile extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Money amount =
         Money.fromMinorUnits(contribution.amountMinorUnits, contribution.currencyCode);
-    return ListTile(
-      key: Key('contributionTile_${contribution.id}'),
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.arrow_upward_rounded),
-      title: Text(_formatter.format(amount)),
-      // `contributedAt` IS a genuine instant -- `.toLocal()` here is
-      // correct, unlike `targetDate` above. See that comment for why
-      // these two use different rules. Only this row's tooltip is
-      // localized; the date/time formatting itself is untouched.
-      subtitle: Text(DateFormat.yMMMd().add_jm().format(contribution.contributedAt.toLocal())),
-      trailing: IconButton(
-        key: Key('deleteContribution_${contribution.id}'),
-        icon: const Icon(Icons.delete_outline),
-        tooltip: l10n.removeTooltip,
-        onPressed: () => unawaited(
-          ref.read(savingsGoalContributionRepositoryProvider).softDeleteContribution(contribution.id),
+    return AppCard(
+      bordered: true,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.zero,
+      child: ListTile(
+        key: Key('contributionTile_${contribution.id}'),
+        leading: const Icon(Icons.arrow_upward_rounded),
+        title: AppMoneyText(_formatter.format(amount), emphasis: AppMoneyEmphasis.secondary),
+        // `contributedAt` IS a genuine instant -- `.toLocal()` here is
+        // correct, unlike `targetDate` above. See that comment for why
+        // these two use different rules. Only this row's tooltip is
+        // localized; the date/time formatting itself is untouched.
+        subtitle: Text(
+          DateFormat.yMMMd().add_jm().format(contribution.contributedAt.toLocal()),
+          style: context.appTypography.caption,
+        ),
+        trailing: IconButton(
+          key: Key('deleteContribution_${contribution.id}'),
+          icon: const Icon(Icons.delete_outline),
+          tooltip: l10n.removeTooltip,
+          onPressed: () => unawaited(
+            ref.read(savingsGoalContributionRepositoryProvider).softDeleteContribution(contribution.id),
+          ),
         ),
       ),
     );

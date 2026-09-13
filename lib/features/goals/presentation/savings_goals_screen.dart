@@ -10,6 +10,8 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../domain/savings_goal_status.dart';
 import 'savings_goal_providers.dart';
@@ -48,6 +50,7 @@ class SavingsGoalsScreen extends ConsumerWidget {
             );
           }
           return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             children: <Widget>[
               for (final SavingsGoalSummary summary in summaries) _GoalListTile(summary: summary),
             ],
@@ -81,27 +84,33 @@ class _GoalListTile extends StatelessWidget {
       SavingsGoalStatus.inProgress => (colors.onSurfaceVariant, l10n.goalStatusInProgress),
     };
 
-    return ListTile(
-      key: Key('goalTile_${summary.id}'),
-      leading: CircleAvatar(
-        backgroundColor: colors.surfaceContainerHighest,
-        child: Icon(
-          status == SavingsGoalStatus.completed ? Icons.check_circle_outline : Icons.flag_outlined,
-          color: statusColor,
+    return AppCard(
+      bordered: true,
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      padding: EdgeInsets.zero,
+      child: ListTile(
+        key: Key('goalTile_${summary.id}'),
+        leading: CircleAvatar(
+          backgroundColor: colors.surfaceContainerHighest,
+          child: Icon(
+            status == SavingsGoalStatus.completed ? Icons.check_circle_outline : Icons.flag_outlined,
+            color: statusColor,
+          ),
         ),
+        title: Text(summary.name, style: context.appTypography.cardTitle),
+        // `l10n.ofAmount` is the same "of {target}" phrase the Home
+        // dashboard's priority-goal card already uses (CP6.3); the bare
+        // percent figure is interpolated the same way that card does too
+        // -- neither needs its own new ARB key.
+        subtitle: Text(
+          '${_formatter.format(summary.calculation.saved)} '
+          '${l10n.ofAmount(_formatter.format(summary.calculation.target))} · '
+          '${summary.calculation.wholePercentSaved}% · $statusLabel',
+          style: context.appTypography.secondaryBody,
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push(AppRoutes.goalDetail(summary.id)),
       ),
-      title: Text(summary.name),
-      // `l10n.ofAmount` is the same "of {target}" phrase the Home
-      // dashboard's priority-goal card already uses (CP6.3); the bare
-      // percent figure is interpolated the same way that card does too
-      // -- neither needs its own new ARB key.
-      subtitle: Text(
-        '${_formatter.format(summary.calculation.saved)} '
-        '${l10n.ofAmount(_formatter.format(summary.calculation.target))} · '
-        '${summary.calculation.wholePercentSaved}% · $statusLabel',
-      ),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push(AppRoutes.goalDetail(summary.id)),
     );
   }
 }

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
 import '../../onboarding/presentation/profile_providers.dart';
 
 /// The "Profile" destination — Beta 0 keeps this to a read-only profile
@@ -45,61 +47,96 @@ class SettingsScreen extends ConsumerWidget {
         data: (ProfileRow? profile) {
           if (profile == null) return const SizedBox.shrink();
           return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             children: <Widget>[
-              ListTile(
-                title: Text(profile.displayName),
-                subtitle: Text(
-                  l10n.profileLocationSummary(
-                    profile.currentCountry,
-                    profile.livingCurrency,
-                    profile.homeCountry,
-                    profile.homeCurrency,
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(profile.displayName, style: context.appTypography.cardTitle),
+                  subtitle: Text(
+                    l10n.profileLocationSummary(
+                      profile.currentCountry,
+                      profile.livingCurrency,
+                      profile.homeCountry,
+                      profile.homeCurrency,
+                    ),
+                    style: context.appTypography.secondaryBody,
                   ),
                 ),
               ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.account_balance_wallet_outlined),
-                title: Text(l10n.accountsSectionTitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.accounts),
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.account_balance_wallet_outlined),
+                  title: Text(l10n.accountsSectionTitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.accounts),
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.category_outlined),
-                title: Text(l10n.categoriesScreenTitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.categories),
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.category_outlined),
+                  title: Text(l10n.categoriesScreenTitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.categories),
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.savings_outlined),
-                title: Text(l10n.budgetsTitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.budgets),
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.savings_outlined),
+                  title: Text(l10n.budgetsTitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.budgets),
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.flag_outlined),
-                title: Text(l10n.savingsGoalsTitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.goals),
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: Text(l10n.savingsGoalsTitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.goals),
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.repeat_outlined),
-                title: Text(l10n.recurringTitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.recurring),
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.repeat_outlined),
+                  title: Text(l10n.recurringTitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.recurring),
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.public),
-                title: Text(l10n.internationalPreferences),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.internationalPreferences),
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.public),
+                  title: Text(l10n.internationalPreferences),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.internationalPreferences),
+                ),
               ),
-              const Divider(),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   l10n.beta0DisclaimerMessage,
-                  style: const TextStyle(color: Colors.grey),
+                  style: context.appTypography.caption,
                 ),
               ),
             ],

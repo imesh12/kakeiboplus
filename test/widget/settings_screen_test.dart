@@ -5,6 +5,7 @@ import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/settings/presentation/international_preferences_screen.dart';
 import 'package:ai_financial_coach/features/settings/presentation/settings_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -119,6 +120,48 @@ void main() {
 
     expect(find.byType(InternationalPreferencesScreen), findsOneWidget);
   });
+
+  // ---------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.6: locks in each Profile/
+  // Settings row's new bordered-card visual treatment (`AppCard(bordered:
+  // true)`) via the same shape/side/color contract `app_card_test.dart`/
+  // `accounts_screen_test.dart` already assert for `AppCard` -- never a
+  // pixel value. This file has no `find.byType(ListTile)`/`find.byType
+  // (Card)`/`find.byType(Divider)` assertions elsewhere, so wrapping each
+  // row is unconstrained by any prior structural test here; this is the
+  // first such assertion for this screen.
+  // ---------------------------------------------------------------------
+  testWidgets(
+    'CP7.6: the International preferences row renders inside a bordered, near-white card '
+    'matching the converged visual system, and still navigates on tap',
+    (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container));
+      await tester.pumpAndSettle();
+
+      final Finder rowLabel = find.text('International preferences');
+      final Card cardWidget = tester.widget<Card>(
+        find.ancestor(of: rowLabel, matching: find.byType(Card)).first,
+      );
+      final BuildContext context = tester.element(rowLabel);
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      final AppTokens tokens = context.appTokens;
+
+      expect(cardWidget.color, colors.surface);
+      expect(cardWidget.elevation, 0);
+      final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+      expect(shape.side.color, tokens.colors.subtleBorder);
+
+      await tester.tap(rowLabel);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InternationalPreferencesScreen), findsOneWidget);
+    },
+  );
 
   group('CP6.8 Japanese localization', () {
     testWidgets(

@@ -9,6 +9,10 @@ import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_money_text.dart';
+import '../../../shared/widgets/app_section_header.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../domain/budget_month.dart';
@@ -63,13 +67,20 @@ class BudgetsScreen extends ConsumerWidget {
               budgets.where((BudgetRow b) => b.categoryId != null).toList();
 
           return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             children: <Widget>[
               if (overall.isNotEmpty) ...<Widget>[
-                _SectionHeader(l10n.overallBudgetsSectionTitle),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: AppSectionHeader(title: l10n.overallBudgetsSectionTitle, eyebrow: true),
+                ),
                 for (final BudgetRow row in overall) _OverallBudgetTile(row: row),
               ],
               if (category.isNotEmpty) ...<Widget>[
-                _SectionHeader(l10n.categoryBudgetsSectionTitle),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: AppSectionHeader(title: l10n.categoryBudgetsSectionTitle, eyebrow: true),
+                ),
                 for (final BudgetRow row in category) _CategoryBudgetTile(row: row),
               ],
             ],
@@ -121,19 +132,6 @@ class BudgetsScreen extends ConsumerWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.label);
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(label, style: Theme.of(context).textTheme.titleSmall),
-    );
-  }
-}
-
 class _OverallBudgetTile extends ConsumerWidget {
   const _OverallBudgetTile({required this.row});
   final BudgetRow row;
@@ -142,30 +140,35 @@ class _OverallBudgetTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Money amount = Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode);
-    return ListTile(
-      key: Key('overallBudgetTile_${row.currencyCode}'),
-      leading: const Icon(Icons.savings_outlined),
-      title: Text(row.currencyCode),
-      subtitle: Text(_formatter.format(amount)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          IconButton(
-            key: Key('editOverallBudget_${row.currencyCode}'),
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: l10n.editTooltip,
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => _OverallBudgetDialog(existing: row),
+    return AppCard(
+      bordered: true,
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      padding: EdgeInsets.zero,
+      child: ListTile(
+        key: Key('overallBudgetTile_${row.currencyCode}'),
+        leading: const Icon(Icons.savings_outlined),
+        title: Text(row.currencyCode),
+        subtitle: AppMoneyText(_formatter.format(amount), emphasis: AppMoneyEmphasis.secondary),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              key: Key('editOverallBudget_${row.currencyCode}'),
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: l10n.editTooltip,
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => _OverallBudgetDialog(existing: row),
+              ),
             ),
-          ),
-          IconButton(
-            key: Key('deleteOverallBudget_${row.currencyCode}'),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: l10n.removeTooltip,
-            onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
-          ),
-        ],
+            IconButton(
+              key: Key('deleteOverallBudget_${row.currencyCode}'),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: l10n.removeTooltip,
+              onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -180,43 +183,52 @@ class _CategoryBudgetTile extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final Money amount = Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode);
     final AsyncValue<CategoryRow> categoryAsync = ref.watch(categoryByIdProvider(row.categoryId!));
-    return ListTile(
-      key: Key('categoryBudgetTile_${row.categoryId}_${row.currencyCode}'),
-      leading: const Icon(Icons.category_outlined),
-      title: Text(
-        // `CategoryRow.name` is persisted content (a system category's
-        // seeded English name, or a profile's own custom category) --
-        // CP6.6 leaves it untouched exactly like every other screen
-        // that already displays it (e.g. Activity). The loading
-        // ellipsis and the categoryId fallback on error are not
-        // translatable copy either -- a placeholder glyph and a raw
-        // identifier, respectively.
-        categoryAsync.when(
-          data: (CategoryRow c) => c.name,
-          loading: () => '…',
-          error: (Object e, StackTrace st) => row.categoryId!,
+    return AppCard(
+      bordered: true,
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      padding: EdgeInsets.zero,
+      child: ListTile(
+        key: Key('categoryBudgetTile_${row.categoryId}_${row.currencyCode}'),
+        leading: const Icon(Icons.category_outlined),
+        title: Text(
+          // `CategoryRow.name` is persisted content (a system category's
+          // seeded English name, or a profile's own custom category) --
+          // CP6.6 leaves it untouched exactly like every other screen
+          // that already displays it (e.g. Activity). The loading
+          // ellipsis and the categoryId fallback on error are not
+          // translatable copy either -- a placeholder glyph and a raw
+          // identifier, respectively.
+          categoryAsync.when(
+            data: (CategoryRow c) => c.name,
+            loading: () => '…',
+            error: (Object e, StackTrace st) => row.categoryId!,
+          ),
+          style: context.appTypography.cardTitle,
         ),
-      ),
-      subtitle: Text('${row.currencyCode} · ${_formatter.format(amount)}'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          IconButton(
-            key: Key('editCategoryBudget_${row.id}'),
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: l10n.editTooltip,
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => _CategoryBudgetDialog(existing: row),
+        subtitle: Text(
+          '${row.currencyCode} · ${_formatter.format(amount)}',
+          style: context.appTypography.secondaryBody?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              key: Key('editCategoryBudget_${row.id}'),
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: l10n.editTooltip,
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => _CategoryBudgetDialog(existing: row),
+              ),
             ),
-          ),
-          IconButton(
-            key: Key('deleteCategoryBudget_${row.id}'),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: l10n.removeTooltip,
-            onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
-          ),
-        ],
+            IconButton(
+              key: Key('deleteCategoryBudget_${row.id}'),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: l10n.removeTooltip,
+              onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
+            ),
+          ],
+        ),
       ),
     );
   }

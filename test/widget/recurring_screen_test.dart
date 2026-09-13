@@ -12,6 +12,7 @@ import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind
 import 'package:ai_financial_coach/features/recurring/domain/recurring_schedule.dart';
 import 'package:ai_financial_coach/features/recurring/presentation/recurring_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -1215,4 +1216,62 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.5: locks in the pending-item
+  // card's new bordered visual treatment (`AppCard(bordered: true)`) via
+  // the same shape/side/color contract `app_card_test.dart`/
+  // `accounts_screen_test.dart` already assert for `AppCard` -- never a
+  // pixel value. The card previously was a bare `Card()` with no such
+  // contract at all -- this locks in the now-converged appearance.
+  // ---------------------------------------------------------------------
+  testWidgets(
+    'CP7.5: a pending recurring item renders inside a bordered, near-white card matching the '
+    'converged visual system',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+      await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Rent',
+        amount: Money.fromMinorUnits(80000, 'JPY'),
+        accountId: accounts.first.id,
+        destinationAccountId: null,
+        categoryId: null,
+        note: null,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: DateTime.now().toUtc(),
+        endDate: null,
+        notificationsEnabled: false,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('sectionDueToday')), findsOneWidget);
+      final Finder ruleNameFinder = find.text('Rent');
+      final Card cardWidget = tester.widget<Card>(
+        find.ancestor(of: ruleNameFinder, matching: find.byType(Card)).first,
+      );
+      final BuildContext context = tester.element(ruleNameFinder);
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      final AppTokens tokens = context.appTokens;
+
+      expect(cardWidget.color, colors.surface);
+      expect(cardWidget.elevation, 0);
+      final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+      expect(shape.side.color, tokens.colors.subtleBorder);
+
+      // The urgency label still renders as its own localized text --
+      // `AppStatusChip` never reformats or drops the supplied label.
+      // (Matches twice: once as the section header, once as the item's
+      // own status chip -- both share the same localized string.)
+      expect(find.text('Due today'), findsNWidgets(2));
+    },
+  );
 }

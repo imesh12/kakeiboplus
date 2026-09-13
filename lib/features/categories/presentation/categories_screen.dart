@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_status_chip.dart';
 import 'category_providers.dart';
 
 class CategoriesScreen extends ConsumerWidget {
@@ -82,14 +85,31 @@ class _CategoryList extends ConsumerWidget {
           Center(child: Text(l10n.couldNotLoadCategories(e.toString()))),
       data: (List<CategoryRow> categories) {
         if (categories.isEmpty) {
-          return Center(child: Text(l10n.noCategoriesYetMessage));
+          return Center(
+            child: Text(
+              l10n.noCategoriesYetMessage,
+              style: context.appTypography.secondaryBody,
+            ),
+          );
         }
+        final ColorScheme colors = Theme.of(context).colorScheme;
         return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
           children: <Widget>[
             for (final CategoryRow category in categories)
-              ListTile(
-                title: Text(category.name),
-                trailing: category.isSystem ? Text(l10n.systemCategoryIndicatorLabel) : null,
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  title: Text(category.name, style: context.appTypography.cardTitle),
+                  trailing: category.isSystem
+                      ? AppStatusChip(
+                          label: l10n.systemCategoryIndicatorLabel,
+                          color: colors.onSurfaceVariant,
+                        )
+                      : null,
+                ),
               ),
           ],
         );

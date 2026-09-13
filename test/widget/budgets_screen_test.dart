@@ -8,6 +8,7 @@ import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
 import 'package:ai_financial_coach/features/budgets/presentation/budgets_screen.dart';
 import 'package:ai_financial_coach/features/categories/presentation/category_providers.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -670,4 +671,51 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.4: locks in the budget tiles'
+  // new bordered-card visual treatment (`AppCard(bordered: true)`) via the
+  // same shape/side/color contract `app_card_test.dart`/
+  // `accounts_screen_test.dart` already assert for `AppCard` -- never a
+  // pixel value. Also locks in that the section header text still
+  // renders exactly as before (`AppSectionHeader` never changes casing).
+  // ---------------------------------------------------------------------
+  testWidgets(
+    'CP7.4: an overall budget tile renders inside a bordered, near-white card matching the '
+    'converged visual system, and the section header text is unchanged',
+    (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await BudgetRepository(db).setOverallBudget(
+        profileId: profileId,
+        month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithBudgets(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Overall budgets'), findsOneWidget); // overallBudgetsSectionTitle unchanged
+
+      final Finder tileKey = find.byKey(const Key('overallBudgetTile_JPY'));
+      final Card cardWidget = tester.widget<Card>(
+        find.ancestor(of: tileKey, matching: find.byType(Card)).first,
+      );
+      final BuildContext context = tester.element(tileKey);
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      final AppTokens tokens = context.appTokens;
+
+      expect(cardWidget.color, colors.surface);
+      expect(cardWidget.elevation, 0);
+      final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+      expect(shape.side.color, tokens.colors.subtleBorder);
+
+      // The amount itself still renders in full, unformatted-by-us --
+      // `AppMoneyText` never reformats or truncates `MoneyFormatter`'s
+      // output.
+      expect(find.text('¥50,000'), findsOneWidget);
+    },
+  );
 }

@@ -6,6 +6,7 @@ import 'package:ai_financial_coach/core/database/repositories/savings_goal_repos
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/goals/presentation/goal_detail_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -716,4 +717,58 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.4: locks in the hero section's
+  // and each contribution row's new bordered-card visual treatment
+  // (`AppCard(bordered: true)`) via the same shape/side/color contract
+  // `app_card_test.dart`/`accounts_screen_test.dart` already assert for
+  // `AppCard` -- never a pixel value. Also confirms the saved amount and
+  // a contribution amount still render in full, unformatted-by-us.
+  // ---------------------------------------------------------------------
+  testWidgets(
+    'CP7.4: the hero section and a contribution row each render inside a bordered, '
+    'near-white card matching the converged visual system',
+    (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+      final String goalId = await goalRepo.createGoal(
+        profileId: profileId,
+        name: 'Emergency Fund',
+        targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      final SavingsGoalContributionRepository contributionRepo =
+          SavingsGoalContributionRepository(db, goalRepo);
+      final String contributionId = await contributionRepo.addContribution(
+        goalId: goalId,
+        amount: Money.fromMinorUnits(30000, 'JPY'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithGoalDetail(container, goalId));
+      await tester.pumpAndSettle();
+
+      final BuildContext context = tester.element(find.byKey(const Key('goalSavedAmount')));
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      final AppTokens tokens = context.appTokens;
+
+      void expectBorderedCard(Finder anchor) {
+        final Card cardWidget = tester.widget<Card>(
+          find.ancestor(of: anchor, matching: find.byType(Card)).first,
+        );
+        expect(cardWidget.color, colors.surface);
+        expect(cardWidget.elevation, 0);
+        final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+        expect(shape.side.color, tokens.colors.subtleBorder);
+      }
+
+      expectBorderedCard(find.byKey(const Key('goalSavedAmount')));
+      expectBorderedCard(find.byKey(Key('contributionTile_$contributionId')));
+
+      expect(tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data, '¥30,000');
+      expect(find.text('¥30,000'), findsWidgets); // hero amount + contribution row amount
+    },
+  );
 }

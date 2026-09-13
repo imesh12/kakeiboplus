@@ -18,6 +18,10 @@ import '../../../core/money/money_formatter.dart';
 import '../../../core/notifications/notification_providers.dart';
 import '../../../core/notifications/notification_scheduler.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_section_header.dart';
+import '../../../shared/widgets/app_status_chip.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
@@ -76,6 +80,7 @@ class RecurringScreen extends ConsumerWidget {
                 child: Text(
                   l10n.noRecurringRulesYetTapMessage,
                   textAlign: TextAlign.center,
+                  style: context.appTypography.secondaryBody,
                 ),
               ),
             );
@@ -91,15 +96,36 @@ class RecurringScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: <Widget>[
               if (overdue.isNotEmpty) ...<Widget>[
-                _SectionHeader(key: const Key('sectionOverdue'), title: l10n.overdueLabel),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: AppSectionHeader(
+                    key: const Key('sectionOverdue'),
+                    title: l10n.overdueLabel,
+                    eyebrow: true,
+                  ),
+                ),
                 for (final RecurringPendingItem item in overdue) _PendingItemTile(item: item),
               ],
               if (dueToday.isNotEmpty) ...<Widget>[
-                _SectionHeader(key: const Key('sectionDueToday'), title: l10n.recurringStatusDueToday),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: AppSectionHeader(
+                    key: const Key('sectionDueToday'),
+                    title: l10n.recurringStatusDueToday,
+                    eyebrow: true,
+                  ),
+                ),
                 for (final RecurringPendingItem item in dueToday) _PendingItemTile(item: item),
               ],
               if (upcoming.isNotEmpty) ...<Widget>[
-                _SectionHeader(key: const Key('sectionUpcoming'), title: l10n.recurringStatusUpcoming),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: AppSectionHeader(
+                    key: const Key('sectionUpcoming'),
+                    title: l10n.recurringStatusUpcoming,
+                    eyebrow: true,
+                  ),
+                ),
                 for (final RecurringPendingItem item in upcoming) _PendingItemTile(item: item),
               ],
             ],
@@ -110,22 +136,6 @@ class RecurringScreen extends ConsumerWidget {
         key: const Key('addRecurringRuleFab'),
         onPressed: () => showDialog<void>(context: context, builder: (_) => const _RuleDialog()),
         child: const Icon(Icons.add),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, super.key});
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -191,7 +201,6 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final RecurringRuleRow rule = widget.item.rule;
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
     final Money amount = Money.fromMinorUnits(rule.amountMinorUnits, rule.currencyCode);
 
     final (Color urgencyColor, String urgencyLabel) = switch (widget.item.urgency) {
@@ -205,45 +214,35 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
       RecurringRuleKind.transfer => Icons.swap_horiz_rounded,
     };
 
-    return Card(
+    return AppCard(
       key: Key('pendingItem_${rule.id}_$_dateKey'),
+      bordered: true,
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(kindIcon, color: colors.onSurfaceVariant, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    rule.name,
-                    style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(kindIcon, color: colors.onSurfaceVariant, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  rule.name,
+                  style: context.appTypography.cardTitle,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: urgencyColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    urgencyLabel,
-                    style: text.labelSmall?.copyWith(color: urgencyColor, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${_formatter.format(amount)} · ${DateFormat.yMMMd().format(widget.item.scheduledDateUtc)}',
-              style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
+              ),
+              AppStatusChip(label: urgencyLabel, color: urgencyColor),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_formatter.format(amount)} · ${DateFormat.yMMMd().format(widget.item.scheduledDateUtc)}',
+            style: context.appTypography.secondaryBody,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
               alignment: WrapAlignment.end,
               spacing: 8,
               runSpacing: 4,
@@ -291,8 +290,7 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
                 ),
               ],
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

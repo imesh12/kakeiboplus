@@ -8,6 +8,7 @@ import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/goals/presentation/goal_detail_screen.dart';
 import 'package:ai_financial_coach/features/goals/presentation/savings_goals_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -574,4 +575,43 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.4: locks in the goal tile's new
+  // bordered-card visual treatment (`AppCard(bordered: true)`) via the
+  // same shape/side/color contract `app_card_test.dart`/
+  // `accounts_screen_test.dart` already assert for `AppCard` -- never a
+  // pixel value.
+  // ---------------------------------------------------------------------
+  testWidgets(
+    'CP7.4: a goal tile renders inside a bordered, near-white card matching the converged '
+    'visual system',
+    (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String goalId = await SavingsGoalRepository(db).createGoal(
+        profileId: profileId,
+        name: 'Emergency Fund',
+        targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithGoals(container));
+      await tester.pumpAndSettle();
+
+      final Finder tileKey = find.byKey(Key('goalTile_$goalId'));
+      final Card cardWidget = tester.widget<Card>(
+        find.ancestor(of: tileKey, matching: find.byType(Card)).first,
+      );
+      final BuildContext context = tester.element(tileKey);
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      final AppTokens tokens = context.appTokens;
+
+      expect(cardWidget.color, colors.surface);
+      expect(cardWidget.elevation, 0);
+      final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+      expect(shape.side.color, tokens.colors.subtleBorder);
+    },
+  );
 }

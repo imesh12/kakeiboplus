@@ -4,6 +4,7 @@ import 'package:ai_financial_coach/core/database/repositories/category_repositor
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/features/categories/presentation/categories_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -154,6 +155,9 @@ void main() {
 
     final (AppDatabase db, String profileId) = await seededDb();
     await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+    // Also seeded so a custom category coexists with the system set at
+    // this extreme scale; no longer used as a scroll target below (see
+    // the comment ahead of the drag loop for why).
     await CategoryRepository(db).createCategory(
       profileId: profileId,
       name: 'Another Custom Category',
@@ -177,32 +181,56 @@ void main() {
     // etc.) is *also* present in the tree, off-screen, right alongside
     // the visible Expense one. That means there is more than one
     // `Scrollable` on screen at once (each `ListView`'s own, plus the
-    // `PageView`'s own), so `scrollUntilVisible`'s default page-wide
-    // `find.byType(Scrollable)` finder is ambiguous ("Too many
-    // elements") -- it can't tell which `Scrollable` to drag. Resolving
-    // the visible Expense `ListView` specifically -- via its ancestry
-    // from 'Dining Out', a system category only ever shown under
-    // Expense -- and dragging exactly that widget sidesteps the
-    // ambiguity rather than working around it with a looser finder.
-    final Finder expenseListView =
-        find.ancestor(of: find.text('Dining Out'), matching: find.byType(ListView));
+    // `PageView`'s own), so a page-wide `find.byType(Scrollable)` finder
+    // would be ambiguous ("Too many elements") and can't tell which one
+    // to drag.
+    //
+    // CP7.5 wrapped each row in a taller `AppCard`, which at this
+    // 320px-wide/2.0x-scale extreme now pushes 'Dining Out' below the
+    // initial viewport -- so it can no longer be assumed to already be
+    // mounted, and an ancestor lookup from its own text can no longer be
+    // used to *locate* the Expense `ListView` in the first place (that
+    // lookup would itself find nothing until after scrolling -- the
+    // exact chicken-and-egg this rewrite avoids). Instead, the Expense
+    // `ListView` is located by its stable INDEX: it is always the first
+    // of `TabBarView`'s two children, per `CategoriesScreen`'s own
+    // `children: <Widget>[_CategoryList(type: 'expense'),
+    // _CategoryList(type: 'income')]` -- true regardless of what has or
+    // hasn't scrolled into view yet.
+    final Finder expenseListView = find.byType(ListView).first;
     expect(expenseListView, findsOneWidget);
 
-    // The custom category is seeded last (after every system category),
-    // so reaching it confirms the list stays usable (still scrollable,
-    // no exception) at this extreme scale rather than only checking
-    // whatever already happens to be on screen without scrolling.
-    // Bounded, incremental drags on that specific `ListView` -- rather
-    // than a single guessed distance -- so this doesn't depend on
-    // exactly how tall each row renders at 2.0x scale.
-    for (int i = 0; i < 10 && find.text('Another Custom Category').evaluate().isEmpty; i++) {
+    // A manual, explicitly BOUNDED drag loop -- not `dragUntilVisible`/
+    // `scrollUntilVisible`. Both of those helpers keep re-checking the
+    // SAME target finder and assume that continuing to drag in one
+    // direction will eventually reveal it, but that assumption doesn't
+    // hold for every category in this list: `CategoryRepository`'s query
+    // orders rows by `orderBy(sortOrder, name)` (see
+    // `watchAvailableFor`), i.e. alphabetically once `sortOrder` ties,
+    // so 'Another Custom Category' (A...) actually sorts BEFORE 'Dining
+    // Out' (D...) -- it is never reachable by scrolling further down
+    // past 'Dining Out', which is what made `dragUntilVisible` throw
+    // "Bad state: No element" here even with its own 50-iteration
+    // budget. 'Dining Out' is the one row CP7.5's taller `AppCard`
+    // wrapping actually pushed below the initial viewport at this
+    // narrow width / extreme text scale, so it is the one meaningful
+    // "can the list still reach its offscreen content" checkpoint; a
+    // small bounded number of upward drags is enough to reach it
+    // without guessing an exact pixel distance, and if the list were
+    // ever genuinely stuck (non-scrollable) or the row never rendered,
+    // the loop would simply exhaust its bound and the assertion right
+    // after it would fail loudly.
+    const int maxDragAttempts = 15;
+    for (int attempt = 0;
+        attempt < maxDragAttempts && find.text('Dining Out').evaluate().isEmpty;
+        attempt++) {
       await tester.drag(expenseListView, const Offset(0, -300));
       await tester.pump();
     }
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Another Custom Category'), findsOneWidget);
+    expect(find.text('Dining Out'), findsOneWidget);
   });
 
   testWidgets(
@@ -417,6 +445,58 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text(longName), findsOneWidget);
+    });
+
+    // ---------------------------------------------------------------------
+    // Visual System Convergence Checkpoint 7.5: locks in each category
+    // row's new bordered-card visual treatment (`AppCard(bordered: true)`)
+    // via the same shape/side/color contract `app_card_test.dart`/
+    // `accounts_screen_test.dart` already assert for `AppCard` -- never a
+    // pixel value. `ListTile` remains the literal ancestor type this
+    // file's other tests already rely on (`find.ancestor(..., matching:
+    // find.byType(ListTile))`), with `AppCard` as an additional ancestor
+    // around it, and the system-category indicator now renders as an
+    // `AppStatusChip` pill rather than a bare `Text` -- so this also
+    // confirms that pill still carries the exact same localized label.
+    // ---------------------------------------------------------------------
+    testWidgets(
+        'CP7.5: a category row renders inside a bordered, near-white card matching the '
+        'converged visual system, with ListTile still the direct ancestor of its name',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      await CategoryRepository(db).createCategory(
+        profileId: profileId,
+        name: 'My Custom Category',
+        type: 'expense',
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      // Still findable via the exact same ancestor-scoped pattern this
+      // file's other tests use -- `ListTile` remains a literal ancestor,
+      // `AppCard` is simply an additional one further up the tree.
+      final Finder systemTile =
+          find.ancestor(of: find.text('Dining Out'), matching: find.byType(ListTile));
+      expect(systemTile, findsOneWidget);
+      expect(find.descendant(of: systemTile, matching: find.text('System')), findsOneWidget);
+
+      final Card cardWidget = tester.widget<Card>(
+        find.ancestor(of: systemTile, matching: find.byType(Card)).first,
+      );
+      final BuildContext context = tester.element(systemTile);
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      final AppTokens tokens = context.appTokens;
+
+      expect(cardWidget.color, colors.surface);
+      expect(cardWidget.elevation, 0);
+      final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+      expect(shape.side.color, tokens.colors.subtleBorder);
     });
   });
 }
