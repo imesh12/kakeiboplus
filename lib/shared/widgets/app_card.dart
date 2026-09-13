@@ -32,6 +32,7 @@ class AppCard extends StatelessWidget {
     this.radius,
     this.margin = EdgeInsets.zero,
     this.onTap,
+    this.bordered = false,
   });
 
   final Widget child;
@@ -55,9 +56,26 @@ class AppCard extends StatelessWidget {
   /// semantics it doesn't have.
   final VoidCallback? onTap;
 
+  /// Visual System Convergence Checkpoint 7.2: when true, renders a flat
+  /// near-white card (`colorScheme.surface`) with a thin
+  /// `context.appTokens.colors.subtleBorder` outline instead of the
+  /// default tonal `cardSurface` fill with no border -- matching the
+  /// approved Claude Design reference's "white, bordered, generously
+  /// rounded" card treatment. [subtleBorder] was already defined by CP7.1
+  /// (`app_tokens.dart`) but had no call site until this checkpoint. An
+  /// explicit [color] still always wins over this flag's own default
+  /// background (e.g. the hero currency card keeps its own
+  /// `primaryContainer` fill either way); this flag only ever changes the
+  /// DEFAULT background plus whether a border is drawn. `false` (the
+  /// default) is pixel-identical to CP7.1's card -- no border, same
+  /// tonal fill -- so every existing call site is unaffected until it
+  /// opts in.
+  final bool bordered;
+
   @override
   Widget build(BuildContext context) {
     final AppTokens tokens = context.appTokens;
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
     final BorderRadius borderRadius = BorderRadius.circular(radius ?? tokens.radii.medium);
     final Widget content = Padding(
       padding: padding ?? EdgeInsets.all(tokens.spacing.md),
@@ -67,8 +85,11 @@ class AppCard extends StatelessWidget {
     return Card(
       margin: margin,
       elevation: 0,
-      color: color ?? tokens.colors.cardSurface,
-      shape: RoundedRectangleBorder(borderRadius: borderRadius),
+      color: color ?? (bordered ? colorScheme.surface : tokens.colors.cardSurface),
+      shape: RoundedRectangleBorder(
+        borderRadius: borderRadius,
+        side: bordered ? BorderSide(color: tokens.colors.subtleBorder) : BorderSide.none,
+      ),
       child: onTap == null
           ? content
           : InkWell(onTap: onTap, borderRadius: borderRadius, child: content),

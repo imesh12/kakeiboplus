@@ -141,8 +141,9 @@ void main() {
   });
 
   testWidgets(
-      'the Add icon renders inside a circular tonal container sized/colored per '
-      'ColorScheme, and no other destination gets that treatment', (tester) async {
+      'CP7.2: the Add icon renders inside a raised, solid-color circular Material '
+      'sized/colored per ColorScheme, and no other destination gets that treatment',
+      (tester) async {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
@@ -150,25 +151,39 @@ void main() {
 
     // On Home, Add is unselected, so it's rendering its `icon:` (not
     // `selectedIcon:`) -- add_circle_outline, per the approved spec.
+    // Visual System Convergence Checkpoint 7.2 enlarged it (27 -> 30) and
+    // switched its color from the tonal `onPrimaryContainer` to the
+    // solid-fill `onPrimary`, matching the approved Claude Design
+    // reference's raised, solid-green Add button.
     final Icon addIcon = tester.widget<Icon>(find.byIcon(Icons.add_circle_outline));
-    expect(addIcon.size, 27);
-    expect(addIcon.color, colors.onPrimaryContainer);
+    expect(addIcon.size, 30);
+    expect(addIcon.color, colors.onPrimary);
 
-    bool isAddTonalCircle(Widget w) =>
-        w is Container &&
-        w.constraints?.maxWidth == 44 &&
-        w.constraints?.maxHeight == 44 &&
-        (w.decoration as BoxDecoration?)?.shape == BoxShape.circle &&
-        (w.decoration as BoxDecoration?)?.color == colors.primaryContainer;
+    bool isAddCircle(Widget w) =>
+        w is Material &&
+        w.color == colors.primary &&
+        w.shape is CircleBorder &&
+        w.elevation > 0;
 
-    // Exactly one circular tonal container exists on the whole bar, and
-    // it's the Add icon's own ancestor -- proving Home/Activity/Profile's
-    // plain Icons were never given the same treatment.
-    final Finder tonalCircle = find.byWidgetPredicate(isAddTonalCircle);
-    expect(tonalCircle, findsOneWidget);
+    // Exactly one raised, solid-primary-colored circular Material exists
+    // on the whole bar, and it's the Add icon's own ancestor -- proving
+    // Home/Activity/Profile's plain Icons were never given the same
+    // treatment.
+    final Finder addCircle = find.byWidgetPredicate(isAddCircle);
+    expect(addCircle, findsOneWidget);
     expect(
-      find.ancestor(of: find.byIcon(Icons.add_circle_outline), matching: tonalCircle),
+      find.ancestor(of: find.byIcon(Icons.add_circle_outline), matching: addCircle),
       findsOneWidget,
+    );
+
+    // CP7.2: genuinely elevated (not the flat tonal container CP6 used)
+    // and nudged upward so it visually floats above the bar line --
+    // `Transform.translate` is a repaint/hit-test-only transform, so it
+    // does not disturb the destination's own tap target (every tap-based
+    // test elsewhere in this file keeps passing unchanged).
+    expect(
+      find.ancestor(of: addCircle, matching: find.byType(Transform)),
+      findsWidgets,
     );
   });
 

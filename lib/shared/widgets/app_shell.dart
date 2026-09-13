@@ -10,12 +10,25 @@ import '../../l10n/generated/app_localizations.dart';
 /// (`STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §9). No Goals destination yet;
 /// "Add" opens a modal sheet rather than being its own screen.
 ///
-/// Beta 1 Transaction UX Phase B, Checkpoint 6 gives the Add destination
-/// a visually stronger circular tonal icon (see [_addIcon]) so it reads
-/// as the primary action among the four. This is presentation-only:
-/// `_currentIndex`, `onDestinationSelected`, and the destination count
-/// are all unchanged from before this checkpoint -- Add remains index 2
-/// and remains an action, never a routable destination.
+/// Beta 1 Transaction UX Phase B, Checkpoint 6 gave the Add destination
+/// a visually stronger circular tonal icon; Visual System Convergence
+/// Checkpoint 7.2 takes this further, converging on the approved Claude
+/// Design reference's raised, solid-color, floating-looking Add button
+/// (see [_addIcon]) -- larger, filled with `colorScheme.primary` rather
+/// than the softer tonal `primaryContainer`, genuinely elevated via a
+/// [Material] with non-zero `elevation`, and nudged upward with
+/// [Transform.translate] so it visually "pops" above the bar line. This
+/// is STILL presentation-only: `_currentIndex`, `onDestinationSelected`,
+/// and the destination count are all unchanged from before either
+/// checkpoint -- Add remains index 2, remains an action rather than a
+/// routable destination, and is still exactly the widget passed to
+/// `NavigationDestination.icon`/`selectedIcon`, so the bar's own
+/// semantics/tap-target/RTL-mirroring behavior (already proven by
+/// `app_shell_test.dart`'s CP5.5/CP5.6/CP6.1 groups) is untouched --
+/// `Transform.translate` only repaints (and re-hit-tests) this one
+/// child, it doesn't change the destination's own layout box, so tapping
+/// "Add" anywhere in its destination area keeps working exactly as
+/// before.
 class AppShell extends StatelessWidget {
   const AppShell({required this.child, super.key});
 
@@ -28,18 +41,29 @@ class AppShell extends StatelessWidget {
     return 0;
   }
 
-  /// The Add destination's icon, Checkpoint 6: the same Material icon
-  /// passed in (`add_circle_outline` for unselected, `add_circle` for
-  /// selected) inside a circular tonal container -- `ColorScheme` only,
-  /// no hard-coded finance colors, no elevation/shadow. This is purely
-  /// the widget passed to `NavigationDestination.icon`/`selectedIcon`;
-  /// the bar's own built-in tap handling and semantics are untouched.
+  /// The Add destination's icon. Visual System Convergence Checkpoint
+  /// 7.2: the same Material icon passed in (`add_circle_outline` for
+  /// unselected, `add_circle` for selected) inside a larger, solid
+  /// `colorScheme.primary` circle with real elevation, nudged upward so
+  /// it visually floats above the bar line -- matching the approved
+  /// Claude Design reference's raised center Add button. `ColorScheme`
+  /// only, still no hard-coded finance colors. This is purely the widget
+  /// passed to `NavigationDestination.icon`/`selectedIcon`; the bar's own
+  /// built-in tap handling and semantics are untouched.
   Widget _addIcon(ColorScheme colors, IconData icon) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(color: colors.primaryContainer, shape: BoxShape.circle),
-      child: Icon(icon, size: 27, color: colors.onPrimaryContainer),
+    return Transform.translate(
+      offset: const Offset(0, -10),
+      child: Material(
+        color: colors.primary,
+        shape: const CircleBorder(),
+        elevation: 4,
+        shadowColor: colors.shadow,
+        child: SizedBox(
+          width: 56,
+          height: 56,
+          child: Center(child: Icon(icon, size: 30, color: colors.onPrimary)),
+        ),
+      ),
     );
   }
 

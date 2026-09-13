@@ -13,6 +13,7 @@ import 'package:ai_financial_coach/features/dashboard/presentation/home_screen.d
 import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequency.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -1396,6 +1397,124 @@ void main() {
       closeTo(rowRight, 1.0),
       reason: "expected the balance to hug the stacked tile's reading-start edge "
           "(the tile's right edge under RTL), matching the account name above it",
+    );
+  });
+
+  // ============================================================
+  // Visual System Convergence Checkpoint 7.2: Home + AppShell Visual
+  // Convergence toward the approved Claude Design light-theme dashboard
+  // reference. These tests lock in the two shared-primitive enhancements
+  // CP7.2 applied to Home (`AppCard.bordered`, `AppSectionHeader.eyebrow`)
+  // without re-testing anything `app_card_test.dart`/
+  // `app_section_header_test.dart` already cover generically -- these
+  // only confirm Home actually wires the flags on, and that doing so
+  // never changed any rendered string (every pre-existing `find.text(...)`
+  // assertion above this point still passes unchanged, which is itself
+  // part of that guarantee).
+  // ============================================================
+
+  group('CP7.2 Visual System Convergence', () {
+    testWidgets(
+      'the budget card renders as a bordered, colorScheme.surface card -- the shared '
+      '"bordered" AppCard treatment -- instead of the old tonal fill with no border',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        final Finder budgetCard = find
+            .ancestor(of: find.byIcon(Icons.savings_outlined), matching: find.byType(Card))
+            .first;
+        final Card card = tester.widget<Card>(budgetCard);
+        final BuildContext context = tester.element(find.byIcon(Icons.savings_outlined));
+        final ColorScheme colors = Theme.of(context).colorScheme;
+        final AppTokens tokens = context.appTokens;
+
+        expect(card.color, colors.surface);
+        final RoundedRectangleBorder shape = card.shape! as RoundedRectangleBorder;
+        expect(shape.side.color, tokens.colors.subtleBorder);
+      },
+    );
+
+    testWidgets(
+      'the savings goals and recurring cards also render bordered, and an account tile '
+      'renders bordered too -- every card converged consistently, not just the budget card',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        final BuildContext context = tester.element(find.byIcon(Icons.flag_outlined));
+        final ColorScheme colors = Theme.of(context).colorScheme;
+        final AppTokens tokens = context.appTokens;
+
+        for (final IconData icon in <IconData>[Icons.flag_outlined, Icons.event_note_outlined]) {
+          final Card card = tester.widget<Card>(
+            find.ancestor(of: find.byIcon(icon), matching: find.byType(Card)).first,
+          );
+          expect(card.color, colors.surface, reason: 'card for $icon should be bordered');
+          final RoundedRectangleBorder shape = card.shape! as RoundedRectangleBorder;
+          expect(shape.side.color, tokens.colors.subtleBorder, reason: 'card for $icon should be bordered');
+        }
+
+        final Card accountCard = tester.widget<Card>(
+          find.ancestor(of: find.text('JPY Wallet'), matching: find.byType(Card)).first,
+        );
+        expect(accountCard.color, colors.surface);
+        final RoundedRectangleBorder accountShape = accountCard.shape! as RoundedRectangleBorder;
+        expect(accountShape.side.color, tokens.colors.subtleBorder);
+      },
+    );
+
+    testWidgets(
+      'the budget/savings/recurring/accounts section headers keep their exact original '
+      'English title text even with the eyebrow styling applied',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        // Exact original casing -- never forced to upper case -- proving
+        // the `eyebrow` flag changed styling only, not the rendered
+        // string, exactly as `AppSectionHeader`'s own doc comment
+        // guarantees.
+        expect(find.text('Remaining monthly budget'), findsOneWidget);
+        expect(find.text('Savings Goals'), findsOneWidget);
+        expect(find.text('Recurring'), findsOneWidget);
+        expect(find.text('Accounts'), findsOneWidget);
+        expect(find.text('REMAINING MONTHLY BUDGET'), findsNothing);
+        expect(find.text('SAVINGS GOALS'), findsNothing);
+      },
     );
   });
 

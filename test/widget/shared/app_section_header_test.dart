@@ -1,4 +1,5 @@
 import 'package:ai_financial_coach/shared/theme/app_theme.dart';
+import 'package:ai_financial_coach/shared/theme/app_typography.dart';
 import 'package:ai_financial_coach/shared/widgets/app_section_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,6 +58,44 @@ void main() {
 
     expect(find.byType(TextButton), findsNothing);
   });
+
+  // Visual System Convergence Checkpoint 7.2: `eyebrow` -- styles the
+  // title with `AppTypography.eyebrow` instead of `sectionTitle`, but
+  // deliberately never changes the rendered string's casing.
+
+  testWidgets(
+    'CP7.2: eyebrow defaults to false and renders the title with the sectionTitle style',
+    (tester) async {
+      await tester.pumpWidget(buildApp(const AppSectionHeader(title: 'Recurring')));
+
+      final BuildContext context = tester.element(find.text('Recurring'));
+      final Text widget = tester.widget<Text>(find.text('Recurring'));
+      expect(widget.style?.fontSize, AppTypography.of(context).sectionTitle?.fontSize);
+    },
+  );
+
+  testWidgets(
+    'CP7.2: eyebrow: true styles the title with AppTypography.eyebrow, without '
+    "changing the rendered string's casing",
+    (tester) async {
+      await tester.pumpWidget(
+        buildApp(const AppSectionHeader(title: 'Remaining monthly budget', eyebrow: true)),
+      );
+
+      // Exact original casing is preserved -- this is the guarantee every
+      // existing `find.text('Remaining monthly budget')` assertion
+      // elsewhere in the app relies on.
+      final Finder titleFinder = find.text('Remaining monthly budget');
+      expect(titleFinder, findsOneWidget);
+      expect(find.text('REMAINING MONTHLY BUDGET'), findsNothing);
+
+      final BuildContext context = tester.element(titleFinder);
+      final Text widget = tester.widget<Text>(titleFinder);
+      final TextStyle? eyebrowStyle = AppTypography.of(context).eyebrow;
+      expect(widget.style?.fontSize, eyebrowStyle?.fontSize);
+      expect(widget.style?.letterSpacing, eyebrowStyle?.letterSpacing);
+    },
+  );
 
   testWidgets(
     'a long Japanese title and trailing action both render without overflow '

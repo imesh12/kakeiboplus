@@ -65,6 +65,26 @@ class AppTypography {
   TextStyle? get mediumMoney => _text.titleLarge?.copyWith(fontWeight: FontWeight.w700);
 
   TextStyle? get smallMoney => _text.titleMedium?.copyWith(fontWeight: FontWeight.w700);
+
+  /// Visual System Convergence Checkpoint 7.2 addition: a small, muted,
+  /// letter-spaced label role -- matching the approved Claude Design
+  /// reference's section-header treatment (e.g. "TOTAL AVAILABLE
+  /// BALANCE", "UPCOMING COMMITMENTS"). This getter only owns the shape
+  /// (size/weight/tracking/color) of the role, exactly like every other
+  /// getter here -- it does NOT uppercase text itself. [AppSectionHeader]'s
+  /// own `eyebrow` flag renders its title styled with this role while
+  /// deliberately preserving the title's original casing (rather than
+  /// calling `.toUpperCase()`), because dozens of existing widget tests
+  /// across the app assert on the exact ARB-sourced title strings (e.g.
+  /// `find.text('Remaining monthly budget')`) -- see that flag's own doc
+  /// comment for the full reasoning. A caller that separately wants a
+  /// true all-caps look may still call `.toUpperCase()` on its own text
+  /// before styling it with this getter.
+  TextStyle? get eyebrow => _text.labelSmall?.copyWith(
+    color: _colors.onSurfaceVariant,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.8,
+  );
 }
 
 /// Ergonomic accessor, matching `context.appTokens` in `app_tokens.dart`.

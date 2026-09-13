@@ -103,6 +103,7 @@ class HomeScreen extends ConsumerWidget {
                 // behavior is unchanged.
                 AppSectionHeader(
                   title: l10n.accountsSectionTitle,
+                  eyebrow: true,
                   trailing: TextButton(
                     onPressed: () => context.push(AppRoutes.accounts),
                     child: Text(l10n.manage),
@@ -177,10 +178,11 @@ class _CurrencySummarySection extends StatelessWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (Object e, StackTrace st) =>
-          AppCard(child: Text(l10n.couldNotLoadBalances(e.toString()))),
+          AppCard(bordered: true, child: Text(l10n.couldNotLoadBalances(e.toString()))),
       data: (List<CurrencyDashboardSummary> summaries) {
         if (summaries.isEmpty) {
           return AppCard(
+            bordered: true,
             child: Row(
               children: <Widget>[
                 Icon(Icons.account_balance_wallet_outlined, color: colors.primary),
@@ -330,9 +332,20 @@ class _HeroCurrencyCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Visual System Convergence Checkpoint 7.2: styled with
+                // the shared `eyebrow` typography role (small, muted,
+                // letter-spaced, semibold) instead of a plain
+                // `bodyMedium`, matching the approved Claude Design
+                // reference's "TOTAL AVAILABLE BALANCE" caption -- tinted
+                // to `onPrimaryContainer` (at reduced emphasis) since
+                // this card sits on a filled `primaryContainer`
+                // background. The string itself (`l10n.totalAvailableBalance`)
+                // is unchanged -- only its style.
                 Text(
                   l10n.totalAvailableBalance,
-                  style: text.bodyMedium?.copyWith(color: colors.onPrimaryContainer),
+                  style: context.appTypography.eyebrow?.copyWith(
+                    color: colors.onPrimaryContainer.withValues(alpha: 0.85),
+                  ),
                 ),
                 const SizedBox(height: 18),
                 _MonthlyMetricsSection(
@@ -366,6 +379,7 @@ class _SecondaryCurrencyCard extends StatelessWidget {
 
     return AppCard(
       key: Key('secondaryCurrencyCard_${summary.currencyCode}'),
+      bordered: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -402,7 +416,9 @@ class _SecondaryCurrencyCard extends StatelessWidget {
               ),
             ],
           ),
-          Text(l10n.totalAvailableBalance, style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+          // CP7.2: shared `eyebrow` role, matching the hero card's own
+          // caption above -- see that widget's comment.
+          Text(l10n.totalAvailableBalance, style: context.appTypography.eyebrow),
           const SizedBox(height: 12),
           _MonthlyMetricsSection(summary: summary, emphasize: false),
         ],
@@ -583,12 +599,14 @@ class _BudgetCard extends ConsumerWidget {
     final BudgetCalculation? calculation = budget.calculation;
 
     return AppCard(
+      bordered: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           AppSectionHeader(
             icon: Icons.savings_outlined,
             title: l10n.remainingMonthlyBudget,
+            eyebrow: true,
             trailing: calculation != null
                 ? TextButton(
                     key: const Key('manageBudgetsButton'),
@@ -859,12 +877,14 @@ class _SavingsGoalsCard extends ConsumerWidget {
     final GoalHomeSelection? selection = selectionAsync.valueOrNull;
 
     return AppCard(
+      bordered: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           AppSectionHeader(
             icon: Icons.flag_outlined,
             title: l10n.savingsGoalsTitle,
+            eyebrow: true,
             trailing: selection != null && selection.kind != GoalHomeSelectionKind.empty
                 ? TextButton(
                     key: const Key('viewAllGoalsButton'),
@@ -1002,12 +1022,14 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
     final RecurringHomeSelection? selection = selectionAsync.valueOrNull;
 
     return AppCard(
+      bordered: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           AppSectionHeader(
             icon: Icons.event_note_outlined,
             title: l10n.recurringTitle,
+            eyebrow: true,
             trailing: selection != null && selection.kind != RecurringHomeSelectionKind.empty
                 ? TextButton(
                     key: const Key('viewAllRecurringButton'),
@@ -1120,6 +1142,7 @@ class _AccountTile extends ConsumerWidget {
     // in full -- see its doc comment. No `onTap` existed before this
     // change and none is added here.
     return AppCard(
+      bordered: true,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md, vertical: tokens.spacing.sm),
       child: balanceAsync.when(
         loading: () => _AdaptiveAccountRow(

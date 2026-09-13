@@ -18,7 +18,13 @@ import '../theme/app_typography.dart';
 /// translation shrinks gracefully instead of pushing [trailing] off the
 /// row or overflowing.
 class AppSectionHeader extends StatelessWidget {
-  const AppSectionHeader({required this.title, super.key, this.icon, this.trailing});
+  const AppSectionHeader({
+    required this.title,
+    super.key,
+    this.icon,
+    this.trailing,
+    this.eyebrow = false,
+  });
 
   final String title;
 
@@ -31,11 +37,23 @@ class AppSectionHeader extends StatelessWidget {
   /// reflowed by this widget beyond sitting at the row's end.
   final Widget? trailing;
 
+  /// Visual System Convergence Checkpoint 7.2: when true, styles [title]
+  /// with [AppTypography.eyebrow] (small, muted, letter-spaced, semibold)
+  /// instead of [AppTypography.sectionTitle] -- matching the approved
+  /// Claude Design reference's section-header treatment. Deliberately
+  /// does NOT change [title]'s casing: the string rendered is always
+  /// exactly [title], unchanged, so every existing `find.text(title)`
+  /// assertion across the app keeps matching regardless of which value
+  /// this flag is given. Purely a visual-hierarchy choice, like
+  /// `AppMoneyEmphasis` on `AppMoneyText`.
+  final bool eyebrow;
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final AppTokens tokens = context.appTokens;
-    final TextStyle? style = context.appTypography.sectionTitle;
+    final TextStyle? style =
+        eyebrow ? context.appTypography.eyebrow : context.appTypography.sectionTitle;
 
     return Row(
       children: <Widget>[
