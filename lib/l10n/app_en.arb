@@ -342,5 +342,43 @@
   "addExpenseCategoryDialogTitle": "Add expense category",
   "addIncomeCategoryDialogTitle": "Add income category",
   "categoryNameLabel": "Name",
-  "addCategoryButton": "Add"
+  "addCategoryButton": "Add",
+  "profileLocationSummary": "Living in {currentCountry} ({livingCurrency}) · Home: {homeCountry} ({homeCurrency})",
+  "@profileLocationSummary": {
+    "description": "profileLocationSummary",
+    "placeholders": {
+      "currentCountry": {
+        "type": "String"
+      },
+      "livingCurrency": {
+        "type": "String"
+      },
+      "homeCountry": {
+        "type": "String"
+      },
+      "homeCurrency": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotLoadProfile": "Could not load profile: {error}",
+  "@couldNotLoadProfile": {
+    "description": "couldNotLoadProfile",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "budgetsTitle": "Budgets",
+  "beta0DisclaimerMessage": "Beta 0 -- local money engine. FX, receipts, notifications, cloud sync, and AI coaching are not implemented yet.",
+  "couldNotSavePreferencesMessage": "Could not save: {error}",
+  "@couldNotSavePreferencesMessage": {
+    "description": "couldNotSavePreferencesMessage",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

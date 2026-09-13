@@ -1184,6 +1184,37 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add'**
   String get addCategoryButton;
+
+  /// profileLocationSummary
+  ///
+  /// In en, this message translates to:
+  /// **'Living in {currentCountry} ({livingCurrency}) · Home: {homeCountry} ({homeCurrency})'**
+  String profileLocationSummary(String currentCountry, String livingCurrency,
+      String homeCountry, String homeCurrency);
+
+  /// couldNotLoadProfile
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load profile: {error}'**
+  String couldNotLoadProfile(String error);
+
+  /// No description provided for @budgetsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Budgets'**
+  String get budgetsTitle;
+
+  /// No description provided for @beta0DisclaimerMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Beta 0 -- local money engine. FX, receipts, notifications, cloud sync, and AI coaching are not implemented yet.'**
+  String get beta0DisclaimerMessage;
+
+  /// couldNotSavePreferencesMessage
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save: {error}'**
+  String couldNotSavePreferencesMessage(String error);
 }
 
 class _AppLocalizationsDelegate

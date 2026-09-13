@@ -598,4 +598,27 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get addCategoryButton => '追加';
+
+  @override
+  String profileLocationSummary(String currentCountry, String livingCurrency,
+      String homeCountry, String homeCurrency) {
+    return '現在の居住国: $currentCountry（$livingCurrency）・母国: $homeCountry（$homeCurrency）';
+  }
+
+  @override
+  String couldNotLoadProfile(String error) {
+    return 'プロフィールを読み込めませんでした: $error';
+  }
+
+  @override
+  String get budgetsTitle => '予算';
+
+  @override
+  String get beta0DisclaimerMessage =>
+      'ベータ0 — ローカルの家計管理エンジンです。外貨換算（FX）、レシート、通知、クラウド同期、AIコーチングはまだ実装されていません。';
+
+  @override
+  String couldNotSavePreferencesMessage(String error) {
+    return '保存できませんでした: $error';
+  }
 }

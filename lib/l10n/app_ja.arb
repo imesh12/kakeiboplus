@@ -342,5 +342,43 @@
   "addExpenseCategoryDialogTitle": "支出カテゴリを追加",
   "addIncomeCategoryDialogTitle": "収入カテゴリを追加",
   "categoryNameLabel": "名前",
-  "addCategoryButton": "追加"
+  "addCategoryButton": "追加",
+  "profileLocationSummary": "現在の居住国: {currentCountry}（{livingCurrency}）・母国: {homeCountry}（{homeCurrency}）",
+  "@profileLocationSummary": {
+    "description": "profileLocationSummary",
+    "placeholders": {
+      "currentCountry": {
+        "type": "String"
+      },
+      "livingCurrency": {
+        "type": "String"
+      },
+      "homeCountry": {
+        "type": "String"
+      },
+      "homeCurrency": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotLoadProfile": "プロフィールを読み込めませんでした: {error}",
+  "@couldNotLoadProfile": {
+    "description": "couldNotLoadProfile",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "budgetsTitle": "予算",
+  "beta0DisclaimerMessage": "ベータ0 — ローカルの家計管理エンジンです。外貨換算（FX）、レシート、通知、クラウド同期、AIコーチングはまだ実装されていません。",
+  "couldNotSavePreferencesMessage": "保存できませんでした: {error}",
+  "@couldNotSavePreferencesMessage": {
+    "description": "couldNotSavePreferencesMessage",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

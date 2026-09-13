@@ -615,4 +615,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addCategoryButton => 'Add';
+
+  @override
+  String profileLocationSummary(String currentCountry, String livingCurrency,
+      String homeCountry, String homeCurrency) {
+    return 'Living in $currentCountry ($livingCurrency) · Home: $homeCountry ($homeCurrency)';
+  }
+
+  @override
+  String couldNotLoadProfile(String error) {
+    return 'Could not load profile: $error';
+  }
+
+  @override
+  String get budgetsTitle => 'Budgets';
+
+  @override
+  String get beta0DisclaimerMessage =>
+      'Beta 0 -- local money engine. FX, receipts, notifications, cloud sync, and AI coaching are not implemented yet.';
+
+  @override
+  String couldNotSavePreferencesMessage(String error) {
+    return 'Could not save: $error';
+  }
 }

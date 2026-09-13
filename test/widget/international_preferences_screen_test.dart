@@ -963,4 +963,159 @@ void main() {
     final ProfileRow? profile = await ProfileRepository(db).getProfile();
     expect(profile!.homeCountry, 'US');
   });
+
+  // CP6.8 (Localization Phase 1): additive coverage the CP3B/CP4.3/CP5.3
+  // suite above doesn't already provide -- a single Save that changes
+  // all 8 fields atomically in one go, and the Japanese-locale x
+  // large-text-scale x narrow-width combinations the existing Japanese
+  // proof test and the existing CP5.3 (English-locale) stress tests
+  // don't individually cover together. Nothing here weakens or replaces
+  // any test above.
+  testWidgets(
+      'CP6.8 (H): a single Save persists all 8 changed international preference fields '
+      'atomically', (tester) async {
+    final (AppDatabase db, String profileId) = await seededDb();
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container);
+    await selectItem(tester, key: homeCountryKey, itemValue: 'US', itemLabel: 'United States');
+    await selectItem(tester, key: currentCountryKey, itemValue: 'CA', itemLabel: 'Canada');
+    await selectItem(tester, key: homeCurrencyKey, itemValue: 'USD', itemLabel: 'USD — US Dollar');
+    await selectItem(
+      tester,
+      key: livingCurrencyKey,
+      itemValue: 'CAD',
+      itemLabel: 'CAD — Canadian Dollar',
+    );
+    await selectItem(tester, key: languageKey, itemValue: 'ja', itemLabel: 'Japanese');
+    await selectItem(
+      tester,
+      key: dateFormatKey,
+      itemValue: 'dmy',
+      itemLabel: 'Day, Month, Year (30-08-2026)',
+    );
+    await selectItem(
+      tester,
+      key: numberFormatKey,
+      itemValue: 'period_comma',
+      itemLabel: '1.234.567,89 (period thousands)',
+    );
+    await selectItem(
+      tester,
+      key: timezoneKey,
+      itemValue: 'America/Toronto',
+      itemLabel: 'Toronto (America/Toronto)',
+    );
+
+    await save(tester);
+
+    final ProfileRow? profile = await ProfileRepository(db).getProfile();
+    expect(profile!.homeCountry, 'US');
+    expect(profile.currentCountry, 'CA');
+    expect(profile.homeCurrency, 'USD');
+    expect(profile.livingCurrency, 'CAD');
+    expect(profile.preferredLanguage, 'ja');
+    expect(profile.dateFormat, 'dmy');
+    expect(profile.numberFormat, 'period_comma');
+    expect(profile.timezone, 'America/Toronto');
+  });
+
+  testWidgets(
+      'CP6.8 (I): the screen renders without overflow under the Japanese locale at a 1.6x text '
+      'scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb(preferredLanguage: 'ja');
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container, locale: const Locale('ja'));
+    expect(tester.takeException(), isNull);
+
+    expect(find.text('言語・地域設定'), findsOneWidget);
+    expect(await fieldValue(tester, homeCountryKey), 'LK');
+    expect(await fieldValue(tester, timezoneKey), 'Asia/Tokyo');
+    expect(tester.takeException(), isNull);
+
+    final Finder saveButton = find.text('保存');
+    await scrollPageUntilVisible(tester, saveButton, description: "The '保存' (Save) button");
+    expect(saveButton, findsOneWidget);
+  });
+
+  testWidgets(
+      'CP6.8 (J): the screen renders without overflow under the Japanese locale at an extreme '
+      '2.0x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId) = await seededDb(preferredLanguage: 'ja');
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container, locale: const Locale('ja'));
+    expect(tester.takeException(), isNull);
+
+    expect(find.text('言語・地域設定'), findsOneWidget);
+    expect(await fieldValue(tester, homeCurrencyKey), 'LKR');
+    expect(await fieldValue(tester, languageKey), 'ja');
+    expect(tester.takeException(), isNull);
+
+    final Finder saveButton = find.text('保存');
+    await scrollPageUntilVisible(tester, saveButton, description: "The '保存' (Save) button");
+    expect(saveButton, findsOneWidget);
+  });
+
+  testWidgets(
+      'CP6.8 (K): a long unknown raw timezone value renders without an overflow exception under '
+      'the Japanese locale at a narrow 320px width and a 1.6x text scale, and survives an '
+      'unrelated Save unchanged', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    const String longUnknownTimezone =
+        'Not/A-Legacy-Timezone-Identifier-From-A-Discontinued-Region-Used-For-Stress-Testing';
+    final (AppDatabase db, String profileId) =
+        await seededDb(preferredLanguage: 'ja', timezone: longUnknownTimezone);
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await openScreen(tester, container, locale: const Locale('ja'));
+    expect(tester.takeException(), isNull);
+    expect(await fieldValue(tester, timezoneKey), longUnknownTimezone);
+    await ensureFieldVisible(tester, timezoneKey);
+    expect(
+      find.descendant(
+        of: find.byKey(timezoneKey),
+        matching: find.text('Unknown ($longUnknownTimezone)'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    await selectItem(tester, key: currentCountryKey, itemValue: 'CA', itemLabel: 'Canada');
+    await save(tester, buttonLabel: '保存');
+    expect(tester.takeException(), isNull);
+
+    final ProfileRow? profile = await ProfileRepository(db).getProfile();
+    expect(profile!.timezone, longUnknownTimezone); // preserved raw, unchanged
+    expect(profile.currentCountry, 'CA'); // the field actually changed
+  });
 }

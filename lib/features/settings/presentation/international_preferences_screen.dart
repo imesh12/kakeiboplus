@@ -30,6 +30,25 @@ import '../../onboarding/presentation/profile_providers.dart';
 /// timezone display names and format examples is a separate, much larger
 /// effort, not part of this checkpoint's small proof surface.
 ///
+/// Checkpoint 6.8 (Localization Phase 1) finishes this screen's remaining
+/// two literal-English messages -- the profile-load error (reuses the
+/// same `couldNotLoadProfile` key `SettingsScreen` uses, since both
+/// screens hit the exact same error branch on the exact same
+/// `activeProfileProvider`) and the Save-failure message (a new
+/// `couldNotSavePreferencesMessage` key, kept separate from the
+/// similarly-generic `couldNotSaveTransaction` key so a save failure here
+/// is never conflated with a transaction save failure even though the
+/// English text happens to coincide). `_save` resolves `l10n` once,
+/// before its first `await`, matching this project's established
+/// pattern (see `RecurringScreen._submit`). [_languageLabel] is left
+/// exactly as CP4.3 defined it -- still English self-names ("English"/
+/// "Japanese") for both options regardless of the active UI locale.
+/// Showing each language's own native name instead (e.g. "日本語") would
+/// be a reasonable follow-up, but changing it now would also mean
+/// rewriting two already-passing tests below for a purely cosmetic
+/// change outside this checkpoint's mandate, so it's deliberately
+/// deferred rather than bundled in here.
+///
 /// # Raw-value-is-source-of-truth policy (critical -- see CP3 audit +
 /// CP3A's "critical unknown-value safety" rule)
 ///
@@ -115,6 +134,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
 
   Future<void> _save() async {
     if (_isSaving) return;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -133,7 +153,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
           );
       if (mounted) context.pop();
     } catch (e) {
-      if (mounted) setState(() => _errorMessage = 'Could not save: $e');
+      if (mounted) setState(() => _errorMessage = l10n.couldNotSavePreferencesMessage('$e'));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -150,7 +170,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
       appBar: AppBar(title: Text(l10n.internationalPreferences)),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) => Center(child: Text('Could not load profile: $e')),
+        error: (Object e, StackTrace st) => Center(child: Text(l10n.couldNotLoadProfile('$e'))),
         data: (ProfileRow? profile) {
           if (profile == null) return const SizedBox.shrink();
           _ensureSeeded(profile);
