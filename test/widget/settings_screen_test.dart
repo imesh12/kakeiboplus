@@ -148,7 +148,7 @@ void main() {
         findsOneWidget,
       ); // beta0DisclaimerMessage
       // profileLocationSummary -- Japanese sentence template, raw codes untranslated.
-      expect(find.text('現在の居住国: JP（JPY）・母国: LK（LKR）'), findsOneWidget);
+      expect(find.text('現在の国: JP（JPY）・母国: LK（LKR）'), findsOneWidget);
     });
 
     testWidgets('CP6.8 (B): tapping the localized Accounts row under the Japanese locale still '
@@ -193,7 +193,7 @@ void main() {
       expect(find.text('田中 花子'), findsOneWidget); // untouched user content, never translated
       // Raw ISO country/currency codes interpolated into the Japanese
       // template, never translated or reordered.
-      expect(find.text('現在の居住国: KW（KWD）・母国: MM（MMK）'), findsOneWidget);
+      expect(find.text('現在の国: KW（KWD）・母国: MM（MMK）'), findsOneWidget);
     });
 
     testWidgets(

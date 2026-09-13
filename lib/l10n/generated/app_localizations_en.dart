@@ -638,4 +638,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String couldNotSavePreferencesMessage(String error) {
     return 'Could not save: $error';
   }
+
+  @override
+  String get editTransactionGenericTitle => 'Edit transaction';
+
+  @override
+  String couldNotLoadTransactionDetail(String error) {
+    return 'Could not load this transaction: $error';
+  }
+
+  @override
+  String get transactionDetailScreenTitle => 'Transaction';
+
+  @override
+  String get deleteTooltip => 'Delete';
+
+  @override
+  String get deleteTransactionConfirmTitle => 'Delete this transaction?';
+
+  @override
+  String get deleteTransactionConfirmMessage =>
+      'It will no longer count toward any balance, budget, or total.';
+
+  @override
+  String get transactionDetailFromLabel => 'From';
+
+  @override
+  String get transactionDetailToLabel => 'To';
+
+  @override
+  String get transactionDetailNoteLabel => 'Note';
 }

@@ -8,6 +8,7 @@ import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import 'transaction_icon_badge.dart';
@@ -35,22 +36,23 @@ class TransactionDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<Transaction?> txAsync = ref.watch(transactionByIdProvider(transactionId));
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Transaction'),
+        title: Text(l10n.transactionDetailScreenTitle),
         actions: <Widget>[
           if (txAsync.valueOrNull != null) ...<Widget>[
             IconButton(
               key: const Key('editTransaction'),
               icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit',
+              tooltip: l10n.editTooltip,
               onPressed: () => context.push(AppRoutes.editTransaction(transactionId)),
             ),
             IconButton(
               key: const Key('deleteTransaction'),
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete',
+              tooltip: l10n.deleteTooltip,
               onPressed: () => _confirmDelete(context, ref),
             ),
           ],
@@ -59,14 +61,14 @@ class TransactionDetailScreen extends ConsumerWidget {
       body: txAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (Object e, StackTrace st) =>
-            Center(child: Text('Could not load this transaction: $e')),
+            Center(child: Text(l10n.couldNotLoadTransactionDetail('$e'))),
         data: (Transaction? tx) {
           if (tx == null) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
-                  'This transaction is no longer available.',
+                  l10n.transactionNoLongerAvailable,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -79,22 +81,21 @@ class TransactionDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Delete this transaction?'),
-        content: const Text(
-          'It will no longer count toward any balance, budget, or total.',
-        ),
+        title: Text(l10n.deleteTransactionConfirmTitle),
+        content: Text(l10n.deleteTransactionConfirmMessage),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             key: const Key('confirmDeleteTransaction'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.deleteButton),
           ),
         ],
       ),
@@ -113,6 +114,7 @@ class _TransactionDetailBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
 
     final bool isTransfer = tx.type == 'transfer';
@@ -161,24 +163,24 @@ class _TransactionDetailBody extends ConsumerWidget {
       _ => colors.error,
     };
     final String typeLabel = switch (tx.type) {
-      'income' => 'Income',
-      'transfer' => 'Transfer',
-      _ => 'Expense',
+      'income' => l10n.transactionTypeIncome,
+      'transfer' => l10n.transactionTypeTransfer,
+      _ => l10n.transactionTypeExpense,
     };
     // Preserves the exact existing fallback text: no categoryId at all
     // -> 'None'; a categoryId that doesn't resolve (deleted/unrecognized)
     // -> '—'; otherwise the resolved name.
     final String categoryDisplayValue =
-        tx.categoryId == null ? 'None' : (category?.name ?? '—');
+        tx.categoryId == null ? l10n.noneOptionLabel : (category?.name ?? '—');
 
     final String formattedAmount = _formatter.format(amount);
     // Spoken sign, independent of the visual '+'/'-'/none prefix and of
     // amountColor -- "don't rely on color alone" extends to the amount
     // too, matching Activity's row convention.
     final String spokenAmount = switch (tx.type) {
-      'income' => 'plus $formattedAmount',
+      'income' => l10n.spokenPlusAmount(formattedAmount),
       'transfer' => formattedAmount,
-      _ => 'minus $formattedAmount',
+      _ => l10n.spokenMinusAmount(formattedAmount),
     };
 
     return ListView(
@@ -210,28 +212,31 @@ class _TransactionDetailBody extends ConsumerWidget {
             child: Column(
               children: <Widget>[
                 if (isTransfer) ...<Widget>[
-                  _DetailRow(label: 'From', value: accountNames[tx.accountId] ?? '—'),
+                  _DetailRow(
+                    label: l10n.transactionDetailFromLabel,
+                    value: accountNames[tx.accountId] ?? '—',
+                  ),
                   const Divider(height: 1),
                   _DetailRow(
-                    label: 'To',
+                    label: l10n.transactionDetailToLabel,
                     value: tx.destinationAccountId == null
                         ? '—'
                         : (accountNames[tx.destinationAccountId] ?? '—'),
                   ),
                   const Divider(height: 1),
                 ] else ...<Widget>[
-                  _DetailRow(label: 'Account', value: accountNames[tx.accountId] ?? '—'),
+                  _DetailRow(label: l10n.accountLabel, value: accountNames[tx.accountId] ?? '—'),
                   const Divider(height: 1),
-                  _DetailRow(label: 'Category', value: categoryDisplayValue),
+                  _DetailRow(label: l10n.categoryFieldLabel, value: categoryDisplayValue),
                   const Divider(height: 1),
                 ],
                 _DetailRow(
-                  label: 'Date',
+                  label: l10n.dateLabel,
                   value: DateFormat.yMMMd().add_jm().format(tx.occurredAt.toLocal()),
                 ),
                 if (tx.note != null && tx.note!.isNotEmpty) ...<Widget>[
                   const Divider(height: 1),
-                  _DetailRow(label: 'Note', value: tx.note!),
+                  _DetailRow(label: l10n.transactionDetailNoteLabel, value: tx.note!),
                 ],
               ],
             ),

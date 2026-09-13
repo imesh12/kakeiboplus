@@ -267,7 +267,7 @@
     }
   },
   "goalNoLongerAvailableMessage": "この目標は利用できません。",
-  "deleteGoalConfirmTitle": "この目標を削除しますか?",
+  "deleteGoalConfirmTitle": "この目標を削除しますか？",
   "deleteGoalConfirmMessage": "積立履歴は保持されますが、目標自体は有効ではなくなります。",
   "deleteButton": "削除",
   "remainingLabel": "残り",
@@ -343,7 +343,7 @@
   "addIncomeCategoryDialogTitle": "収入カテゴリを追加",
   "categoryNameLabel": "名前",
   "addCategoryButton": "追加",
-  "profileLocationSummary": "現在の居住国: {currentCountry}（{livingCurrency}）・母国: {homeCountry}（{homeCurrency}）",
+  "profileLocationSummary": "現在の国: {currentCountry}（{livingCurrency}）・母国: {homeCountry}（{homeCurrency}）",
   "@profileLocationSummary": {
     "description": "profileLocationSummary",
     "placeholders": {
@@ -380,5 +380,22 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editTransactionGenericTitle": "取引を編集",
+  "couldNotLoadTransactionDetail": "この取引を読み込めませんでした: {error}",
+  "@couldNotLoadTransactionDetail": {
+    "description": "couldNotLoadTransactionDetail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "transactionDetailScreenTitle": "取引",
+  "deleteTooltip": "削除",
+  "deleteTransactionConfirmTitle": "この取引を削除しますか？",
+  "deleteTransactionConfirmMessage": "残高・予算・合計のいずれにも反映されなくなります。",
+  "transactionDetailFromLabel": "振替元",
+  "transactionDetailToLabel": "振替先",
+  "transactionDetailNoteLabel": "メモ"
 }

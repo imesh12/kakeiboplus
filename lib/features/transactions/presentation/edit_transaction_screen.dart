@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import 'add_transaction_screen.dart';
 import 'transaction_providers.dart';
 
@@ -23,25 +24,26 @@ class EditTransactionScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<Transaction?> txAsync = ref.watch(transactionByIdProvider(transactionId));
+    final AppLocalizations l10n = AppLocalizations.of(context);
 
     return txAsync.when(
       loading: () => Scaffold(
-        appBar: AppBar(title: const Text('Edit transaction')),
+        appBar: AppBar(title: Text(l10n.editTransactionGenericTitle)),
         body: const Center(child: CircularProgressIndicator()),
       ),
       error: (Object e, StackTrace st) => Scaffold(
-        appBar: AppBar(title: const Text('Edit transaction')),
-        body: Center(child: Text('Could not load this transaction: $e')),
+        appBar: AppBar(title: Text(l10n.editTransactionGenericTitle)),
+        body: Center(child: Text(l10n.couldNotLoadTransactionDetail('$e'))),
       ),
       data: (Transaction? tx) {
         if (tx == null) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Edit transaction')),
-            body: const Center(
+            appBar: AppBar(title: Text(l10n.editTransactionGenericTitle)),
+            body: Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
-                  'This transaction is no longer available.',
+                  l10n.transactionNoLongerAvailable,
                   textAlign: TextAlign.center,
                 ),
               ),

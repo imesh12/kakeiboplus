@@ -5,6 +5,7 @@ import 'package:ai_financial_coach/core/database/repositories/category_repositor
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
+import 'package:ai_financial_coach/core/money/money_formatter.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/edit_transaction_screen.dart';
@@ -69,7 +70,11 @@ void main() {
   /// `context.push`/`context.pop` calls to have somewhere to go, without
   /// pulling in the real `ActivityScreen` (which isn't what these tests
   /// are about).
-  Widget appWithRouter(ProviderContainer container, String transactionId) {
+  Widget appWithRouter(
+    ProviderContainer container,
+    String transactionId, {
+    Locale locale = const Locale('en'),
+  }) {
     final GoRouter router = GoRouter(
       initialLocation: '/activity',
       routes: <RouteBase>[
@@ -103,11 +108,12 @@ void main() {
         // `EditTransactionScreen`) now reads `AppLocalizations.of(context)`,
         // so this harness needs the same localization wiring
         // `add_transaction_screen_test.dart`'s `appWithPushedScreen()` and
-        // `app_shell_test.dart`'s `buildApp()` already carry. Every test in
-        // this file expects English text (e.g. 'Edit expense'), so a fixed
-        // `locale: const Locale('en')` is enough -- no Japanese-proof tests
-        // live in this file.
-        locale: const Locale('en'),
+        // `app_shell_test.dart`'s `buildApp()` already carry. Most tests in
+        // this file expect English text (e.g. 'Edit expense') and rely on
+        // the `locale` default of `const Locale('en')`; the CP6.9 Japanese
+        // localization group below passes `locale: const Locale('ja')`
+        // explicitly.
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         routerConfig: router,
@@ -185,7 +191,10 @@ void main() {
     await tester.tap(find.text('open detail'));
     await tester.pumpAndSettle();
 
-    expect(find.text('This transaction is no longer available.'), findsOneWidget);
+    expect(
+      find.text('This transaction is no longer available -- it may have been deleted elsewhere.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('editTransaction')), findsNothing);
     expect(find.byKey(const Key('deleteTransaction')), findsNothing);
   });
@@ -202,7 +211,10 @@ void main() {
     await tester.tap(find.text('open detail'));
     await tester.pumpAndSettle();
 
-    expect(find.text('This transaction is no longer available.'), findsOneWidget);
+    expect(
+      find.text('This transaction is no longer available -- it may have been deleted elsewhere.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('tapping edit navigates to the edit screen, prefilled with the existing values',
@@ -501,5 +513,174 @@ void main() {
     // (via `excludeSemantics: true` on its wrapper) isn't also announced
     // as the raw visual text -- avoids duplicate/noisy semantics.
     expect(hasSemanticsLabel(tester, 'minus ¥1,200'), isTrue);
+  });
+
+  // ---------------------------------------------------------------------
+  // CP6.9: Japanese End-to-End QA + Localization Hardening. Covers the
+  // genuinely new/changed strings this checkpoint introduced on this
+  // screen (title, tooltips, delete-confirm dialog, and the From/To/Note
+  // detail-row labels), the full Japanese delete flow end to end, an
+  // international money-format regression check under the Japanese
+  // locale (a 3-decimal currency, since the existing English tests above
+  // already cover JPY's 0-decimal case), and a narrow-width/large-text
+  // sanity check -- deliberately NOT duplicating every English test
+  // above in Japanese (per CP6.9 §16/§9's "aggregate gaps only"
+  // instruction).
+  // ---------------------------------------------------------------------
+
+  testWidgets(
+      'CP6.9 (A): a transfer detail screen renders its title, tooltips, and From/To labels in '
+      'Japanese, and the Japanese delete-confirm dialog completes a real softDelete', (tester) async {
+    final (AppDatabase db, String profileId, String accountId) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String secondAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Savings',
+      type: 'cash',
+      currencyCode: 'JPY',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    final String txId = await txRepo.recordTransfer(
+      profileId: profileId,
+      sourceAccountId: accountId,
+      destinationAccountId: secondAccountId,
+      amount: Money.fromMinorUnits(3000, 'JPY'),
+      occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container, txId, locale: const Locale('ja')));
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    expect(find.text('取引'), findsOneWidget); // AppBar title (transactionDetailScreenTitle)
+    expect(find.text('振替'), findsOneWidget); // header type label (transactionTypeTransfer)
+    expect(find.text('振替元'), findsOneWidget); // transactionDetailFromLabel
+    expect(find.text('振替先'), findsOneWidget); // transactionDetailToLabel
+    expect(find.text('Wallet'), findsOneWidget); // account name -- user/seed content, never translated
+    expect(find.text('Savings'), findsOneWidget);
+    expect(find.text('日付'), findsOneWidget); // dateLabel (reused)
+    expect(hasSemanticsLabel(tester, '振替'), isTrue); // transfer-type Semantics label
+
+    // Tooltip text is a widget property, not rendered `Text` -- read it
+    // directly off the IconButton rather than via `find.text`.
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('editTransaction'))).tooltip,
+      '編集', // editTooltip
+    );
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('deleteTransaction'))).tooltip,
+      '削除', // deleteTooltip
+    );
+
+    await tester.tap(find.byKey(const Key('deleteTransaction')));
+    await tester.pumpAndSettle();
+    expect(find.text('この取引を削除しますか？'), findsOneWidget); // deleteTransactionConfirmTitle
+    expect(
+      find.text('残高・予算・合計のいずれにも反映されなくなります。'),
+      findsOneWidget,
+    ); // deleteTransactionConfirmMessage
+
+    await tester.tap(find.byKey(const Key('confirmDeleteTransaction')));
+    await tester.pumpAndSettle();
+    // Same extra settle cycle as the English delete test above -- see
+    // that test's comment for why one `pumpAndSettle()` isn't always
+    // enough to drain the softDelete/context.pop() overlap.
+    await tester.pumpAndSettle();
+
+    expect(find.text('open detail'), findsOneWidget); // popped back
+    final Transaction row =
+        await (db.select(db.transactions)..where((tbl) => tbl.id.equals(txId))).getSingle();
+    expect(row.deletedAt, isNotNull);
+  });
+
+  testWidgets(
+      'CP6.9 (B): a 3-decimal-currency (KWD) expense renders its full unclipped precision under '
+      'the Japanese locale, with no storage/minor-units corruption', (tester) async {
+    final (AppDatabase db, String profileId, String _) = await seededDb();
+    final AccountRepository accountRepo = AccountRepository(db);
+    final String kwdAccountId = await accountRepo.createAccount(
+      profileId: profileId,
+      name: 'Kuwait Wallet',
+      type: 'cash',
+      currencyCode: 'KWD',
+    );
+    final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+    // 1250.375 KWD -- exercises all 3 of KWD's minor-unit digits.
+    final Money kwdAmount = Money.fromMinorUnits(1250375, 'KWD');
+    final String txId = await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: kwdAccountId,
+      amount: kwdAmount,
+      occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container, txId, locale: const Locale('ja')));
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    // Built from the same production `MoneyFormatter` the screen itself
+    // uses -- this test verifies the screen renders that authoritative
+    // output unmodified under the Japanese locale, not a hand-transcribed
+    // re-implementation of currency formatting rules.
+    const MoneyFormatter formatter = MoneyFormatter();
+    final String formattedAmount = formatter.format(kwdAmount);
+    expect(find.text('-$formattedAmount'), findsOneWidget); // '-' expense prefix, no digits dropped
+    expect(hasSemanticsLabel(tester, 'マイナス$formattedAmount'), isTrue); // spokenMinusAmount
+    expect(find.text('なし'), findsOneWidget); // noneOptionLabel -- no category on this transaction
+
+    // Storage invariant: the persisted minor-units value is untouched by
+    // any of the above presentation-layer localization.
+    final Transaction row =
+        await (db.select(db.transactions)..where((tbl) => tbl.id.equals(txId))).getSingle();
+    expect(row.amountMinorUnits, 1250375);
+    expect(row.currencyCode, 'KWD');
+  });
+
+  testWidgets(
+      'CP6.9 (C): the transaction detail screen renders without overflow under the Japanese '
+      'locale at a narrow 320px width and an extreme 2.0x text scale', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    final (AppDatabase db, String profileId, String accountId) = await seededDb();
+    final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+    final String txId = await txRepo.recordIncome(
+      profileId: profileId,
+      accountId: accountId,
+      amount: Money.fromMinorUnits(500000, 'JPY'),
+      categoryId: 'sys-salary',
+      note: 'ボーナス',
+      occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container, txId, locale: const Locale('ja')));
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+
+    // The money value must never be the thing that yields under text
+    // scaling/narrow width -- no overflow exception, and the amount is
+    // still findable with every digit intact.
+    expect(tester.takeException(), isNull);
+    expect(find.text('+¥500,000'), findsOneWidget);
+    expect(find.byKey(const Key('transactionDetailAmount')), findsOneWidget);
+    expect(find.text('ボーナス'), findsOneWidget); // user-entered note, never translated
   });
 }

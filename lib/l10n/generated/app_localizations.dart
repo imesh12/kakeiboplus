@@ -1215,6 +1215,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not save: {error}'**
   String couldNotSavePreferencesMessage(String error);
+
+  /// No description provided for @editTransactionGenericTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit transaction'**
+  String get editTransactionGenericTitle;
+
+  /// couldNotLoadTransactionDetail
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this transaction: {error}'**
+  String couldNotLoadTransactionDetail(String error);
+
+  /// No description provided for @transactionDetailScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction'**
+  String get transactionDetailScreenTitle;
+
+  /// No description provided for @deleteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get deleteTooltip;
+
+  /// No description provided for @deleteTransactionConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this transaction?'**
+  String get deleteTransactionConfirmTitle;
+
+  /// No description provided for @deleteTransactionConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'It will no longer count toward any balance, budget, or total.'**
+  String get deleteTransactionConfirmMessage;
+
+  /// No description provided for @transactionDetailFromLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get transactionDetailFromLabel;
+
+  /// No description provided for @transactionDetailToLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'To'**
+  String get transactionDetailToLabel;
+
+  /// No description provided for @transactionDetailNoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get transactionDetailNoteLabel;
 }
 
 class _AppLocalizationsDelegate

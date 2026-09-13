@@ -380,5 +380,22 @@
         "type": "String"
       }
     }
-  }
+  },
+  "editTransactionGenericTitle": "Edit transaction",
+  "couldNotLoadTransactionDetail": "Could not load this transaction: {error}",
+  "@couldNotLoadTransactionDetail": {
+    "description": "couldNotLoadTransactionDetail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "transactionDetailScreenTitle": "Transaction",
+  "deleteTooltip": "Delete",
+  "deleteTransactionConfirmTitle": "Delete this transaction?",
+  "deleteTransactionConfirmMessage": "It will no longer count toward any balance, budget, or total.",
+  "transactionDetailFromLabel": "From",
+  "transactionDetailToLabel": "To",
+  "transactionDetailNoteLabel": "Note"
 }

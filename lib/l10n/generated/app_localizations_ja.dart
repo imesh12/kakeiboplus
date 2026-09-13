@@ -441,7 +441,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get goalNoLongerAvailableMessage => 'この目標は利用できません。';
 
   @override
-  String get deleteGoalConfirmTitle => 'この目標を削除しますか?';
+  String get deleteGoalConfirmTitle => 'この目標を削除しますか？';
 
   @override
   String get deleteGoalConfirmMessage => '積立履歴は保持されますが、目標自体は有効ではなくなります。';
@@ -602,7 +602,7 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String profileLocationSummary(String currentCountry, String livingCurrency,
       String homeCountry, String homeCurrency) {
-    return '現在の居住国: $currentCountry（$livingCurrency）・母国: $homeCountry（$homeCurrency）';
+    return '現在の国: $currentCountry（$livingCurrency）・母国: $homeCountry（$homeCurrency）';
   }
 
   @override
@@ -621,4 +621,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String couldNotSavePreferencesMessage(String error) {
     return '保存できませんでした: $error';
   }
+
+  @override
+  String get editTransactionGenericTitle => '取引を編集';
+
+  @override
+  String couldNotLoadTransactionDetail(String error) {
+    return 'この取引を読み込めませんでした: $error';
+  }
+
+  @override
+  String get transactionDetailScreenTitle => '取引';
+
+  @override
+  String get deleteTooltip => '削除';
+
+  @override
+  String get deleteTransactionConfirmTitle => 'この取引を削除しますか？';
+
+  @override
+  String get deleteTransactionConfirmMessage => '残高・予算・合計のいずれにも反映されなくなります。';
+
+  @override
+  String get transactionDetailFromLabel => '振替元';
+
+  @override
+  String get transactionDetailToLabel => '振替先';
+
+  @override
+  String get transactionDetailNoteLabel => 'メモ';
 }
