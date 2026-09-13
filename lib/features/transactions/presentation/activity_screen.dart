@@ -8,6 +8,9 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_tokens.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../domain/activity_date_group.dart';
@@ -110,11 +113,22 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         data: (List<Transaction> transactions) {
           if (transactions.isEmpty) {
             // Activity's true empty state (zero transactions ever) --
-            // unchanged from Checkpoint 2, with no search/filter UI at
-            // all: search is meaningless when there's nothing to search,
-            // and this keeps that state byte-for-byte what it was before
-            // Checkpoint 3.
-            return Center(child: Text(l10n.noTransactionsYetMessage));
+            // same message/behavior as before Checkpoint 3, with no
+            // search/filter UI at all: search is meaningless when
+            // there's nothing to search. Visual System Convergence
+            // Checkpoint 7.3 restyles the message with the shared
+            // `secondaryBody` role (a muted, quieter treatment matching
+            // Home/Activity's other supporting text) -- the string
+            // itself, and the fact that this is the ONLY thing rendered
+            // here (no icon, no action -- `AppEmptyState` requires a
+            // non-null action, which this state has never had), is
+            // unchanged.
+            return Center(
+              child: Text(
+                l10n.noTransactionsYetMessage,
+                style: context.appTypography.secondaryBody,
+              ),
+            );
           }
 
           // Resolve each transaction into Checkpoint 1's
@@ -196,8 +210,9 @@ class _SearchAndFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final AppTokens tokens = context.appTokens;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: EdgeInsets.fromLTRB(tokens.spacing.md, tokens.spacing.xs, tokens.spacing.md, tokens.spacing.xxs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -218,10 +233,10 @@ class _SearchAndFilterBar extends StatelessWidget {
               isDense: true,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.xs),
           Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: tokens.spacing.xs,
+            runSpacing: tokens.spacing.xxs,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
               _TypeFilterChip(
@@ -297,14 +312,19 @@ class _NoMatchingTransactions extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final AppTokens tokens = context.appTokens;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Icon(Icons.search_off, size: 40, color: colors.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text(l10n.noMatchingTransactions),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.spacing.sm),
+          // Visual System Convergence Checkpoint 7.3: restyled with the
+          // shared `secondaryBody` role (muted body text) -- same string,
+          // same "no action beyond Clear filters below" structure as
+          // before this checkpoint.
+          Text(l10n.noMatchingTransactions, style: context.appTypography.secondaryBody),
+          SizedBox(height: tokens.spacing.xs),
           TextButton(
             onPressed: onClearFilters,
             child: Text(l10n.clearFilters),
@@ -381,9 +401,8 @@ class _DateSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme text = Theme.of(context).textTheme;
-    final ColorScheme colors = Theme.of(context).colorScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final AppTokens tokens = context.appTokens;
     // CP6.4: only the two exact-regardless-of-locale labels (`kind` ==
     // today/yesterday) are localized here. `group.label` for
     // `thisWeek`/`thisYear`/`older` groups comes from `DateFormat.EEEE()`/
@@ -402,19 +421,28 @@ class _DateSectionHeader extends StatelessWidget {
       _ => group.label,
     };
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.md,
+        tokens.spacing.md,
+        tokens.spacing.md,
+        tokens.spacing.xxs,
+      ),
       child: Semantics(
         header: true,
         excludeSemantics: true,
         label: l10n.dateGroupSemanticLabel(displayLabel),
-        child: Text(
-          displayLabel.toUpperCase(),
-          style: text.labelSmall?.copyWith(
-            color: colors.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
+        // Visual System Convergence Checkpoint 7.3: swapped the hand-rolled
+        // labelSmall/onSurfaceVariant/w600/letterSpacing:0.5 style for the
+        // shared `eyebrow` role (CP7.2, `app_typography.dart`) -- same
+        // shape family, letter-spacing bumped slightly (0.5 -> 0.8) to
+        // match every other eyebrow-styled label in the app now. The
+        // pre-existing `.toUpperCase()` call is deliberately UNCHANGED:
+        // it predates this checkpoint and this checkpoint does not
+        // introduce any new uppercase transform of localized text (see
+        // `AppTypography.eyebrow`'s own doc comment) -- removing it would
+        // be an unrequested behavior change to already-shipped display
+        // text, not a visual-convergence change.
+        child: Text(displayLabel.toUpperCase(), style: context.appTypography.eyebrow),
       ),
     );
   }
@@ -543,7 +571,10 @@ class _TransactionRow extends StatelessWidget {
     final String amountString = '$amountPrefix$formattedAmount';
 
     final TextStyle? titleStyle = text.bodyLarge?.copyWith(fontWeight: FontWeight.w600);
-    final TextStyle? subtitleStyle = text.bodySmall?.copyWith(color: colors.onSurfaceVariant);
+    // Visual System Convergence Checkpoint 7.3: this is exactly the shape
+    // `AppTypography.caption` already names (`bodySmall` +
+    // `onSurfaceVariant`) -- a pure rename, not a resize.
+    final TextStyle? subtitleStyle = context.appTypography.caption;
     // Never shrunk, never ellipsized -- see the class doc comment.
     final TextStyle? amountStyle =
         text.bodyLarge?.copyWith(color: amountColor, fontWeight: FontWeight.bold);
@@ -586,71 +617,82 @@ class _TransactionRow extends StatelessWidget {
       child: Text(amountString, maxLines: 1, softWrap: false, style: amountStyle),
     );
 
+    // Visual System Convergence Checkpoint 7.3: the raw `Card` +
+    // `InkWell` this row used before is now the shared `AppCard`
+    // (`bordered: true` -- flat white surface, thin `subtleBorder`
+    // outline, matching Home/Activity's converged card treatment).
+    // `AppCard`'s own `padding` parameter carries exactly the same
+    // `symmetric(horizontal: 16, vertical: 12)` value the inner `Padding`
+    // used before, and the outer `Padding(16, 4, 16, 4)` below is
+    // unchanged -- so the TOTAL horizontal inset feeding the
+    // `LayoutBuilder` below is bit-for-bit identical to before this
+    // checkpoint (still 64 total, matching Home's own convention), which
+    // is what keeps every existing `transactionRowHorizontal`/
+    // `transactionRowStacked` boundary test passing unmodified. `AppCard`
+    // also carries CP7.3's own `clipBehavior: Clip.antiAlias` default (see
+    // its doc comment), reproducing the raw `Card`'s explicit
+    // `clipBehavior` so the `InkWell` ripple this row's `onTap` now runs
+    // through `AppCard` stays clipped to the rounded corners exactly as
+    // before.
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      child: Card(
-        elevation: 0,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: InkWell(
-          onTap: () => context.push(AppRoutes.transactionDetail(tx.id)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                // The amount's own natural (unconstrained) width at the
-                // CURRENT text style and text scale -- this single
-                // measurement is what makes the decision automatically
-                // currency-, sign-, and text-scale-agnostic, with no
-                // per-currency or per-transaction-type branching
-                // anywhere in this method.
-                final TextPainter painter = TextPainter(
-                  text: TextSpan(text: amountString, style: amountStyle),
-                  textDirection: Directionality.of(context),
-                  textScaler: MediaQuery.textScalerOf(context),
-                )..layout();
+      child: AppCard(
+        bordered: true,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        onTap: () => context.push(AppRoutes.transactionDetail(tx.id)),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            // The amount's own natural (unconstrained) width at the
+            // CURRENT text style and text scale -- this single
+            // measurement is what makes the decision automatically
+            // currency-, sign-, and text-scale-agnostic, with no
+            // per-currency or per-transaction-type branching
+            // anywhere in this method.
+            final TextPainter painter = TextPainter(
+              text: TextSpan(text: amountString, style: amountStyle),
+              textDirection: Directionality.of(context),
+              textScaler: MediaQuery.textScalerOf(context),
+            )..layout();
 
-                final double available =
-                    constraints.maxWidth - _leadingWidth - _leadingGap - _amountGap;
-                final bool fitsHorizontally = available - painter.width >= _minDescriptionWidth;
+            final double available =
+                constraints.maxWidth - _leadingWidth - _leadingGap - _amountGap;
+            final bool fitsHorizontally = available - painter.width >= _minDescriptionWidth;
 
-                if (fitsHorizontally) {
-                  return Row(
-                    key: const Key('transactionRowHorizontal'),
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: <Widget>[
-                      leadingIcon,
-                      const SizedBox(width: _leadingGap),
-                      Expanded(child: description),
-                      const SizedBox(width: _amountGap),
-                      amountText,
-                    ],
-                  );
-                }
+            if (fitsHorizontally) {
+              return Row(
+                key: const Key('transactionRowHorizontal'),
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  leadingIcon,
+                  const SizedBox(width: _leadingGap),
+                  Expanded(child: description),
+                  const SizedBox(width: _amountGap),
+                  amountText,
+                ],
+              );
+            }
 
-                // Genuinely constrained: the full amount moves below the
-                // description, right-aligned, rather than shrinking or
-                // truncating either side.
-                return Column(
-                  key: const Key('transactionRowStacked'),
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
+            // Genuinely constrained: the full amount moves below the
+            // description, right-aligned, rather than shrinking or
+            // truncating either side.
+            return Column(
+              key: const Key('transactionRowStacked'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: <Widget>[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: <Widget>[
-                        leadingIcon,
-                        const SizedBox(width: _leadingGap),
-                        Expanded(child: description),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Align(alignment: Alignment.centerRight, child: amountText),
+                    leadingIcon,
+                    const SizedBox(width: _leadingGap),
+                    Expanded(child: description),
                   ],
-                );
-              },
-            ),
-          ),
+                ),
+                const SizedBox(height: 4),
+                Align(alignment: Alignment.centerRight, child: amountText),
+              ],
+            );
+          },
         ),
       ),
     );

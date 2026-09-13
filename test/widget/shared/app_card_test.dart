@@ -128,6 +128,21 @@ void main() {
     },
   );
 
+  // Visual System Convergence Checkpoint 7.3: the underlying `Card` always
+  // clips to its rounded shape now, regardless of `onTap`/`bordered` -- see
+  // the `clipBehavior` doc comment on `AppCard` itself for why (Activity's
+  // transaction row is the first call site to combine `onTap`'s InkWell
+  // ripple with this card's rounded corners).
+  testWidgets('CP7.3: always clips to its rounded shape, with or without onTap', (tester) async {
+    await tester.pumpWidget(buildApp(const AppCard(child: Text('content'))));
+    final Card staticCard = tester.widget<Card>(find.byType(Card));
+    expect(staticCard.clipBehavior, Clip.antiAlias);
+
+    await tester.pumpWidget(buildApp(AppCard(onTap: () {}, child: const Text('tappable'))));
+    final Card tappableCard = tester.widget<Card>(find.byType(Card));
+    expect(tappableCard.clipBehavior, Clip.antiAlias);
+  });
+
   testWidgets('renders without exceptions at a narrow 320px width', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);

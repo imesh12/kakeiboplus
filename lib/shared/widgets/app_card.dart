@@ -72,6 +72,17 @@ class AppCard extends StatelessWidget {
   /// opts in.
   final bool bordered;
 
+  /// Visual System Convergence Checkpoint 7.3: the underlying [Card] now
+  /// always sets `clipBehavior: Clip.antiAlias` (previously unset, i.e.
+  /// `Clip.none`). Activity's transaction row -- CP7.3's first call site to
+  /// combine [onTap] (an [InkWell] ripple) with this card's rounded
+  /// corners -- needs its ripple clipped to the rounded shape, exactly like
+  /// the raw `Card(clipBehavior: Clip.antiAlias, ...)` it replaces already
+  /// did. A card with no [onTap] (every CP7.1/CP7.2 Home call site) has no
+  /// ripple to clip and a [child] that never overflows its own rounded
+  /// bounds, so this is invisible there -- see `app_card_test.dart`'s
+  /// dedicated assertion.
+
   @override
   Widget build(BuildContext context) {
     final AppTokens tokens = context.appTokens;
@@ -85,6 +96,7 @@ class AppCard extends StatelessWidget {
     return Card(
       margin: margin,
       elevation: 0,
+      clipBehavior: Clip.antiAlias,
       color: color ?? (bordered ? colorScheme.surface : tokens.colors.cardSurface),
       shape: RoundedRectangleBorder(
         borderRadius: borderRadius,

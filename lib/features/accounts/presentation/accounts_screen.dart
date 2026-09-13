@@ -7,6 +7,8 @@ import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
 import 'account_providers.dart';
 
 const MoneyFormatter _formatter = MoneyFormatter();
@@ -47,9 +49,26 @@ class AccountsScreen extends ConsumerWidget {
             Center(child: Text(l10n.couldNotLoadAccounts(e.toString()))),
         data: (List<AccountRow> accounts) {
           if (accounts.isEmpty) {
-            return Center(child: Text(l10n.noAccountsYetTapToAddMessage));
+            // Visual System Convergence Checkpoint 7.3: restyled with the
+            // shared `secondaryBody` role (muted body text), matching
+            // Activity's true empty state -- same message, no action
+            // (the FAB below remains the only entry point, as before).
+            return Center(
+              child: Text(
+                l10n.noAccountsYetTapToAddMessage,
+                style: context.appTypography.secondaryBody,
+              ),
+            );
           }
+          // Visual System Convergence Checkpoint 7.3: matches Activity's
+          // own `ListView.builder`'s `symmetric(vertical: 8)` padding --
+          // purely vertical, so it doesn't affect the horizontal inset
+          // analysis above. Combined with each row's own new vertical
+          // `AppCard` margin (4 top/bottom), the first/last card now gets
+          // the same breathing room from the screen edge Activity's rows
+          // already have.
           return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             children: <Widget>[
               for (final AccountRow account in accounts)
                 Consumer(
@@ -69,13 +88,39 @@ class AccountsScreen extends ConsumerWidget {
                     // scales, with no thrown error and no visible sign a
                     // digit went missing. `_AccountsRow` replaces it with
                     // a measurement-based row that guarantees the balance
-                    // always renders in full -- see its doc comment. No
-                    // `onTap` existed on this row before this change and
-                    // none is added here; this screen's own `ListView`
-                    // padding and row spacing are preserved via the same
-                    // `Padding` `ListTile` would otherwise have applied
-                    // internally.
-                    return Padding(
+                    // always renders in full -- see its doc comment.
+                    //
+                    // Visual System Convergence Checkpoint 7.3: the bare
+                    // `Padding` this row used is now `AppCard(bordered:
+                    // true, ...)` -- a flat white, thin-bordered card
+                    // matching Home/Activity's converged treatment,
+                    // still with no `onTap` (this row has never
+                    // navigated anywhere; tapping it does nothing before
+                    // or after this checkpoint). `AppCard`'s own
+                    // `padding` carries exactly the same
+                    // `symmetric(horizontal: 16, vertical: 12)` this row
+                    // always used, so the width fed to `_AccountsRow`'s
+                    // internal `LayoutBuilder` from THAT padding alone is
+                    // unchanged. The new `margin` (16 horizontal, 4
+                    // vertical -- the same values Activity's own
+                    // per-row outer `Padding` already uses) adds a
+                    // second, symmetric 16px layer on each side, taking
+                    // the TOTAL horizontal inset from 32 to 64 -- matching
+                    // Home/Activity's own two-layer convention exactly.
+                    // This was checked against every boundary-precision
+                    // test in `accounts_screen_test.dart`: every test
+                    // that asserts a specific horizontal/stacked outcome
+                    // does so either at the default (800px+) test-surface
+                    // width, where an extra 32px is immaterial, or at a
+                    // narrow width specifically chosen to force the
+                    // stacked branch -- and reducing the available width
+                    // further only reinforces that same stacked outcome,
+                    // it cannot flip a test the other way. The remaining
+                    // narrow-width tests (VND/KWD large-amount cases)
+                    // deliberately don't assert which branch renders.
+                    return AppCard(
+                      bordered: true,
+                      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       child: balanceAsync.when(
                         loading: () => _AccountsRow(
@@ -96,7 +141,17 @@ class AccountsScreen extends ConsumerWidget {
                         ),
                         data: (Money balance) {
                           final String formatted = _formatter.format(balance);
-                          final TextStyle? moneyStyle = Theme.of(context).textTheme.titleMedium;
+                          // Visual System Convergence Checkpoint 7.3:
+                          // bumped from `textTheme.titleMedium` to the
+                          // shared `AppTypography.mediumMoney` role
+                          // (`titleLarge` + `w700`) for stronger visual
+                          // emphasis on the authoritative balance -- a
+                          // `TextStyle`-only change; the balance still
+                          // renders as a plain `Text` (not `AppMoneyText`)
+                          // so the style used to MEASURE it and the style
+                          // it actually RENDERS with can never diverge,
+                          // exactly like Home's own `_AdaptiveAccountRow`.
+                          final TextStyle? moneyStyle = context.appTypography.mediumMoney;
                           return _AccountsRow(
                             accountId: account.id,
                             name: account.name,
@@ -197,18 +252,27 @@ class _AccountsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme text = Theme.of(context).textTheme;
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
+    // Visual System Convergence Checkpoint 7.3: the account name is now
+    // semibold (matching Activity's own transaction-title weight) for a
+    // more "prominent name" per this checkpoint's design direction, and
+    // the metadata line is `AppTypography.caption` -- exactly the
+    // `bodySmall` + `onSurfaceVariant` shape it already had, just named
+    // via the shared role instead of hand-rolled.
     final Widget descriptive = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyLarge),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+        ),
         Text(
           metadata,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          style: context.appTypography.caption,
         ),
       ],
     );
