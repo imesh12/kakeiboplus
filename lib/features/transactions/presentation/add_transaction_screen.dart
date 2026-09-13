@@ -7,6 +7,9 @@ import '../../../core/database/repositories/transaction_repository.dart';
 import '../../../core/database/repositories/transaction_not_found_exception.dart';
 import '../../../core/money/currency_mismatch_exception.dart';
 import '../../../core/money/money.dart';
+import '../../../shared/theme/app_tokens.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
@@ -38,6 +41,18 @@ import '../../../l10n/generated/app_localizations.dart';
 /// non-interactive content (no dropdown, no tap target) in both add and
 /// edit mode, so it reads as fixed/non-editable without needing a
 /// separate "locked" indicator.
+///
+/// Visual System Convergence Checkpoint 7.7 (scoped as "Edit Transaction"
+/// visual convergence -- see `EditTransactionScreen`'s own doc comment;
+/// this is the one screen that actually renders the edit form) brings this
+/// form's presentation onto the same shared primitives (`AppCard`,
+/// `AppTypography`) every other converged screen already uses, replacing
+/// the two hand-written `Card(elevation: 0, shape: RoundedRectangleBorder(
+/// ...))` sections and the amount field's ad hoc tinted `Container` with
+/// the shared equivalents. Because add and edit share this one widget by
+/// design (see above), add mode picks up the exact same visual refresh as
+/// a byproduct -- every field, provider/repository call, and validation
+/// path is unchanged either way.
 class AddTransactionScreen extends ConsumerStatefulWidget {
   const AddTransactionScreen({super.key, this.initialType, this.existingTransaction});
 
@@ -113,7 +128,6 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
     // CP6.2 (Localization Phase 1): resolved once per build and reused
     // by every literal string below (header, dropdown labels, empty/
     // error states, Save) -- `_DestinationAccountDropdown` and
@@ -170,12 +184,14 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                           child: TransactionIconBadge(type: _type, color: typeColor),
                         ),
                         const SizedBox(height: 8),
+                        // Checkpoint 7.7: `AppTypography.cardTitle` is the
+                        // same `titleMedium` + `FontWeight.w600` this
+                        // already rendered with -- a pure rename onto the
+                        // shared role, with the type color still applied
+                        // on top exactly as before.
                         Text(
                           _typeLabel(l10n),
-                          style: text.titleMedium?.copyWith(
-                            color: typeColor,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: context.appTypography.cardTitle?.copyWith(color: typeColor),
                         ),
                       ],
                     ),
@@ -191,92 +207,95 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   // between the two dropdowns communicates direction --
                   // no new selector, no duplicated account picker, no
                   // logic of its own.
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: colors.outlineVariant),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: <Widget>[
-                          DropdownButtonFormField<String>(
-                            initialValue: _accountId,
-                            // CP6.2 follow-up: `isExpanded: true` -- without it,
-                            // `DropdownButton`'s own inner Row sizes itself to the
-                            // UNCLAMPED intrinsic width of the selected item's Text,
-                            // so the `overflow: TextOverflow.ellipsis` already set on
-                            // that Text below never gets a chance to engage (there is
-                            // no bounded width for it to ellipsize against) -- a
-                            // documented `DropdownButton` gotcha, not something
-                            // specific to any one language. `isExpanded: true` makes
-                            // the button fill the available width instead, which is
-                            // what actually lets the ellipsis do its job at a narrow
-                            // viewport/large text scale, for a long account name in
-                            // ANY locale.
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: _isTransfer ? l10n.fromAccountLabel : l10n.accountLabel,
-                            ),
-                            items: <DropdownMenuItem<String>>[
-                              for (final AccountRow account in accounts)
-                                DropdownMenuItem<String>(
-                                  value: account.id,
-                                  child: Text(
-                                    '${account.name} (${account.currencyCode})',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                            onChanged: (String? id) => setState(() {
-                              _accountId = id;
-                              if (_destinationAccountId == _accountId) _destinationAccountId = null;
-                            }),
+                  // Checkpoint 7.7: the same shared `AppCard(bordered: true)`
+                  // treatment every other converged screen uses in place of
+                  // a hand-written `Card(elevation: 0, shape:
+                  // RoundedRectangleBorder(..., side: BorderSide(color:
+                  // colors.outlineVariant)))` -- pixel-equivalent (same flat
+                  // white surface, subtle border, 16-radius corners); every
+                  // dropdown/field inside is unchanged.
+                  AppCard(
+                    bordered: true,
+                    child: Column(
+                      children: <Widget>[
+                        DropdownButtonFormField<String>(
+                          initialValue: _accountId,
+                          // CP6.2 follow-up: `isExpanded: true` -- without it,
+                          // `DropdownButton`'s own inner Row sizes itself to the
+                          // UNCLAMPED intrinsic width of the selected item's Text,
+                          // so the `overflow: TextOverflow.ellipsis` already set on
+                          // that Text below never gets a chance to engage (there is
+                          // no bounded width for it to ellipsize against) -- a
+                          // documented `DropdownButton` gotcha, not something
+                          // specific to any one language. `isExpanded: true` makes
+                          // the button fill the available width instead, which is
+                          // what actually lets the ellipsis do its job at a narrow
+                          // viewport/large text scale, for a long account name in
+                          // ANY locale.
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: _isTransfer ? l10n.fromAccountLabel : l10n.accountLabel,
                           ),
-                          if (_isTransfer) ...<Widget>[
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Icon(
-                                Icons.arrow_downward,
-                                size: 18,
-                                color: colors.onSurfaceVariant,
+                          items: <DropdownMenuItem<String>>[
+                            for (final AccountRow account in accounts)
+                              DropdownMenuItem<String>(
+                                value: account.id,
+                                child: Text(
+                                  '${account.name} (${account.currencyCode})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                            _DestinationAccountDropdown(
-                              accounts: accounts,
-                              sourceAccountId: _accountId,
-                              value: _destinationAccountId,
-                              onChanged: (String? id) => setState(() => _destinationAccountId = id),
-                            ),
                           ],
-                          if (!_isTransfer) ...<Widget>[
-                            const SizedBox(height: 12),
-                            _CategoryDropdown(
-                              type: _type,
-                              value: _categoryId,
-                              onChanged: (String? id) => setState(() => _categoryId = id),
+                          onChanged: (String? id) => setState(() {
+                            _accountId = id;
+                            if (_destinationAccountId == _accountId) _destinationAccountId = null;
+                          }),
+                        ),
+                        if (_isTransfer) ...<Widget>[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Icon(
+                              Icons.arrow_downward,
+                              size: 18,
+                              color: colors.onSurfaceVariant,
                             ),
-                          ],
+                          ),
+                          _DestinationAccountDropdown(
+                            accounts: accounts,
+                            sourceAccountId: _accountId,
+                            value: _destinationAccountId,
+                            onChanged: (String? id) => setState(() => _destinationAccountId = id),
+                          ),
                         ],
-                      ),
+                        if (!_isTransfer) ...<Widget>[
+                          const SizedBox(height: 12),
+                          _CategoryDropdown(
+                            type: _type,
+                            value: _categoryId,
+                            onChanged: (String? id) => setState(() => _categoryId = id),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   const SizedBox(height: 24),
 
                   // B. Amount emphasis -- the exact same MoneyTextField
                   // widget, callbacks, and position relative to the
-                  // other fields; a subtly tinted rounded backdrop and
-                  // generous surrounding spacing are what make it read
-                  // as the primary input, not a change to the field
-                  // itself.
+                  // other fields. Checkpoint 7.7 replaces the previous ad
+                  // hoc alpha-tinted `Container` backdrop with the same
+                  // bordered `AppCard` treatment the rest of this form (and
+                  // the rest of the converged app) uses, at the larger
+                  // `radii.large` corner radius `AppCard`'s own doc comment
+                  // documents for a hero-style emphasis card -- still a
+                  // flat, restrained, white/bordered surface, not a change
+                  // to the field itself or its position relative to the
+                  // other sections.
                   if (selectedAccount != null)
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: colors.surfaceContainerHighest.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                    AppCard(
+                      bordered: true,
+                      radius: context.appTokens.radii.large,
+                      padding: const EdgeInsets.all(8),
                       child: MoneyTextField(
                         currencyCode: selectedAccount.currencyCode,
                         label: l10n.amountLabel,
@@ -289,38 +308,37 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   // E. Note/date -- the exact same TextFormField/ListTile
                   // widgets and wiring, grouped into one bordered
                   // section for hierarchy. The calendar icon and
-                  // `_pickDate` wiring are unchanged.
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: colors.outlineVariant),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Column(
-                        children: <Widget>[
-                          TextFormField(
-                            initialValue: _note,
-                            decoration: InputDecoration(
-                              labelText: l10n.noteOptionalLabel,
-                              border: InputBorder.none,
-                            ),
-                            onChanged: (String value) => _note = value,
+                  // `_pickDate` wiring are unchanged. Checkpoint 7.7: same
+                  // shared `AppCard(bordered: true)` swap as the
+                  // account/category section above, with the exact same
+                  // `fromLTRB(16, 12, 16, 4)` padding preserved (the
+                  // `ListTile`/borderless `TextFormField` already carry
+                  // their own internal spacing).
+                  AppCard(
+                    bordered: true,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Column(
+                      children: <Widget>[
+                        TextFormField(
+                          initialValue: _note,
+                          decoration: InputDecoration(
+                            labelText: l10n.noteOptionalLabel,
+                            border: InputBorder.none,
                           ),
-                          const Divider(height: 1),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(l10n.dateLabel),
-                            subtitle: Text(
-                              '${_occurredAt.year}-${_occurredAt.month.toString().padLeft(2, '0')}-'
-                              '${_occurredAt.day.toString().padLeft(2, '0')}',
-                            ),
-                            trailing: const Icon(Icons.calendar_today_outlined),
-                            onTap: _pickDate,
+                          onChanged: (String value) => _note = value,
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(l10n.dateLabel),
+                          subtitle: Text(
+                            '${_occurredAt.year}-${_occurredAt.month.toString().padLeft(2, '0')}-'
+                            '${_occurredAt.day.toString().padLeft(2, '0')}',
                           ),
-                        ],
-                      ),
+                          trailing: const Icon(Icons.calendar_today_outlined),
+                          onTap: _pickDate,
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -328,7 +346,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   if (_errorMessage != null) ...<Widget>[
                     Text(
                       _errorMessage!,
-                      style: TextStyle(color: colors.error),
+                      style: context.appTypography.body?.copyWith(color: colors.error),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -585,7 +603,7 @@ class _DestinationAccountDropdown extends StatelessWidget {
     if (source != null && eligible.isEmpty) {
       return Text(
         l10n.noEligibleTransferDestination(source.currencyCode),
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
+        style: context.appTypography.body?.copyWith(color: Theme.of(context).colorScheme.error),
       );
     }
 

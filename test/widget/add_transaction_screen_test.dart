@@ -7,6 +7,7 @@ import 'package:ai_financial_coach/core/database/repositories/transaction_reposi
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/add_transaction_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:ai_financial_coach/shared/widgets/money_text_field.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -1178,5 +1179,55 @@ void main() {
       expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+  });
+
+  // -----------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.7: locks in the Account/Category
+  // section's and the Amount field's new bordered-card visual treatment
+  // (`AppCard(bordered: true)`) via the same shape/side/color contract
+  // `app_card_test.dart`/`goal_detail_screen_test.dart` (CP7.4) already
+  // assert for `AppCard` -- never a pixel value. This screen is shared by
+  // Add and Edit (see `AddTransactionScreen`'s own doc comment -- Edit
+  // reaches it via `EditTransactionScreen`), so this test doubles as Edit
+  // Transaction's own visual regression coverage; `edit_transaction_screen_
+  // test.dart` deliberately does not re-test this screen's own rendering
+  // (see that file's header comment).
+  // -----------------------------------------------------------------------
+  testWidgets(
+      'CP7.7: the Account/Category section and the Amount field each render inside a '
+      'bordered, near-white card matching the converged visual system', (tester) async {
+    final AppDatabase db = await seededDb();
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(
+      appWithPushedScreen(container, const AddTransactionScreen(initialType: 'expense')),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final BuildContext context = tester.element(find.byType(MoneyTextField));
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppTokens tokens = context.appTokens;
+
+    void expectBorderedCard(Finder anchor) {
+      final Card cardWidget = tester.widget<Card>(
+        find.ancestor(of: anchor, matching: find.byType(Card)).first,
+      );
+      expect(cardWidget.color, colors.surface);
+      expect(cardWidget.elevation, 0);
+      final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+      expect(shape.side.color, tokens.colors.subtleBorder);
+    }
+
+    // The account dropdown defaults to the first seeded account (JPY
+    // Wallet) -- same display string ("Name (CURRENCY)") the account
+    // dropdown's own existing tests already key off.
+    expectBorderedCard(
+      find.widgetWithText(DropdownButtonFormField<String>, 'JPY Wallet (JPY)'),
+    );
+    expectBorderedCard(find.byType(MoneyTextField));
   });
 }

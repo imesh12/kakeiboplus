@@ -9,6 +9,8 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import 'transaction_icon_badge.dart';
@@ -29,6 +31,15 @@ const MoneyFormatter _formatter = MoneyFormatter();
 /// [transactionId] must resolve to an explicit unavailable state below
 /// the UI layer, not stale data — `transactionByIdProvider` already
 /// guarantees this; this screen just renders what it's given.
+///
+/// Visual System Convergence Checkpoint 7.7 brings this screen's
+/// presentation onto the same shared primitives (`AppCard`,
+/// `AppTypography`) every other converged screen (Goal Detail, Recurring,
+/// Categories, Settings) already uses, replacing the hand-written
+/// `Card(elevation: 0, shape: RoundedRectangleBorder(...))` + ad hoc
+/// `TextTheme` styles Checkpoint 4 introduced with the shared
+/// equivalents. Every read path, the header's information hierarchy, the
+/// edit/delete actions, and the unavailable state are unchanged.
 class TransactionDetailScreen extends ConsumerWidget {
   const TransactionDetailScreen({required this.transactionId, super.key});
   final String transactionId;
@@ -201,45 +212,48 @@ class _TransactionDetailBody extends ConsumerWidget {
           spokenAmount: spokenAmount,
         ),
         const SizedBox(height: 24),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: colors.outlineVariant),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Column(
-              children: <Widget>[
-                if (isTransfer) ...<Widget>[
-                  _DetailRow(
-                    label: l10n.transactionDetailFromLabel,
-                    value: accountNames[tx.accountId] ?? '—',
-                  ),
-                  const Divider(height: 1),
-                  _DetailRow(
-                    label: l10n.transactionDetailToLabel,
-                    value: tx.destinationAccountId == null
-                        ? '—'
-                        : (accountNames[tx.destinationAccountId] ?? '—'),
-                  ),
-                  const Divider(height: 1),
-                ] else ...<Widget>[
-                  _DetailRow(label: l10n.accountLabel, value: accountNames[tx.accountId] ?? '—'),
-                  const Divider(height: 1),
-                  _DetailRow(label: l10n.categoryFieldLabel, value: categoryDisplayValue),
-                  const Divider(height: 1),
-                ],
+        // Visual System Convergence Checkpoint 7.7: the same shared
+        // `AppCard(bordered: true)` treatment every other converged screen
+        // (Goal Detail, Recurring, Categories, Settings) now uses in place
+        // of a hand-written `Card(elevation: 0, shape: RoundedRectangleBorder(
+        // ..., side: BorderSide(color: colors.outlineVariant)))` --
+        // pixel-equivalent (same flat white surface, same subtle border, same
+        // 16-radius corners), just the shared primitive instead of a local
+        // copy of its exact recipe. Every row/value/divider inside is
+        // unchanged.
+        AppCard(
+          bordered: true,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Column(
+            children: <Widget>[
+              if (isTransfer) ...<Widget>[
                 _DetailRow(
-                  label: l10n.dateLabel,
-                  value: DateFormat.yMMMd().add_jm().format(tx.occurredAt.toLocal()),
+                  label: l10n.transactionDetailFromLabel,
+                  value: accountNames[tx.accountId] ?? '—',
                 ),
-                if (tx.note != null && tx.note!.isNotEmpty) ...<Widget>[
-                  const Divider(height: 1),
-                  _DetailRow(label: l10n.transactionDetailNoteLabel, value: tx.note!),
-                ],
+                const Divider(height: 1),
+                _DetailRow(
+                  label: l10n.transactionDetailToLabel,
+                  value: tx.destinationAccountId == null
+                      ? '—'
+                      : (accountNames[tx.destinationAccountId] ?? '—'),
+                ),
+                const Divider(height: 1),
+              ] else ...<Widget>[
+                _DetailRow(label: l10n.accountLabel, value: accountNames[tx.accountId] ?? '—'),
+                const Divider(height: 1),
+                _DetailRow(label: l10n.categoryFieldLabel, value: categoryDisplayValue),
+                const Divider(height: 1),
               ],
-            ),
+              _DetailRow(
+                label: l10n.dateLabel,
+                value: DateFormat.yMMMd().add_jm().format(tx.occurredAt.toLocal()),
+              ),
+              if (tx.note != null && tx.note!.isNotEmpty) ...<Widget>[
+                const Divider(height: 1),
+                _DetailRow(label: l10n.transactionDetailNoteLabel, value: tx.note!),
+              ],
+            ],
           ),
         ),
       ],
@@ -289,9 +303,6 @@ class _DetailHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme text = Theme.of(context).textTheme;
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
@@ -309,20 +320,21 @@ class _DetailHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          typeLabel,
-          style: text.labelLarge?.copyWith(
-            color: colors.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
+        // Checkpoint 7.7: the same `AppTypography.eyebrow` role every other
+        // converged screen's small muted section/type label already uses
+        // (Recurring's section headers, Goal Detail's "Contribution
+        // history"), replacing this label's own hand-picked
+        // `labelLarge`/`onSurfaceVariant`/`w600`/`letterSpacing: 0.5`
+        // recipe -- one shade smaller and 0.3 more letter-spacing than
+        // before, matching the rest of the app's own small-label rhythm
+        // instead of a one-off variant of it.
+        Text(typeLabel, style: context.appTypography.eyebrow),
         if (categoryName != null) ...<Widget>[
           const SizedBox(height: 2),
-          Text(
-            categoryName!,
-            style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
+          // `AppTypography.cardTitle` is byte-for-byte the same
+          // `titleMedium` + `FontWeight.w600` this already rendered with --
+          // a pure rename onto the shared role, not a visual change.
+          Text(categoryName!, style: context.appTypography.cardTitle),
         ],
         const SizedBox(height: 8),
         // `excludeSemantics: true` so the spoken sign ("plus"/"minus")
@@ -334,8 +346,15 @@ class _DetailHeader extends StatelessWidget {
           excludeSemantics: true,
           child: Text(
             '$amountPrefix$formattedAmount',
+            // Key preserved exactly -- still a plain `Text` (not
+            // `AppMoneyText`) specifically so the existing
+            // `tester.widget<Text>(find.byKey(const
+            // Key('transactionDetailAmount')))` color assertion (CP4's
+            // "income must use colorScheme.primary, not a hardcoded
+            // color" regression test) keeps working unmodified; only the
+            // TEXT STYLE below moves onto the shared `largeMoney` role.
             key: const Key('transactionDetailAmount'),
-            style: text.headlineLarge?.copyWith(color: amountColor, fontWeight: FontWeight.bold),
+            style: context.appTypography.largeMoney?.copyWith(color: amountColor),
           ),
         ),
       ],
@@ -350,22 +369,25 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme text = Theme.of(context).textTheme;
-    final ColorScheme colors = Theme.of(context).colorScheme;
+    // Checkpoint 7.7: the same `context.appTypography.secondaryBody`/`body`
+    // roles Goal Detail's own `_DetailRow` already uses for this exact
+    // label/value pattern -- both are byte-for-byte the same
+    // `bodyMedium`(+`onSurfaceVariant`)/`bodyMedium`+`w600` this already
+    // rendered with, so this is a pure rename onto the shared roles.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Expanded(
-            child: Text(label, style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+            child: Text(label, style: context.appTypography.secondaryBody),
           ),
           const SizedBox(width: 12),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: context.appTypography.body?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
         ],

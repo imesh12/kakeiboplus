@@ -10,6 +10,7 @@ import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/edit_transaction_screen.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/transaction_detail_screen.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -682,5 +683,49 @@ void main() {
     expect(find.text('+¥500,000'), findsOneWidget);
     expect(find.byKey(const Key('transactionDetailAmount')), findsOneWidget);
     expect(find.text('ボーナス'), findsOneWidget); // user-entered note, never translated
+  });
+
+  // ---------------------------------------------------------------------
+  // Visual System Convergence Checkpoint 7.7: locks in the metadata
+  // section's new bordered-card visual treatment (`AppCard(bordered:
+  // true)`) via the same shape/side/color contract `app_card_test.dart`/
+  // `goal_detail_screen_test.dart` (CP7.4) already assert for `AppCard` --
+  // never a pixel value.
+  // ---------------------------------------------------------------------
+  testWidgets(
+      'CP7.7: the metadata section renders inside a bordered, near-white card matching the '
+      'converged visual system', (tester) async {
+    final (AppDatabase db, String profileId, String accountId) = await seededDb();
+    final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+    final String txId = await txRepo.recordExpense(
+      profileId: profileId,
+      accountId: accountId,
+      amount: Money.fromMinorUnits(1200, 'JPY'),
+      categoryId: 'sys-dining',
+      occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+    );
+
+    final ProviderContainer container =
+        ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+
+    await tester.pumpWidget(appWithRouter(container, txId));
+    await tester.tap(find.text('open detail'));
+    await tester.pumpAndSettle();
+
+    // 'Wallet' is the account name rendered by the metadata section's own
+    // `_DetailRow` -- a stable anchor to walk up from to the `AppCard`
+    // wrapping the whole section.
+    final BuildContext context = tester.element(find.text('Wallet'));
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppTokens tokens = context.appTokens;
+
+    final Card cardWidget = tester.widget<Card>(
+      find.ancestor(of: find.text('Wallet'), matching: find.byType(Card)).first,
+    );
+    expect(cardWidget.color, colors.surface);
+    expect(cardWidget.elevation, 0);
+    final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+    expect(shape.side.color, tokens.colors.subtleBorder);
   });
 }
