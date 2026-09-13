@@ -650,4 +650,38 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transactionDetailNoteLabel => 'メモ';
+
+  @override
+  String get appearanceSectionTitle => '外観';
+
+  @override
+  String get themeCustomizationTitle => 'テーマのカスタマイズ';
+
+  @override
+  String get themeCustomizationSubtitle => '自分好みにカスタマイズしましょう。';
+
+  @override
+  String get presetThemesSectionTitle => 'プリセットテーマ';
+
+  @override
+  String get themeStyleLight => 'ライト';
+
+  @override
+  String get themeStyleDark => 'ダーク';
+
+  @override
+  String get themeStylePink => 'ピンク';
+
+  @override
+  String get themeStyleOcean => 'オーシャン';
+
+  @override
+  String get themeStyleForest => 'フォレスト';
+
+  @override
+  String get themeSelectedSemanticLabel => '選択中';
+
+  @override
+  String get themeCustomizationPrivacyDisclaimer =>
+      'すべてのテーマで、データは100%安全かつローカルに保存されます。';
 }

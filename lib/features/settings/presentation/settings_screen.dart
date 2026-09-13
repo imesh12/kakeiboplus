@@ -32,6 +32,11 @@ import '../../onboarding/presentation/profile_providers.dart';
 /// `budgetsTitle` key since no existing plain-"Budgets" key exists), and
 /// the Beta 0 disclaimer. `profile.displayName` (user-entered content)
 /// is never translated.
+///
+/// Checkpoint 8.1 adds one more row, "Appearance", reached the exact
+/// same way every other nav row already is -- it opens
+/// `ThemeCustomizationScreen`, where the user picks one of the 5 product
+/// themes (see `lib/shared/theme/app_theme_style.dart`).
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -123,13 +128,29 @@ class SettingsScreen extends ConsumerWidget {
               ),
               AppCard(
                 bordered: true,
-                margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                 padding: EdgeInsets.zero,
                 child: ListTile(
                   leading: const Icon(Icons.public),
                   title: Text(l10n.internationalPreferences),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push(AppRoutes.internationalPreferences),
+                ),
+              ),
+              // Checkpoint 8.1 (Premium Theme Personalization
+              // Foundation): the entry point into the new Theme
+              // Customization screen -- same AppCard+ListTile row
+              // pattern every other Settings nav row above already
+              // uses, so it never introduces a second row idiom.
+              AppCard(
+                bordered: true,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                padding: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.palette_outlined),
+                  title: Text(l10n.appearanceSectionTitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.themeCustomization),
                 ),
               ),
               Padding(

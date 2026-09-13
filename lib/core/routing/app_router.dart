@@ -12,6 +12,7 @@ import '../../features/onboarding/presentation/profile_providers.dart';
 import '../../features/recurring/presentation/recurring_screen.dart';
 import '../../features/settings/presentation/international_preferences_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/settings/presentation/theme_customization_screen.dart';
 import '../../features/transactions/presentation/activity_screen.dart';
 import '../../features/transactions/presentation/add_transaction_screen.dart';
 import '../../features/transactions/presentation/edit_transaction_screen.dart';
@@ -27,7 +28,9 @@ import 'go_router_refresh_stream.dart';
 /// screen (Beta 1 Task 3 -- see `docs/14_DECISION_LOG.md` ADR-022).
 /// Goals deliberately gets no new bottom-nav item, same as Budgets --
 /// see `STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §9 for the full navigation
-/// rationale.
+/// rationale. Checkpoint 8.1 adds the Theme Customization screen the
+/// same way -- reached only from a Profile/Settings row, no new
+/// bottom-nav item.
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.home,
@@ -86,6 +89,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.internationalPreferences,
         builder: (context, state) => const InternationalPreferencesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.themeCustomization,
+        builder: (context, state) => const ThemeCustomizationScreen(),
       ),
     ],
   );

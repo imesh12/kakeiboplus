@@ -10,6 +10,8 @@ import '../core/routing/app_router.dart';
 import '../features/recurring/presentation/recurring_notification_providers.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../shared/theme/app_theme.dart';
+import '../shared/theme/app_theme_provider.dart';
+import '../shared/theme/app_theme_style.dart';
 
 /// App root: wires up `MaterialApp.router` with the Beta 0 [GoRouter],
 /// seeds system categories once the database is available, (Beta 1
@@ -20,6 +22,25 @@ import '../shared/theme/app_theme.dart';
 /// provider's own doc comment). CP4.2 wires the locale/delegates only;
 /// no production widget strings are localized yet, and Japanese is not
 /// yet selectable anywhere in the UI.
+///
+/// Checkpoint 8.1 (Premium Theme Personalization Foundation) resolves
+/// the app's active [ThemeData] from [appThemeStyleProvider] the exact
+/// same way -- a pure derivation of the persisted profile's
+/// `theme_preference`, never a write path (see that provider's own doc
+/// comment). `theme:` is now `AppTheme.resolve(ref.watch
+/// (appThemeStyleProvider))` instead of the previous hard-coded
+/// `AppTheme.light()`, and `themeMode: ThemeMode.light` is set
+/// explicitly (new -- previously unset, which defaulted to
+/// `ThemeMode.system`) so Flutter's own automatic OS-brightness-driven
+/// switch away from `theme:` never overrides the user's explicit 5-way
+/// theme choice -- including when the user has explicitly chosen
+/// [AppThemeStyle.dark] itself, which must not then also be silently
+/// swapped out again by the OS switching brightness. The previous
+/// `darkTheme: AppTheme.dark()` parameter is removed: with `themeMode`
+/// pinned to [ThemeMode.light], `MaterialApp` never consults
+/// `darkTheme` for any reason, so leaving it wired would be dead,
+/// misleading code -- [AppThemeStyle.dark] reaches users exclusively
+/// through `theme:` now, via [AppTheme.resolve].
 ///
 /// A [ConsumerStatefulWidget] rather than the simpler [ConsumerWidget]
 /// specifically so it can be a [WidgetsBindingObserver] -- Task 4B
@@ -83,11 +104,19 @@ class _AiFinancialCoachAppState extends ConsumerState<AiFinancialCoachApp>
     // only makes MaterialApp resolve/accept the two supported locales.
     final Locale locale = ref.watch(appLocaleProvider);
 
+    // Checkpoint 8.1: derived purely from the persisted profile (see
+    // appThemeStyleProvider's doc comment) -- never written back, never
+    // mutates the profile. Any write elsewhere (the Theme Customization
+    // screen) causes this to recompute automatically via
+    // activeProfileProvider's live Drift stream, so a theme change
+    // applies instantly, with no restart and no manual notification.
+    final AppThemeStyle themeStyle = ref.watch(appThemeStyleProvider);
+
     return MaterialApp.router(
       title: 'AI Financial Coach',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.resolve(themeStyle),
+      themeMode: ThemeMode.light,
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

@@ -397,5 +397,16 @@
   "deleteTransactionConfirmMessage": "It will no longer count toward any balance, budget, or total.",
   "transactionDetailFromLabel": "From",
   "transactionDetailToLabel": "To",
-  "transactionDetailNoteLabel": "Note"
+  "transactionDetailNoteLabel": "Note",
+  "appearanceSectionTitle": "Appearance",
+  "themeCustomizationTitle": "Theme Customization",
+  "themeCustomizationSubtitle": "Make the app yours.",
+  "presetThemesSectionTitle": "Preset themes",
+  "themeStyleLight": "Light",
+  "themeStyleDark": "Dark",
+  "themeStylePink": "Pink",
+  "themeStyleOcean": "Ocean",
+  "themeStyleForest": "Forest",
+  "themeSelectedSemanticLabel": "Selected",
+  "themeCustomizationPrivacyDisclaimer": "All themes keep your data 100% secure and 100% local."
 }

@@ -1269,6 +1269,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Note'**
   String get transactionDetailNoteLabel;
+
+  /// No description provided for @appearanceSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearanceSectionTitle;
+
+  /// No description provided for @themeCustomizationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme Customization'**
+  String get themeCustomizationTitle;
+
+  /// No description provided for @themeCustomizationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Make the app yours.'**
+  String get themeCustomizationSubtitle;
+
+  /// No description provided for @presetThemesSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Preset themes'**
+  String get presetThemesSectionTitle;
+
+  /// No description provided for @themeStyleLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get themeStyleLight;
+
+  /// No description provided for @themeStyleDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get themeStyleDark;
+
+  /// No description provided for @themeStylePink.
+  ///
+  /// In en, this message translates to:
+  /// **'Pink'**
+  String get themeStylePink;
+
+  /// No description provided for @themeStyleOcean.
+  ///
+  /// In en, this message translates to:
+  /// **'Ocean'**
+  String get themeStyleOcean;
+
+  /// No description provided for @themeStyleForest.
+  ///
+  /// In en, this message translates to:
+  /// **'Forest'**
+  String get themeStyleForest;
+
+  /// No description provided for @themeSelectedSemanticLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get themeSelectedSemanticLabel;
+
+  /// No description provided for @themeCustomizationPrivacyDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'All themes keep your data 100% secure and 100% local.'**
+  String get themeCustomizationPrivacyDisclaimer;
 }
 
 class _AppLocalizationsDelegate

@@ -4,6 +4,7 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/settings/presentation/international_preferences_screen.dart';
 import 'package:ai_financial_coach/features/settings/presentation/settings_screen.dart';
+import 'package:ai_financial_coach/features/settings/presentation/theme_customization_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/native.dart';
@@ -61,6 +62,10 @@ void main() {
         GoRoute(
           path: AppRoutes.internationalPreferences,
           builder: (context, state) => const InternationalPreferencesScreen(),
+        ),
+        GoRoute(
+          path: AppRoutes.themeCustomization,
+          builder: (context, state) => const ThemeCustomizationScreen(),
         ),
         // A minimal marker screen -- CP6.8's navigation-row test only needs
         // to prove the tap reaches the real `AppRoutes.accounts` path, not
@@ -177,21 +182,33 @@ void main() {
       expect(tester.takeException(), isNull);
 
       expect(find.text('プロフィール'), findsOneWidget); // navProfile (AppBar title)
+      // profileLocationSummary -- Japanese sentence template, raw codes
+      // untranslated. Asserted here, before the scroll below, since it
+      // lives on the top-of-list profile card.
+      expect(find.text('現在の国: JP（JPY）・母国: LK（LKR）'), findsOneWidget);
       expect(find.text('口座'), findsOneWidget); // accountsSectionTitle
       expect(find.text('カテゴリ'), findsOneWidget); // categoriesScreenTitle
       expect(find.text('予算'), findsOneWidget); // budgetsTitle
       expect(find.text('貯蓄目標'), findsOneWidget); // savingsGoalsTitle
       expect(find.text('定期'), findsOneWidget); // recurringTitle
       expect(find.text('言語・地域設定'), findsOneWidget); // internationalPreferences
-      expect(
-        find.text(
-          'ベータ0 — ローカルの家計管理エンジンです。外貨換算（FX）、レシート、通知、'
-          'クラウド同期、AIコーチングはまだ実装されていません。',
-        ),
-        findsOneWidget,
-      ); // beta0DisclaimerMessage
-      // profileLocationSummary -- Japanese sentence template, raw codes untranslated.
-      expect(find.text('現在の国: JP（JPY）・母国: LK（LKR）'), findsOneWidget);
+
+      // CP8.1 verification fix: the new "Appearance" row (CP8.1) pushed
+      // the Beta 0 disclaimer -- the ListView's last child -- far enough
+      // down that it is no longer built into the Element tree at the
+      // default test-surface size; this is a lazy-sliver realization gap,
+      // not a changed/missing widget (`settings_screen.dart`'s disclaimer
+      // code and `app_ja.arb`'s localized string are both unchanged).
+      // Scroll it into view using this repo's own established pattern
+      // (see `add_transaction_screen_test.dart` / `home_screen_test.dart`)
+      // rather than weakening or deleting this assertion.
+      final Finder disclaimer = find.text(
+        'ベータ0 — ローカルの家計管理エンジンです。外貨換算（FX）、レシート、通知、'
+        'クラウド同期、AIコーチングはまだ実装されていません。',
+      );
+      await tester.scrollUntilVisible(disclaimer, 300.0);
+      await tester.pumpAndSettle();
+      expect(disclaimer, findsOneWidget); // beta0DisclaimerMessage
     });
 
     testWidgets('CP6.8 (B): tapping the localized Accounts row under the Japanese locale still '
@@ -316,6 +333,53 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text(longName), findsOneWidget);
+    });
+  });
+
+  group('CP8.1 Appearance row (Premium Theme Personalization Foundation)', () {
+    testWidgets(
+      'the Appearance row renders inside a bordered card matching the converged visual system, '
+      'and navigates to Theme Customization on tap',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        final Finder rowLabel = find.text('Appearance');
+        expect(rowLabel, findsOneWidget);
+
+        final Card cardWidget = tester.widget<Card>(
+          find.ancestor(of: rowLabel, matching: find.byType(Card)).first,
+        );
+        final BuildContext context = tester.element(rowLabel);
+        final ColorScheme colors = Theme.of(context).colorScheme;
+        final AppTokens tokens = context.appTokens;
+        expect(cardWidget.color, colors.surface);
+        expect(cardWidget.elevation, 0);
+        final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
+        expect(shape.side.color, tokens.colors.subtleBorder);
+
+        await tester.tap(rowLabel);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ThemeCustomizationScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('the Appearance row renders in Japanese', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('外観'), findsOneWidget); // appearanceSectionTitle
     });
   });
 }

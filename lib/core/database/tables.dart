@@ -43,6 +43,19 @@ class Profiles extends Table {
   TextColumn get timezone => text()();
   TextColumn get dateFormat => text()();
   TextColumn get numberFormat => text()();
+
+  /// Checkpoint 8.1 (Premium Theme Personalization Foundation): the
+  /// user's chosen decorative product theme -- one of
+  /// `AppThemeStyle.storageValue` ('light'/'dark'/'pink'/'ocean'/
+  /// 'forest'). Defaulted to `'light'` (schema v6 migration backfills
+  /// every existing row to `'light'`, matching `AppThemeStyle.fallback`
+  /// exactly, so no existing install's appearance changes on upgrade).
+  /// Purely a UI-presentation preference: never read by any money/
+  /// accounting/currency/FX/recurring/goals/budget logic, and reading
+  /// it back always goes through `AppThemeStyle.fromStorageValue`,
+  /// which never throws for a missing/unknown/corrupt value -- see that
+  /// factory's own doc comment.
+  TextColumn get themePreference => text().withDefault(const Constant('light'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 

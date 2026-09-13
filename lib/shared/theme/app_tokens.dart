@@ -123,12 +123,26 @@ class AppSemanticColors {
   /// levels of de-emphasis rather than reaching for opacity hacks.
   final Color mutedText;
 
-  factory AppSemanticColors.fromColorScheme(ColorScheme colorScheme) {
+  /// [positiveOverride] -- Checkpoint 8.1 addition, optional and
+  /// defaulting to `null` (= unchanged behavior: [positive] is
+  /// `colorScheme.primary`, exactly as it always was for every theme
+  /// that predates CP8.1). It exists for one reason: a decorative theme
+  /// whose seed color is ITSELF green (the Forest theme -- see
+  /// `app_theme.dart`) would otherwise make income/positive figures
+  /// silently identical to Forest's muted decorative primary green, in
+  /// violation of the "money readability beats decoration" requirement.
+  /// When supplied, [positiveOverride] is used for [positive] instead of
+  /// `colorScheme.primary`; every other semantic color is unaffected.
+  /// [negative] never needs an equivalent override for any theme --
+  /// Material's seed algorithm derives the error/red tonal palette
+  /// independently of the seed hue, so there is no analogous red/
+  /// negative-color collision risk to guard against.
+  factory AppSemanticColors.fromColorScheme(ColorScheme colorScheme, {Color? positiveOverride}) {
     return AppSemanticColors(
       cardSurface: colorScheme.surfaceContainerHigh,
       elevatedSurface: colorScheme.surfaceContainerHighest,
       subtleBorder: colorScheme.outlineVariant,
-      positive: colorScheme.primary,
+      positive: positiveOverride ?? colorScheme.primary,
       warning: colorScheme.tertiary,
       negative: colorScheme.error,
       secondaryText: colorScheme.onSurfaceVariant,
@@ -155,11 +169,15 @@ class AppTokens extends ThemeExtension<AppTokens> {
   final AppRadii radii;
   final AppSemanticColors colors;
 
-  factory AppTokens.fromColorScheme(ColorScheme colorScheme) {
+  /// [positiveOverride] passes straight through to
+  /// [AppSemanticColors.fromColorScheme] -- see that factory's own doc
+  /// comment (Checkpoint 8.1 addition, defaults to `null`/unchanged
+  /// behavior).
+  factory AppTokens.fromColorScheme(ColorScheme colorScheme, {Color? positiveOverride}) {
     return AppTokens(
       spacing: const AppSpacing(),
       radii: const AppRadii(),
-      colors: AppSemanticColors.fromColorScheme(colorScheme),
+      colors: AppSemanticColors.fromColorScheme(colorScheme, positiveOverride: positiveOverride),
     );
   }
 

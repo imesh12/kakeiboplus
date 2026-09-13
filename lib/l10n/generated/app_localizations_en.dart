@@ -668,4 +668,38 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transactionDetailNoteLabel => 'Note';
+
+  @override
+  String get appearanceSectionTitle => 'Appearance';
+
+  @override
+  String get themeCustomizationTitle => 'Theme Customization';
+
+  @override
+  String get themeCustomizationSubtitle => 'Make the app yours.';
+
+  @override
+  String get presetThemesSectionTitle => 'Preset themes';
+
+  @override
+  String get themeStyleLight => 'Light';
+
+  @override
+  String get themeStyleDark => 'Dark';
+
+  @override
+  String get themeStylePink => 'Pink';
+
+  @override
+  String get themeStyleOcean => 'Ocean';
+
+  @override
+  String get themeStyleForest => 'Forest';
+
+  @override
+  String get themeSelectedSemanticLabel => 'Selected';
+
+  @override
+  String get themeCustomizationPrivacyDisclaimer =>
+      'All themes keep your data 100% secure and 100% local.';
 }

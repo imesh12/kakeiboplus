@@ -397,5 +397,16 @@
   "deleteTransactionConfirmMessage": "残高・予算・合計のいずれにも反映されなくなります。",
   "transactionDetailFromLabel": "振替元",
   "transactionDetailToLabel": "振替先",
-  "transactionDetailNoteLabel": "メモ"
+  "transactionDetailNoteLabel": "メモ",
+  "appearanceSectionTitle": "外観",
+  "themeCustomizationTitle": "テーマのカスタマイズ",
+  "themeCustomizationSubtitle": "自分好みにカスタマイズしましょう。",
+  "presetThemesSectionTitle": "プリセットテーマ",
+  "themeStyleLight": "ライト",
+  "themeStyleDark": "ダーク",
+  "themeStylePink": "ピンク",
+  "themeStyleOcean": "オーシャン",
+  "themeStyleForest": "フォレスト",
+  "themeSelectedSemanticLabel": "選択中",
+  "themeCustomizationPrivacyDisclaimer": "すべてのテーマで、データは100%安全かつローカルに保存されます。"
 }

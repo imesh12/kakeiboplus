@@ -54,4 +54,9 @@ abstract class AppRoutes {
   /// International preference editing -- International / Localization
   /// Foundation Checkpoint 3B. Reached from the Profile/Settings screen.
   static const String internationalPreferences = '/international-preferences';
+
+  /// The Theme Customization screen -- Checkpoint 8.1 (Premium Theme
+  /// Personalization Foundation). Reached from the Profile/Settings
+  /// screen's new "Appearance" row.
+  static const String themeCustomization = '/theme-customization';
 }

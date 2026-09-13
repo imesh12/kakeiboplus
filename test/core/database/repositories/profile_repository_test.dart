@@ -271,6 +271,85 @@ void main() {
       expect(profile!.homeCurrency, 'USD');
       expect(profile.livingCurrency, 'USD');
     });
+
+    // -----------------------------------------------------------------
+    // Checkpoint 8.1 (Premium Theme Personalization Foundation):
+    // updateThemePreference and the theme_preference column's own
+    // default.
+    // -----------------------------------------------------------------
+
+    test('a freshly-created profile defaults theme_preference to "light" -- the schema column '
+        'default, matching AppThemeStyle.fallback exactly', () async {
+      final ProfileRow? profile = await profileRepo.getProfile();
+      expect(profile!.themePreference, 'light');
+    });
+
+    test('updateThemePreference persists the given raw string exactly', () async {
+      await profileRepo.updateThemePreference(profileId: profileId, themePreference: 'forest');
+
+      final ProfileRow? profile = await profileRepo.getProfile();
+      expect(profile!.themePreference, 'forest');
+    });
+
+    test('updateThemePreference does not touch any other column', () async {
+      await profileRepo.updateThemePreference(profileId: profileId, themePreference: 'ocean');
+
+      final ProfileRow? profile = await profileRepo.getProfile();
+      expect(profile!.displayName, 'Test User');
+      expect(profile.homeCountry, 'LK');
+      expect(profile.currentCountry, 'JP');
+      expect(profile.homeCurrency, 'LKR');
+      expect(profile.livingCurrency, 'JPY');
+      expect(profile.preferredLanguage, 'en');
+      expect(profile.timezone, 'Asia/Tokyo');
+      expect(profile.dateFormat, 'yyyy-MM-dd');
+      expect(profile.numberFormat, '#,##0.##');
+    });
+
+    test('updateThemePreference advances updatedAt without regressing it', () async {
+      final ProfileRow before = (await profileRepo.getProfile())!;
+
+      await profileRepo.updateThemePreference(profileId: profileId, themePreference: 'pink');
+
+      final ProfileRow after = (await profileRepo.getProfile())!;
+      expect(after.updatedAt.isBefore(before.updatedAt), isFalse);
+    });
+
+    test('an unrecognized theme_preference string round-trips unchanged -- this repository '
+        'never validates against AppThemeStyle, exactly like it never validates the other '
+        'preference fields against their own registries', () async {
+      await profileRepo.updateThemePreference(
+        profileId: profileId,
+        themePreference: 'not-a-real-theme',
+      );
+
+      final ProfileRow? profile = await profileRepo.getProfile();
+      expect(profile!.themePreference, 'not-a-real-theme');
+    });
+
+    test('updating the theme preference does not modify an existing transaction row or amount',
+        () async {
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final String txId = await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+
+      await profileRepo.updateThemePreference(profileId: profileId, themePreference: 'dark');
+
+      final Transaction? tx = await txRepo.watchById(txId).first;
+      expect(tx, isNotNull);
+      expect(tx!.amountMinorUnits, 50000);
+      expect(tx.currencyCode, 'JPY');
+      expect(tx.type, 'expense');
+    });
   });
 
   group('Persistence survives a database reload', () {
@@ -327,6 +406,44 @@ void main() {
       expect(profile.dateFormat, 'dmy');
       expect(profile.numberFormat, 'period_comma');
       expect(profile.displayName, 'Restart Test User');
+
+      await fileDb.close();
+    });
+
+    test('a theme preference set via updateThemePreference is still readable through a '
+        'newly-opened AppDatabase/ProfileRepository against the same on-disk file', () async {
+      final Directory tempDir =
+          Directory.systemTemp.createTempSync('afc_theme_persistence_test_');
+      final File dbFile = File('${tempDir.path}/test.sqlite');
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
+
+      AppDatabase fileDb = AppDatabase.forTesting(NativeDatabase(dbFile));
+      ProfileRepository fileProfileRepo = ProfileRepository(fileDb);
+      final String fileProfileId = await fileProfileRepo.createProfile(
+        displayName: 'Restart Test User',
+        homeCountry: 'LK',
+        currentCountry: 'JP',
+        homeCurrency: 'LKR',
+        livingCurrency: 'JPY',
+        preferredLanguage: 'en',
+        timezone: 'Asia/Tokyo',
+        dateFormat: 'yyyy-MM-dd',
+        numberFormat: '#,##0.##',
+      );
+      await fileProfileRepo.updateThemePreference(
+        profileId: fileProfileId,
+        themePreference: 'ocean',
+      );
+
+      await fileDb.close();
+      fileDb = AppDatabase.forTesting(NativeDatabase(dbFile));
+      fileProfileRepo = ProfileRepository(fileDb);
+
+      final ProfileRow? profile = await fileProfileRepo.getProfile();
+      expect(profile, isNotNull);
+      expect(profile!.themePreference, 'ocean');
 
       await fileDb.close();
     });

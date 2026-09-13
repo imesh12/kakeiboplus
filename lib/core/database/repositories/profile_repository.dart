@@ -115,4 +115,26 @@ class ProfileRepository {
       ),
     );
   }
+
+  /// Persists the user's chosen decorative product theme -- Checkpoint
+  /// 8.1 (Premium Theme Personalization Foundation). [themePreference]
+  /// is always one of `AppThemeStyle.storageValue` (see
+  /// `lib/shared/theme/app_theme_style.dart`); this method does not
+  /// import or depend on that enum, exactly like
+  /// [updateHomeAndLivingCurrency]/[updateInternationalPreferences]
+  /// above persist raw strings without depending on the presentation-
+  /// layer registries that produced them. Same single-field
+  /// `ProfilesCompanion` write shape as [updateHomeAndLivingCurrency],
+  /// touching no other column and no other table.
+  Future<void> updateThemePreference({
+    required String profileId,
+    required String themePreference,
+  }) {
+    return (_db.update(_db.profiles)..where((tbl) => tbl.id.equals(profileId))).write(
+      ProfilesCompanion(
+        themePreference: Value<String>(themePreference),
+        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+      ),
+    );
+  }
 }
