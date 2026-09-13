@@ -8,6 +8,13 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_tokens.dart';
+import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/app_money_text.dart';
+import '../../../shared/widgets/app_section_header.dart';
+import '../../../shared/widgets/app_status_chip.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../budgets/domain/budget_calculation.dart';
 import '../../budgets/domain/budget_status.dart';
@@ -94,22 +101,12 @@ class HomeScreen extends ConsumerWidget {
                 // (Expanded + one-line ellipsis) matches those two
                 // existing header rows; the "Manage" button's own
                 // behavior is unchanged.
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        l10n.accountsSectionTitle,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => context.push(AppRoutes.accounts),
-                      child: Text(l10n.manage),
-                    ),
-                  ],
+                AppSectionHeader(
+                  title: l10n.accountsSectionTitle,
+                  trailing: TextButton(
+                    onPressed: () => context.push(AppRoutes.accounts),
+                    child: Text(l10n.manage),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 accountsAsync.when(
@@ -179,29 +176,19 @@ class _CurrencySummarySection extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: 24),
         child: Center(child: CircularProgressIndicator()),
       ),
-      error: (Object e, StackTrace st) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(l10n.couldNotLoadBalances(e.toString())),
-        ),
-      ),
+      error: (Object e, StackTrace st) =>
+          AppCard(child: Text(l10n.couldNotLoadBalances(e.toString()))),
       data: (List<CurrencyDashboardSummary> summaries) {
         if (summaries.isEmpty) {
-          return Card(
-            elevation: 0,
-            color: colors.surfaceContainerHigh,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: <Widget>[
-                  Icon(Icons.account_balance_wallet_outlined, color: colors.primary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(l10n.addAccountToSeeBalance),
-                  ),
-                ],
-              ),
+          return AppCard(
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.account_balance_wallet_outlined, color: colors.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(l10n.addAccountToSeeBalance),
+                ),
+              ],
             ),
           );
         }
@@ -271,19 +258,18 @@ class _HeroCurrencyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
+    final AppTokens tokens = context.appTokens;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final bool isNegative = summary.balance.isNegative;
 
     return Stack(
       children: <Widget>[
-        Card(
+        AppCard(
           key: Key('heroCurrencyCard_${summary.currencyCode}'),
-          elevation: 0,
           color: colors.primaryContainer,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
+          radius: tokens.radii.large,
+          padding: EdgeInsets.all(tokens.spacing.lg),
+          child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Row(
@@ -335,12 +321,10 @@ class _HeroCurrencyCard extends StatelessWidget {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
-                        child: Text(
+                        child: AppMoneyText(
                           _formatter.format(summary.balance),
-                          style: text.headlineMedium?.copyWith(
-                            color: isNegative ? colors.error : colors.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          emphasis: AppMoneyEmphasis.hero,
+                          color: isNegative ? colors.error : colors.onPrimaryContainer,
                         ),
                       ),
                     ),
@@ -358,7 +342,6 @@ class _HeroCurrencyCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
         ),
       ],
     );
@@ -381,57 +364,48 @@ class _SecondaryCurrencyCard extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final bool isNegative = summary.balance.isNegative;
 
-    return Card(
+    return AppCard(
       key: Key('secondaryCurrencyCard_${summary.currencyCode}'),
-      elevation: 0,
-      color: colors.surfaceContainerHigh,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: <Widget>[
-                Flexible(
-                  child: Text(
-                    summary.currencyCode,
-                    style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Flexible(
+                child: Text(
+                  summary.currencyCode,
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (badge != null) _CurrencyBadge(label: badge!),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              if (isNegative)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(Icons.south_rounded, color: colors.error, size: 16),
+                ),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: AppMoneyText(
+                    _formatter.format(summary.balance),
+                    color: isNegative ? colors.error : colors.onSurface,
                   ),
                 ),
-                if (badge != null) _CurrencyBadge(label: badge!),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: <Widget>[
-                if (isNegative)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Icon(Icons.south_rounded, color: colors.error, size: 16),
-                  ),
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _formatter.format(summary.balance),
-                      style: text.titleLarge?.copyWith(
-                        color: isNegative ? colors.error : colors.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Text(l10n.totalAvailableBalance, style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-            const SizedBox(height: 12),
-            _MonthlyMetricsSection(summary: summary, emphasize: false),
-          ],
-        ),
+              ),
+            ],
+          ),
+          Text(l10n.totalAvailableBalance, style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+          const SizedBox(height: 12),
+          _MonthlyMetricsSection(summary: summary, emphasize: false),
+        ],
       ),
     );
   }
@@ -605,55 +579,34 @@ class _BudgetCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final MonthlyBudgetSummary budget = ref.watch(monthlyBudgetSummaryProvider);
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final BudgetCalculation? calculation = budget.calculation;
 
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerHigh,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(Icons.savings_outlined, color: colors.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l10n.remainingMonthlyBudget,
-                    style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (calculation != null)
-                  TextButton(
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          AppSectionHeader(
+            icon: Icons.savings_outlined,
+            title: l10n.remainingMonthlyBudget,
+            trailing: calculation != null
+                ? TextButton(
                     key: const Key('manageBudgetsButton'),
                     onPressed: () => context.push(AppRoutes.budgets),
                     child: Text(l10n.manage),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (calculation == null) ...<Widget>[
-              Text(
-                l10n.noBudgetSetMessage,
-                style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => context.push(AppRoutes.budgets),
-                icon: const Icon(Icons.add_rounded),
-                label: Text(l10n.setMonthlyBudgetButton),
-              ),
-            ] else
-              _ConfiguredBudget(calculation: calculation),
-          ],
-        ),
+                  )
+                : null,
+          ),
+          const SizedBox(height: 10),
+          if (calculation == null)
+            AppEmptyState(
+              message: l10n.noBudgetSetMessage,
+              actionLabel: l10n.setMonthlyBudgetButton,
+              onAction: () => context.push(AppRoutes.budgets),
+            )
+          else
+            _ConfiguredBudget(calculation: calculation),
+        ],
       ),
     );
   }
@@ -859,19 +812,10 @@ class _ConfiguredBudget extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
             Flexible(
-              child: Container(
+              child: AppStatusChip(
                 key: const Key('budgetStatusChip'),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  statusLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
-                ),
+                label: statusLabel,
+                color: statusColor,
               ),
             ),
             const SizedBox(width: 8),
@@ -911,69 +855,43 @@ class _SavingsGoalsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<GoalHomeSelection> selectionAsync = ref.watch(homeGoalSelectionProvider);
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final GoalHomeSelection? selection = selectionAsync.valueOrNull;
 
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerHigh,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(Icons.flag_outlined, color: colors.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l10n.savingsGoalsTitle,
-                    style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (selection != null && selection.kind != GoalHomeSelectionKind.empty)
-                  TextButton(
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          AppSectionHeader(
+            icon: Icons.flag_outlined,
+            title: l10n.savingsGoalsTitle,
+            trailing: selection != null && selection.kind != GoalHomeSelectionKind.empty
+                ? TextButton(
                     key: const Key('viewAllGoalsButton'),
                     onPressed: () => context.push(AppRoutes.goals),
                     child: Text(l10n.viewAll),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            switch (selection?.kind) {
-              null => const SizedBox(
-                  height: 24,
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                ),
-              GoalHomeSelectionKind.empty => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      l10n.noSavingsGoalMessage,
-                      style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      key: const Key('setSavingsGoalButton'),
-                      onPressed: () => context.push(AppRoutes.goals),
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(l10n.setSavingsGoalButton),
-                    ),
-                  ],
-                ),
-              GoalHomeSelectionKind.allCompleted => Text(
-                  l10n.allGoalsCompletedMessage,
-                  style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-                ),
-              GoalHomeSelectionKind.priorityGoal => _PriorityGoalSummary(summary: selection!.summary!),
-            },
-          ],
-        ),
+                  )
+                : null,
+          ),
+          const SizedBox(height: 10),
+          switch (selection?.kind) {
+            null => const SizedBox(
+                height: 24,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+            GoalHomeSelectionKind.empty => AppEmptyState(
+                actionKey: const Key('setSavingsGoalButton'),
+                message: l10n.noSavingsGoalMessage,
+                actionLabel: l10n.setSavingsGoalButton,
+                onAction: () => context.push(AppRoutes.goals),
+              ),
+            GoalHomeSelectionKind.allCompleted => Text(
+                l10n.allGoalsCompletedMessage,
+                style: context.appTypography.secondaryBody,
+              ),
+            GoalHomeSelectionKind.priorityGoal => _PriorityGoalSummary(summary: selection!.summary!),
+          },
+        ],
       ),
     );
   }
@@ -1043,21 +961,7 @@ class _PriorityGoalSummary extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: <Widget>[
-            Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  statusLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+            Flexible(child: AppStatusChip(label: statusLabel, color: statusColor)),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -1094,65 +998,39 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<RecurringHomeSelection> selectionAsync =
         ref.watch(homeRecurringSelectionProvider);
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme text = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final RecurringHomeSelection? selection = selectionAsync.valueOrNull;
 
-    return Card(
-      elevation: 0,
-      color: colors.surfaceContainerHigh,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(Icons.event_note_outlined, color: colors.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l10n.recurringTitle,
-                    style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (selection != null && selection.kind != RecurringHomeSelectionKind.empty)
-                  TextButton(
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          AppSectionHeader(
+            icon: Icons.event_note_outlined,
+            title: l10n.recurringTitle,
+            trailing: selection != null && selection.kind != RecurringHomeSelectionKind.empty
+                ? TextButton(
                     key: const Key('viewAllRecurringButton'),
                     onPressed: () => context.push(AppRoutes.recurring),
                     child: Text(l10n.viewAll),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            switch (selection?.kind) {
-              null => const SizedBox(
-                  height: 24,
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                ),
-              RecurringHomeSelectionKind.empty => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      l10n.noRecurringMessage,
-                      style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      key: const Key('setRecurringRuleButton'),
-                      onPressed: () => context.push(AppRoutes.recurring),
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(l10n.setUpRecurringButton),
-                    ),
-                  ],
-                ),
-              RecurringHomeSelectionKind.item => _RecurringItemSummary(item: selection!.item!),
-            },
-          ],
-        ),
+                  )
+                : null,
+          ),
+          const SizedBox(height: 10),
+          switch (selection?.kind) {
+            null => const SizedBox(
+                height: 24,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+            RecurringHomeSelectionKind.empty => AppEmptyState(
+                actionKey: const Key('setRecurringRuleButton'),
+                message: l10n.noRecurringMessage,
+                actionLabel: l10n.setUpRecurringButton,
+                onAction: () => context.push(AppRoutes.recurring),
+              ),
+            RecurringHomeSelectionKind.item => _RecurringItemSummary(item: selection!.item!),
+          },
+        ],
       ),
     );
   }
@@ -1214,17 +1092,7 @@ class _RecurringItemSummary extends StatelessWidget {
           secondaryStyle: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: urgencyColor.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            urgencyLabel,
-            style: text.labelSmall?.copyWith(color: urgencyColor, fontWeight: FontWeight.w600),
-          ),
-        ),
+        AppStatusChip(label: urgencyLabel, color: urgencyColor),
       ],
     );
   }
@@ -1239,6 +1107,7 @@ class _AccountTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<Money> balanceAsync = ref.watch(accountBalanceProvider(account.id));
     final TextStyle? moneyStyle = Theme.of(context).textTheme.titleMedium;
+    final AppTokens tokens = context.appTokens;
 
     // CP5.2a: was a bare `Card(ListTile(title:, subtitle:, trailing:))`.
     // `ListTile` gives no guarantee that a long account name and a
@@ -1250,38 +1119,36 @@ class _AccountTile extends ConsumerWidget {
     // measurement-based row that guarantees the balance always renders
     // in full -- see its doc comment. No `onTap` existed before this
     // change and none is added here.
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: balanceAsync.when(
-          loading: () => _AdaptiveAccountRow(
-            accountId: account.id,
-            name: account.name,
-            currencyCode: account.currencyCode,
-            money: const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+    return AppCard(
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md, vertical: tokens.spacing.sm),
+      child: balanceAsync.when(
+        loading: () => _AdaptiveAccountRow(
+          accountId: account.id,
+          name: account.name,
+          currencyCode: account.currencyCode,
+          money: const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          error: (Object e, StackTrace st) => _AdaptiveAccountRow(
-            accountId: account.id,
-            name: account.name,
-            currencyCode: account.currencyCode,
-            money: const Icon(Icons.error_outline),
-          ),
-          data: (Money balance) {
-            final String formatted = _formatter.format(balance);
-            return _AdaptiveAccountRow(
-              accountId: account.id,
-              name: account.name,
-              currencyCode: account.currencyCode,
-              money: Text(formatted, style: moneyStyle),
-              moneyMeasureText: formatted,
-              moneyStyle: moneyStyle,
-            );
-          },
         ),
+        error: (Object e, StackTrace st) => _AdaptiveAccountRow(
+          accountId: account.id,
+          name: account.name,
+          currencyCode: account.currencyCode,
+          money: const Icon(Icons.error_outline),
+        ),
+        data: (Money balance) {
+          final String formatted = _formatter.format(balance);
+          return _AdaptiveAccountRow(
+            accountId: account.id,
+            name: account.name,
+            currencyCode: account.currencyCode,
+            money: Text(formatted, style: moneyStyle),
+            moneyMeasureText: formatted,
+            moneyStyle: moneyStyle,
+          );
+        },
       ),
     );
   }
