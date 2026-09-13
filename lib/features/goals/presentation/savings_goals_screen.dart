@@ -97,7 +97,16 @@ class _GoalListTile extends StatelessWidget {
             color: statusColor,
           ),
         ),
-        title: Text(summary.name, style: context.appTypography.cardTitle),
+        // CP7.9: a long goal name would otherwise wrap awkwardly next to
+        // the trailing chevron -- ellipsize instead, matching how every
+        // other long, user-entered name is already protected elsewhere
+        // (e.g. the account/category dropdown items).
+        title: Text(
+          summary.name,
+          style: context.appTypography.cardTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         // `l10n.ofAmount` is the same "of {target}" phrase the Home
         // dashboard's priority-goal card already uses (CP6.3); the bare
         // percent figure is interpolated the same way that card does too

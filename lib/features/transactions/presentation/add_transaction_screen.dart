@@ -63,6 +63,15 @@ import '../../../l10n/generated/app_localizations.dart';
 /// comment below for why this one call site is different from Account/
 /// Category's). CP7.8 removed only that one outer border -- no other
 /// section, and no shared primitive, changed.
+///
+/// Visual System Convergence Checkpoint 7.9 (app-wide consistency sweep)
+/// corrected one regression CP7.8 itself introduced: its border-less
+/// Amount card used an explicit `color: colors.surface`, which is also
+/// `AppTheme`'s `scaffoldBackgroundColor` -- so the card had no visible
+/// boundary at all against the page. CP7.9 dropped that explicit color in
+/// favor of `AppCard`'s own default tonal fill, which stays visually
+/// distinct from the page with no border of any kind. See the Amount
+/// section's own comment below.
 class AddTransactionScreen extends ConsumerStatefulWidget {
   const AddTransactionScreen({super.key, this.initialType, this.existingTransaction});
 
@@ -298,10 +307,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   // `AppCard`'s own doc comment documents for a hero-style
                   // emphasis card.
                   //
-                  // Checkpoint 7.8: that `bordered: true` outline is
-                  // removed again here (an explicit `color: colors.surface`
-                  // keeps the same flat, near-white fill and large radius
-                  // for hierarchy) because it drew a second `subtleBorder`
+                  // Checkpoint 7.8: that `bordered: true` outline was
+                  // removed here because it drew a second `subtleBorder`
                   // outline immediately outside `MoneyTextField`'s own
                   // themed `OutlineInputBorder` -- same color, 8dp apart,
                   // at a visibly mismatched radius (20 vs. the field's own
@@ -315,9 +322,23 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   // true)` is unchanged, and `MoneyTextField` itself is
                   // unchanged (still used unmodified everywhere else, e.g.
                   // budgets/recurring/goals' amount fields).
+                  //
+                  // Checkpoint 7.9 correction: CP7.8 first tried this by
+                  // passing an explicit `color: colors.surface` (matching
+                  // the bordered look's fill) -- but `AppTheme` also sets
+                  // `scaffoldBackgroundColor: colorScheme.surface` (same
+                  // color), so a border-less card with that same fill
+                  // rendered with NO visible boundary at all against the
+                  // page -- not "flat and near-white", just invisible,
+                  // losing the hero emphasis this card exists to give the
+                  // Amount field. Using `AppCard`'s own default fill
+                  // instead (`tokens.colors.cardSurface`, the same tonal,
+                  // border-less treatment CP7.1 already established
+                  // elsewhere, e.g. Home's summary cards) keeps the field
+                  // visually set apart from the page without a border of
+                  // any kind, so still no double border.
                   if (selectedAccount != null)
                     AppCard(
-                      color: colors.surface,
                       radius: context.appTokens.radii.large,
                       padding: const EdgeInsets.all(8),
                       child: MoneyTextField(

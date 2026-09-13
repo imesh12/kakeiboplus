@@ -204,6 +204,12 @@ class _CategoryBudgetTile extends ConsumerWidget {
             error: (Object e, StackTrace st) => row.categoryId!,
           ),
           style: context.appTypography.cardTitle,
+          // CP7.9: a long custom category name would otherwise wrap next
+          // to the trailing edit/delete icons -- ellipsize instead,
+          // matching how every other long, user-entered name (e.g. the
+          // account/category dropdown items) is already protected.
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           '${row.currencyCode} · ${_formatter.format(amount)}',

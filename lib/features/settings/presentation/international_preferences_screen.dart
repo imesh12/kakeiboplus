@@ -11,6 +11,7 @@ import '../../../core/locale/date_format_preference.dart';
 import '../../../core/locale/number_format_preference.dart';
 import '../../../core/locale/timezone_preference.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_typography.dart';
 import '../../onboarding/domain/country_registry.dart';
 import '../../onboarding/presentation/profile_providers.dart';
 
@@ -162,7 +163,6 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
   @override
   Widget build(BuildContext context) {
     final AsyncValue<ProfileRow?> profileAsync = ref.watch(activeProfileProvider);
-    final TextTheme text = Theme.of(context).textTheme;
     final ColorScheme colors = Theme.of(context).colorScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
 
@@ -179,7 +179,14 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: <Widget>[
-                Text(l10n.locationSection, style: text.titleMedium),
+                // CP7.9: `context.appTypography.sectionTitle` -- the same
+                // section-header role every other converged screen uses --
+                // instead of raw `Theme.of(context).textTheme.titleMedium`,
+                // which rendered this (and the two section headers below)
+                // visibly lighter than every other section header in the
+                // app (`sectionTitle` adds `FontWeight.w600`). Text/labels
+                // unchanged.
+                Text(l10n.locationSection, style: context.appTypography.sectionTitle),
                 const SizedBox(height: 8),
                 _DropdownField(
                   key: const Key('homeCountryField'),
@@ -204,7 +211,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                   onChanged: (String v) => setState(() => _currentCountry = v),
                 ),
                 const SizedBox(height: 24),
-                Text(l10n.currencySection, style: text.titleMedium),
+                Text(l10n.currencySection, style: context.appTypography.sectionTitle),
                 const SizedBox(height: 8),
                 _DropdownField(
                   key: const Key('homeCurrencyField'),
@@ -229,7 +236,7 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                   onChanged: (String v) => setState(() => _livingCurrency = v),
                 ),
                 const SizedBox(height: 24),
-                Text(l10n.languageAndFormatSection, style: text.titleMedium),
+                Text(l10n.languageAndFormatSection, style: context.appTypography.sectionTitle),
                 const SizedBox(height: 8),
                 _DropdownField(
                   key: const Key('languageField'),

@@ -1237,24 +1237,32 @@ void main() {
   });
 
   // -----------------------------------------------------------------------
-  // Visual System Convergence Checkpoint 7.8: the Amount field's card is a
-  // flat, near-white surface at the same `radii.large` corner radius as
-  // before, but -- unlike the Account/Category and Note/Date sections --
-  // draws no border of its own. `MoneyTextField`'s inner `TextFormField`
-  // already renders its own themed `OutlineInputBorder` (see
-  // `app_theme.dart`'s `inputDecorationTheme`); wrapping it in a second,
-  // same-colored `subtleBorder` outline at a different corner radius
-  // (CP7.7's original `AppCard(bordered: true, radius: radii.large)`)
-  // produced a visibly redundant "double border" specifically here,
-  // because this card holds a single field at much tighter (8) padding
-  // and a much larger radius mismatch (20 vs. the field's own 8) than the
-  // Account/Category card, which made the nesting obvious rather than
-  // incidental. See `add_transaction_screen.dart`'s Amount section
-  // comment for the fix itself.
+  // Visual System Convergence Checkpoint 7.8: the Amount field's card
+  // draws no border of its own -- unlike the Account/Category and
+  // Note/Date sections. `MoneyTextField`'s inner `TextFormField` already
+  // renders its own themed `OutlineInputBorder` (see `app_theme.dart`'s
+  // `inputDecorationTheme`); wrapping it in a second, same-colored
+  // `subtleBorder` outline at a different corner radius (CP7.7's original
+  // `AppCard(bordered: true, radius: radii.large)`) produced a visibly
+  // redundant "double border" specifically here, because this card holds
+  // a single field at much tighter (8) padding and a much larger radius
+  // mismatch (20 vs. the field's own 8) than the Account/Category card,
+  // which made the nesting obvious rather than incidental.
+  //
+  // CP7.9 correction: CP7.8 first paired the border-less card with an
+  // explicit `color: colors.surface` -- but that's also `AppTheme`'s
+  // `scaffoldBackgroundColor`, so the card had no visible boundary at all
+  // against the page. This test now asserts the corrected fill --
+  // `AppTokens`' own tonal `cardSurface` default (the same border-less
+  // treatment CP7.1 already established elsewhere, e.g. Home's summary
+  // cards) -- which keeps the card visually distinct from the page while
+  // still drawing no border. See `add_transaction_screen.dart`'s Amount
+  // section comment for the fix itself.
   // -----------------------------------------------------------------------
   testWidgets(
-      'CP7.8: the Amount field renders inside a flat, near-white card with no border of '
-      "its own, so it doesn't double up with MoneyTextField's own input outline", (tester) async {
+      'CP7.8/7.9: the Amount field renders inside a tonal card with no border of its own, '
+      "so it doesn't double up with MoneyTextField's own input outline, and stays visible "
+      'against the page background', (tester) async {
     final AppDatabase db = await seededDb();
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
@@ -1269,11 +1277,16 @@ void main() {
 
     final BuildContext context = tester.element(find.byType(MoneyTextField));
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppTokens tokens = context.appTokens;
 
     final Card cardWidget = tester.widget<Card>(
       find.ancestor(of: find.byType(MoneyTextField), matching: find.byType(Card)).first,
     );
-    expect(cardWidget.color, colors.surface);
+    // Tonal fill, not `colors.surface` -- `colors.surface` is also the
+    // Scaffold's own background, which is exactly the CP7.9 regression
+    // this locks in against.
+    expect(cardWidget.color, tokens.colors.cardSurface);
+    expect(cardWidget.color, isNot(colors.surface));
     expect(cardWidget.elevation, 0);
     final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
     // No border of its own -- MoneyTextField's own themed
