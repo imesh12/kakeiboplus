@@ -538,8 +538,13 @@ class _TransactionRow extends StatelessWidget {
     // ColorScheme-driven, not a hardcoded `Colors.*` constant -- three
     // distinct roles so expense/income/transfer each read differently
     // even before considering the icon or sign prefix below.
+    //
+    // Checkpoint 8.2 (Whole-App Theme Compatibility): income reads through
+    // `AppTokens.colors.positive`, not `colorScheme.primary` directly --
+    // see `add_transaction_screen.dart`'s matching comment for why (the
+    // Forest theme's income/decorative-green safety mechanism).
     final Color amountColor = switch (tx.type) {
-      'income' => colors.primary,
+      'income' => context.appTokens.colors.positive,
       'transfer' => colors.onSurfaceVariant,
       _ => colors.error,
     };

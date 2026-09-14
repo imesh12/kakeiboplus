@@ -220,17 +220,29 @@ class _GoalDetailBody extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
+                  // Checkpoint 8.2 (Whole-App Theme Compatibility): each
+                  // Chip below overrides `backgroundColor` per milestone
+                  // but, before this fix, left `labelStyle`/the avatar
+                  // icon color at the app-wide `chipTheme` default (tuned
+                  // for a neutral chip background) -- on a
+                  // `primaryContainer` background that default can read
+                  // low-contrast in some themes. Both now explicitly pair
+                  // with the background actually used, in every theme.
                   children: <Widget>[
                     for (final int milestone in savingsGoalMilestoneThresholds)
-                      Chip(
-                        label: Text('$milestone%'),
-                        avatar: calc.reachedMilestones.contains(milestone)
-                            ? const Icon(Icons.check, size: 16)
-                            : null,
-                        backgroundColor: calc.reachedMilestones.contains(milestone)
-                            ? colors.primaryContainer
-                            : colors.surfaceContainerHighest,
-                      ),
+                      if (calc.reachedMilestones.contains(milestone))
+                        Chip(
+                          label: Text('$milestone%'),
+                          labelStyle: TextStyle(color: colors.onPrimaryContainer),
+                          avatar: Icon(Icons.check, size: 16, color: colors.onPrimaryContainer),
+                          backgroundColor: colors.primaryContainer,
+                        )
+                      else
+                        Chip(
+                          label: Text('$milestone%'),
+                          labelStyle: TextStyle(color: colors.onSurfaceVariant),
+                          backgroundColor: colors.surfaceContainerHighest,
+                        ),
                   ],
                 ),
               ],

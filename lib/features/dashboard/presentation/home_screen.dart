@@ -449,6 +449,7 @@ class _MonthlyMetricsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppTokens tokens = context.appTokens;
     final TextTheme textTheme = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextStyle? valueStyle = (emphasize ? textTheme.titleLarge : textTheme.titleMedium)
@@ -457,9 +458,19 @@ class _MonthlyMetricsSection extends StatelessWidget {
       color: tint ?? colors.onSurfaceVariant,
     );
 
+    // Checkpoint 8.2 (Whole-App Theme Compatibility): income reads
+    // through `AppTokens.colors.positive`, not `colorScheme.primary`
+    // directly -- Forest overrides `positive` to a distinct "true
+    // success" green specifically so its own decorative primary accent
+    // (itself green) is never mistaken for the income semantic (see
+    // `app_theme.dart`'s `_forestPositiveGreen` doc comment). Every other
+    // theme's `positive` still equals `colorScheme.primary`, so this is a
+    // no-op everywhere except Forest. `tint` (set on the hero card, which
+    // already tints its whole metrics section to `onPrimaryContainer`)
+    // still always wins, exactly as before.
     final Widget incomeTile = _MetricTile(
       icon: Icons.trending_up_rounded,
-      iconColor: tint ?? colors.primary,
+      iconColor: tint ?? tokens.colors.positive,
       label: l10n.incomeThisMonth,
       value: summary.income,
       valueStyle: valueStyle,

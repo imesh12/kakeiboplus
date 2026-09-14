@@ -9,6 +9,7 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/theme/app_tokens.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../accounts/presentation/account_providers.dart';
@@ -166,10 +167,15 @@ class _TransactionDetailBody extends ConsumerWidget {
     };
     // ColorScheme-driven for every type, including income -- Checkpoint
     // 4 replaces the previous hardcoded `Colors.green` with
-    // `colors.primary`, matching the convention Activity (Checkpoint 2)
-    // already established.
+    // `colors.primary`, matching the convention Activity already
+    // established.
+    //
+    // Checkpoint 8.2 (Whole-App Theme Compatibility): income now reads
+    // through `AppTokens.colors.positive` instead of `colorScheme.primary`
+    // directly -- see `add_transaction_screen.dart`'s matching comment for
+    // why (the Forest theme's income/decorative-green safety mechanism).
     final Color amountColor = switch (tx.type) {
-      'income' => colors.primary,
+      'income' => context.appTokens.colors.positive,
       'transfer' => colors.onSurfaceVariant,
       _ => colors.error,
     };

@@ -154,10 +154,19 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     // own copy from their own `context` instead.
     final AppLocalizations l10n = AppLocalizations.of(context);
     // ColorScheme-driven per type -- matches the convention Activity and
-    // Transaction Detail (Checkpoints 2/4) already established, so the
-    // same transaction type reads consistently everywhere in the app.
+    // Transaction Detail already established, so the same transaction
+    // type reads consistently everywhere in the app.
+    //
+    // Checkpoint 8.2 (Whole-App Theme Compatibility): income reads through
+    // `AppTokens.colors.positive`, not `colorScheme.primary` directly --
+    // Forest overrides `positive` to a distinct "true success" green
+    // specifically so its own decorative primary accent (itself green)
+    // is never mistaken for the income semantic (see `app_theme.dart`'s
+    // `_forestPositiveGreen` doc comment). Every other theme's `positive`
+    // still equals `colorScheme.primary`, so this is a no-op everywhere
+    // except Forest.
     final Color typeColor = switch (_type) {
-      'income' => colors.primary,
+      'income' => context.appTokens.colors.positive,
       'transfer' => colors.onSurfaceVariant,
       _ => colors.error,
     };
