@@ -1,6 +1,6 @@
 import { icon, pet, brand, bars } from './art';
 import { currencies, languages, marketing } from './config';
-import { cta, storeLinks } from './components/cta';
+import { cta } from './components/cta';
 import { dashboardPhone } from './components/phone';
 import { companionScene } from './components/companion';
 import { formatMoney } from './localization';
