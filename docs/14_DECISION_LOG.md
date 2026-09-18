@@ -942,3 +942,100 @@ ADR-009/ADR-010/ADR-011 already established and this checkpoint is
 required to preserve.
 
 Status: Approved 2026-09-18 (Checkpoint 9.3).
+
+## ADR-026 — Checkpoint 9.4: real reference-rate provider is ExchangeRate-API's Open Access endpoint, ingested via a raw-text exact-decimal boundary, no API key
+
+Decision: `FxRateProvider`'s first real (non-fake) implementation,
+`ExchangeRateApiFxRateProvider` (`lib/core/fx/`), calls
+ExchangeRate-API's "Open Access" endpoint
+(`https://open.er-api.com/v6/latest/{BASE}`,
+https://www.exchangerate-api.com/docs/free) directly over `dart:io`'s
+built-in `HttpClient`, behind a new minimal `HttpTransport` seam
+(`lib/core/network/http_transport.dart`).
+
+1. **Vendor selection.** Evaluated against Beta 0's full
+   `CurrencyRegistry` seed set (JPY, KRW, VND, KWD, MMK, LKR, NPR, INR,
+   BDT, QAR, CAD, EUR, USD):
+   - Frankfurter (frankfurter.dev) was rejected: as of this checkpoint
+     it still sources exclusively from the ECB's ~31-currency reference
+     set, and VND/KWD/MMK/LKR/NPR/BDT/QAR are tracked as *unimplemented*
+     currency requests in its own issue tracker (lineofflight/frankfurter
+     issues #144/#169) — more than half of this registry would be
+     unsupported.
+   - Open Exchange Rates and Fixer were rejected for V1: their free
+     tiers restrict the request to a *fixed* base currency (USD or EUR
+     respectively) — `FxRateProvider.fetchRates`'s contract takes an
+     arbitrary `baseCurrencyCode`, and answering an arbitrary base from
+     a fixed-base free tier would require triangulating through a
+     hidden second currency inside the adapter, which is exactly the
+     kind of implicit cross-rate computation this checkpoint's "no
+     automatic inversion" / "no hidden fallback provider" rules exist to
+     prevent.
+   - ExchangeRate-API's Open Access endpoint supports every one of the
+     13 registry currencies, accepts an arbitrary requested base with no
+     API key, is HTTPS, versioned (`/v6/`), documented, states its data
+     is daily reference/indicative (never an executable/bank/remittance
+     rate — matching ADR-011 exactly), and permits personal *and*
+     commercial caching/use subject to attribution and a
+     no-redistribution term. It was selected on this basis.
+2. **No API key, so no secret-handling machinery was built.** This
+   endpoint requires no credential at all — there is nothing to keep out
+   of source control, tests, or Git history, and CP9.4's configuration-
+   boundary/"mobile key isn't truly secret" concerns are moot for this
+   specific vendor. If a future checkpoint adds a key-requiring provider
+   (a paid tier, a different vendor, a backend proxy), the seam to change
+   is `fxRateProviderProvider`/`ExchangeRateApiFxRateProvider`'s
+   constructor — nothing about `FxRateProvider`, `ReferenceFxRateService`,
+   or `ReferenceFxRateCache` would need to change.
+3. **Exact-decimal ingestion never goes through `double`.** This
+   provider's JSON response encodes each rate as a bare JSON number
+   literal (e.g. `"JPY": 149.85`), not a quoted string — decoding that
+   through `dart:convert`'s standard `jsonDecode` would materialize it as
+   a `double`, exactly the "authoritative binary floating point" ADR-017/
+   ADR-018 already forbid anywhere near money or an `FxRate`.
+   `ExchangeRateApiFxRateProvider` never does this: `jsonDecode` is used
+   only to validate response *shape* (object structure, `result`,
+   `base_code`, which keys `rates` contains) — the actual rate value for
+   the requested quote currency is re-extracted from the **raw response
+   text** via a brace-depth- and string-literal-aware scan scoped to the
+   `rates` object, and that literal string is handed directly to
+   `FxRate`'s own constructor, unchanged. A malformed/non-numeric/
+   exponent-notation/excess-precision/non-positive token for one
+   requested quote is dropped for that quote only (never accepted, never
+   crashes the whole request) — see `FxRateProvider`'s own "partial
+   response is valid" contract, unchanged by this checkpoint.
+4. **No new pubspec dependency.** This project targets Android/iOS only
+   (ADR-001; nothing here targets Flutter Web — Drift is wired through
+   `NativeDatabase`, a native-only implementation). `dart:io.HttpClient`
+   is a Flutter/Dart SDK built-in on those platforms, so
+   `IoHttpTransport` needed no `package:http`/`dio`/etc. addition and no
+   separate dependency-approval step.
+5. **No policy duplicated in the adapter.** `ExchangeRateApiFxRateProvider`
+   answers exactly one question — "what did the vendor say for this pair,
+   right now" — as a `FxRateProviderSuccess`/`FxRateProviderFailure`. All
+   fresh/stale/unavailable-fallback decision-making remains exclusively
+   `ReferenceFxRateService`'s job, unchanged since CP9.2/CP9.3. No
+   retries, no background polling, no automatic pair inversion.
+6. **`ReferenceFxRate.observedAt` semantics for this vendor.**
+   ExchangeRate-API's `time_last_update_unix` (a bare JSON *integer* —
+   safe to decode via `jsonDecode`/Dart `int`, unlike the rate values) is
+   used as `observedAt` when present and non-negative. When absent or
+   malformed, `observedAt` is set equal to `fetchedAt` (the actual UTC
+   retrieval instant) rather than inventing historical precision the
+   response didn't actually provide.
+7. **Still no FX UI, no cross-currency transfers, no accounting
+   integration, no automatic/background refresh, no attached-to-a-
+   transaction usage of any kind.** `ReferenceFxRateService` remains
+   directly constructible but is still not wired as a Riverpod provider
+   (no consumer exists yet) — only `httpTransportProvider` and
+   `fxRateProviderProvider` (the new provider-layer DI, paired with
+   CP9.3's existing `referenceFxRateCacheProvider`) were added.
+
+Reason: V1 needs one small, legally-usable, sufficiently-covering vendor
+integration behind the existing `FxRateProvider` abstraction, without
+adding a dependency, without ever letting binary floating point touch an
+exchange rate, and without smuggling caching/staleness policy into the
+vendor-specific layer that CP9.2's architecture deliberately keeps
+ignorant of it.
+
+Status: Approved 2026-09-18 (Checkpoint 9.4).
