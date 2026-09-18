@@ -33,6 +33,22 @@ class MoneyParser {
       throw MoneyParseException('Enter an amount.');
     }
 
+    // `Decimal.tryParse`'s own grammar (`([+-]?\d*)(\.\d*)?([eE][+-]?\d+)?`)
+    // DOES accept scientific/exponent notation (e.g. "1e2", "1E2",
+    // "1e+2", "1e-2", "-1e2"), so it is rejected explicitly here before
+    // ever reaching `tryParse` -- mirrors the identical, already-shipped
+    // check in `FxRate`'s factory (see that class's "Precision contract"
+    // doc for the full reasoning). A user-typed amount meaning "1e2" for
+    // 100 would be exactly the kind of notational ambiguity this input
+    // boundary exists to prevent; every valid plain-decimal input (any
+    // sign, any digit count, with or without a decimal point) is
+    // unaffected by this check.
+    if (trimmed.contains('e') || trimmed.contains('E')) {
+      throw MoneyParseException(
+        '"$input" uses exponent notation, which is not supported for amounts.',
+      );
+    }
+
     final Decimal? decimalValue = Decimal.tryParse(trimmed);
     if (decimalValue == null) {
       throw MoneyParseException('"$input" is not a valid amount.');

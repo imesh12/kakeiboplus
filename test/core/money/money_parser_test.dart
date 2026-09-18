@@ -87,4 +87,28 @@ void main() {
       expect(MoneyParser.parse('0.30', 'USD'), Money.fromMinorUnits(30, 'USD'));
     });
   });
+
+  group('MoneyParser — exponent notation is rejected (CP9.2 hardening)', () {
+    // `Decimal.tryParse`'s own grammar accepts scientific notation, so
+    // MoneyParser must reject it explicitly rather than silently
+    // accepting "1e2" as if it meant 100 -- see the identical,
+    // already-shipped rule in `FxRate`'s factory.
+    for (final String input in <String>['1e2', '1E2', '1e+2', '1e-2', '-1e2']) {
+      test('rejects "$input"', () {
+        expect(
+          () => MoneyParser.parse(input, 'USD'),
+          throwsA(isA<MoneyParseException>()),
+        );
+      });
+    }
+
+    test('exponent rejection does not affect any valid decimal input', () {
+      // Regression guard: every case above/elsewhere in this file that
+      // was valid before this hardening must remain valid and unchanged
+      // afterward -- this check has nothing to do with 'e'/'E' at all.
+      expect(MoneyParser.parse('12.34', 'USD'), Money.fromMinorUnits(1234, 'USD'));
+      expect(MoneyParser.parse('1200', 'JPY'), Money.fromMinorUnits(1200, 'JPY'));
+      expect(MoneyParser.parse('1.234', 'KWD'), Money.fromMinorUnits(1234, 'KWD'));
+    });
+  });
 }
