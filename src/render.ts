@@ -1,5 +1,5 @@
-import * as sections from './sections';
-import { ProblemSection, TrustSection } from './stories';
+import * as sections from "./sections";
+import { ProblemSection, TrustSection } from "./stories";
 
 /** Shared by the build-time static renderer and the development entry point. */
 export function renderLanding(): string {
