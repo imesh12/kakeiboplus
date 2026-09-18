@@ -17,9 +17,15 @@ import 'reference_fx_rate_cache.dart';
 ///
 /// Do not wrap this in anything that implies durability (e.g. don't name
 /// a future decorator "PersistentReferenceFxRateCache" while it's really
-/// just this class underneath) -- when durable caching is actually
-/// approved, it should get its own migration-backed implementation of
-/// [ReferenceFxRateCache], not a relabeling of this one.
+/// just this class underneath) -- CP9.3 added exactly that as its own
+/// separate implementation, `DriftReferenceFxRateCache`
+/// (`lib/core/database/repositories/drift_reference_fx_rate_cache.dart`),
+/// rather than relabeling this one.
+///
+/// [ReferenceFxRateCache]'s methods are `Future`-returning (a CP9.3
+/// interface change made necessary by that Drift-backed sibling -- see
+/// that interface's doc), but every `Future` here still completes
+/// synchronously: this class never actually performs I/O.
 class InMemoryReferenceFxRateCache implements ReferenceFxRateCache {
   final Map<String, ReferenceFxRate> _entries = <String, ReferenceFxRate>{};
 
@@ -32,22 +38,22 @@ class InMemoryReferenceFxRateCache implements ReferenceFxRateCache {
       '${baseCurrencyCode.toUpperCase()}|${quoteCurrencyCode.toUpperCase()}';
 
   @override
-  ReferenceFxRate? get({
+  Future<ReferenceFxRate?> get({
     required String baseCurrencyCode,
     required String quoteCurrencyCode,
-  }) =>
+  }) async =>
       _entries[_key(baseCurrencyCode, quoteCurrencyCode)];
 
   @override
-  void put(ReferenceFxRate rate) {
+  Future<void> put(ReferenceFxRate rate) async {
     _entries[_key(rate.baseCurrencyCode, rate.quoteCurrencyCode)] = rate;
   }
 
   @override
-  void removeIfPresent({
+  Future<void> removeIfPresent({
     required String baseCurrencyCode,
     required String quoteCurrencyCode,
-  }) {
+  }) async {
     _entries.remove(_key(baseCurrencyCode, quoteCurrencyCode));
   }
 }

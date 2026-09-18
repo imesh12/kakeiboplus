@@ -72,7 +72,7 @@ void main() {
   group('1. fresh cache', () {
     test('a cache hit within the freshness window is served without calling the provider', () async {
       final ReferenceFxRate cached = rateFor(fetchedAt: currentTime);
-      cache.put(cached);
+      await cache.put(cached);
 
       final ReferenceRateResult result =
           await service.referenceRate(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY');
@@ -88,7 +88,7 @@ void main() {
       final ReferenceFxRate cached = rateFor(
         fetchedAt: currentTime.subtract(const Duration(hours: 1)),
       );
-      cache.put(cached);
+      await cache.put(cached);
 
       final ReferenceRateResult result =
           await service.referenceRate(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY');
@@ -101,7 +101,7 @@ void main() {
       final ReferenceFxRate cached = rateFor(
         fetchedAt: currentTime.subtract(const Duration(hours: 1, seconds: 1)),
       );
-      cache.put(cached);
+      await cache.put(cached);
       provider.nextResult = const FxRateProviderFailure('provider unreachable');
 
       final ReferenceRateResult result =
@@ -119,7 +119,7 @@ void main() {
         rateValue: '150.25',
         fetchedAt: currentTime.subtract(const Duration(hours: 2)),
       );
-      cache.put(stale);
+      await cache.put(stale);
       final ReferenceFxRate refreshed = rateFor(rateValue: '151.00', fetchedAt: currentTime);
       provider.nextResult = FxRateProviderSuccess(<ReferenceFxRate>[refreshed]);
 
@@ -128,7 +128,7 @@ void main() {
 
       expect(result, isA<ReferenceRateFresh>());
       expect((result as ReferenceRateFresh).rate, refreshed);
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), refreshed);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), refreshed);
     });
   });
 
@@ -137,7 +137,7 @@ void main() {
       final ReferenceFxRate stale = rateFor(
         fetchedAt: currentTime.subtract(const Duration(hours: 2)),
       );
-      cache.put(stale);
+      await cache.put(stale);
       provider.nextResult = const FxRateProviderFailure('provider unreachable');
 
       final ReferenceRateResult result =
@@ -146,7 +146,7 @@ void main() {
       expect(result, isA<ReferenceRateStale>());
       expect((result as ReferenceRateStale).rate, stale);
       // The failed refresh must never poison/clear the still-usable stale entry.
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), stale);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), stale);
     });
   });
 
@@ -160,7 +160,7 @@ void main() {
 
       expect(result, isA<ReferenceRateFresh>());
       expect((result as ReferenceRateFresh).rate, fetched);
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), fetched);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), fetched);
     });
   });
 
@@ -199,7 +199,7 @@ void main() {
       final ReferenceFxRate stale = rateFor(
         fetchedAt: currentTime.subtract(const Duration(hours: 2)),
       );
-      cache.put(stale);
+      await cache.put(stale);
       final ReferenceFxRate wrongPair = rateFor(base: 'EUR', quote: 'USD', rateValue: '1.08');
       provider.nextResult = FxRateProviderSuccess(<ReferenceFxRate>[wrongPair]);
 
@@ -213,7 +213,7 @@ void main() {
 
   group('8. cache direction (service-level)', () {
     test('caching USD->JPY never satisfies a JPY->USD request', () async {
-      cache.put(rateFor(base: 'USD', quote: 'JPY'));
+      await cache.put(rateFor(base: 'USD', quote: 'JPY'));
       provider.nextResult = const FxRateProviderFailure('provider unreachable');
 
       final ReferenceRateResult result =
@@ -274,7 +274,7 @@ void main() {
         currentTime = utcInstant.toLocal();
 
         final ReferenceFxRate cached = rateFor(fetchedAt: utcInstant);
-        cache.put(cached);
+        await cache.put(cached);
 
         final ReferenceRateResult result =
             await service.referenceRate(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY');
@@ -324,7 +324,7 @@ void main() {
       final ReferenceFxRate stale = rateFor(
         fetchedAt: currentTime.subtract(const Duration(hours: 2)),
       );
-      cache.put(stale);
+      await cache.put(stale);
       final ReferenceFxRate future = rateFor(
         observedAt: currentTime.add(const Duration(minutes: 5)),
         fetchedAt: currentTime,

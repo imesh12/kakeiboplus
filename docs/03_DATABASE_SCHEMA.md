@@ -269,6 +269,19 @@ If the contribution currency differs from the goal currency, preserve a conversi
 
 ## exchange_rates
 
+> **Checkpoint 9.3 divergence:** the section below is the original
+> aspirational design. What actually shipped in schema version 7 is
+> `reference_exchange_rates` (see that section below, and
+> `lib/core/database/tables.dart`/`docs/14_DECISION_LOG.md` ADR-025):
+> `base_currency`, `quote_currency`, `rate` (TEXT, never REAL), `provider`,
+> `observed_at` (renamed from `provider_timestamp` to match the domain
+> field `ReferenceFxRate.observedAt`), `fetched_at`. There is no surrogate
+> `id` column — the primary key is the composite `(base_currency,
+> quote_currency)` pair itself, which is also what gives this table its
+> "at most one row per ordered pair" uniqueness, rather than a separate
+> index. `user_currency_pairs` and `rate_alerts` below remain
+> unimplemented and aspirational.
+
 - id
 - base_currency
 - quote_currency
@@ -278,6 +291,36 @@ If the contribution currency differs from the goal currency, preserve a conversi
 - fetched_at
 
 Use a uniqueness/index strategy appropriate to provider + pair + timestamp.
+
+## reference_exchange_rates
+
+> **What actually shipped, schema v7 (Checkpoint 9.3).** See
+> `lib/core/database/tables.dart`'s `ReferenceExchangeRates` class doc and
+> `docs/14_DECISION_LOG.md` ADR-025 for the full rationale.
+
+- base_currency
+- quote_currency
+- rate (full-precision decimal TEXT, never REAL/double — ADR-018's rule)
+- provider
+- observed_at (a genuine instant; when the provider says the rate was
+  quoted)
+- fetched_at (a genuine instant; when this row was cached — this is what
+  freshness is measured against, never `observed_at`)
+
+Primary key: the composite `(base_currency, quote_currency)` pair — the
+only table in this schema using a composite key instead of a surrogate
+`id`, because a cache row's identity IS the ordered pair (see ADR-025).
+`(USD, JPY)` and `(JPY, USD)` are always independent rows; a write for one
+never affects the other.
+
+This table is a replaceable, freshness-based CURRENT market-rate cache
+(ADR-011: "FX rates are reference data") populated and read only through
+`DriftReferenceFxRateCache`/`ReferenceFxRateService`
+(`lib/core/fx/reference_fx_rate_service.dart`). It is architecturally
+independent of `transaction_exchange_rates` above: never joined to it,
+never read from it, never written from it. No FX provider vendor
+integration, no FX UI, and no automatic/background refresh exist yet —
+see ADR-025.
 
 ## user_currency_pairs
 

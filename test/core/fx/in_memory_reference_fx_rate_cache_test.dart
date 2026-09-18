@@ -19,84 +19,84 @@ void main() {
       );
 
   group('InMemoryReferenceFxRateCache — basic get/put', () {
-    test('returns null for a pair nothing has been cached for', () {
+    test('returns null for a pair nothing has been cached for', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), isNull);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), isNull);
     });
 
-    test('put then get returns the exact cached rate', () {
+    test('put then get returns the exact cached rate', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
       final ReferenceFxRate rate = rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25');
-      cache.put(rate);
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), rate);
+      await cache.put(rate);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), rate);
     });
 
-    test('put overwrites a prior entry for the exact same pair', () {
+    test('put overwrites a prior entry for the exact same pair', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
-      cache.put(rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25'));
+      await cache.put(rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25'));
       final ReferenceFxRate refreshed = rateFor(base: 'USD', quote: 'JPY', rateValue: '151.00');
-      cache.put(refreshed);
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), refreshed);
+      await cache.put(refreshed);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), refreshed);
     });
   });
 
   group('InMemoryReferenceFxRateCache — pair safety (direction matters)', () {
-    test('USD->JPY and JPY->USD are independent cache slots', () {
+    test('USD->JPY and JPY->USD are independent cache slots', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
       final ReferenceFxRate usdToJpy = rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25');
-      cache.put(usdToJpy);
+      await cache.put(usdToJpy);
 
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), usdToJpy);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), usdToJpy);
       // The inverse pair must never read the forward pair's entry -- no
       // implicit inversion, ever.
-      expect(cache.get(baseCurrencyCode: 'JPY', quoteCurrencyCode: 'USD'), isNull);
+      expect(await cache.get(baseCurrencyCode: 'JPY', quoteCurrencyCode: 'USD'), isNull);
     });
 
-    test('caching multiple unrelated pairs does not cross-contaminate', () {
+    test('caching multiple unrelated pairs does not cross-contaminate', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
       final ReferenceFxRate usdToJpy = rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25');
       final ReferenceFxRate eurToUsd = rateFor(base: 'EUR', quote: 'USD', rateValue: '1.08');
-      cache.put(usdToJpy);
-      cache.put(eurToUsd);
+      await cache.put(usdToJpy);
+      await cache.put(eurToUsd);
 
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), usdToJpy);
-      expect(cache.get(baseCurrencyCode: 'EUR', quoteCurrencyCode: 'USD'), eurToUsd);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), usdToJpy);
+      expect(await cache.get(baseCurrencyCode: 'EUR', quoteCurrencyCode: 'USD'), eurToUsd);
     });
 
-    test('cache keys are case-insensitive, matching canonical upper-case currency codes', () {
+    test('cache keys are case-insensitive, matching canonical upper-case currency codes', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
       final ReferenceFxRate usdToJpy = rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25');
-      cache.put(usdToJpy);
-      expect(cache.get(baseCurrencyCode: 'usd', quoteCurrencyCode: 'jpy'), usdToJpy);
+      await cache.put(usdToJpy);
+      expect(await cache.get(baseCurrencyCode: 'usd', quoteCurrencyCode: 'jpy'), usdToJpy);
     });
   });
 
   group('InMemoryReferenceFxRateCache — removeIfPresent', () {
-    test('removes an existing entry for the exact pair', () {
+    test('removes an existing entry for the exact pair', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
-      cache.put(rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25'));
-      cache.removeIfPresent(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY');
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), isNull);
+      await cache.put(rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25'));
+      await cache.removeIfPresent(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY');
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), isNull);
     });
 
-    test('is a no-op (does not throw) when nothing is cached for that pair', () {
+    test('is a no-op (does not throw) when nothing is cached for that pair', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
-      expect(
-        () => cache.removeIfPresent(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'),
-        returnsNormally,
+      await expectLater(
+        cache.removeIfPresent(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'),
+        completes,
       );
     });
 
-    test('does not affect a different pair', () {
+    test('does not affect a different pair', () async {
       final InMemoryReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
       final ReferenceFxRate eurToUsd = rateFor(base: 'EUR', quote: 'USD', rateValue: '1.08');
-      cache.put(rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25'));
-      cache.put(eurToUsd);
+      await cache.put(rateFor(base: 'USD', quote: 'JPY', rateValue: '150.25'));
+      await cache.put(eurToUsd);
 
-      cache.removeIfPresent(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY');
+      await cache.removeIfPresent(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY');
 
-      expect(cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), isNull);
-      expect(cache.get(baseCurrencyCode: 'EUR', quoteCurrencyCode: 'USD'), eurToUsd);
+      expect(await cache.get(baseCurrencyCode: 'USD', quoteCurrencyCode: 'JPY'), isNull);
+      expect(await cache.get(baseCurrencyCode: 'EUR', quoteCurrencyCode: 'USD'), eurToUsd);
     });
   });
 }

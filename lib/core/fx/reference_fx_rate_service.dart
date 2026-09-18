@@ -110,7 +110,7 @@ class ReferenceFxRateService {
       return ReferenceRateIdentity(base.code);
     }
 
-    final ReferenceFxRate? cached = _cache.get(
+    final ReferenceFxRate? cached = await _cache.get(
       baseCurrencyCode: base.code,
       quoteCurrencyCode: quote.code,
     );
@@ -153,7 +153,7 @@ class ReferenceFxRateService {
           );
         }
 
-        _cache.put(match);
+        await _cache.put(match);
         return ReferenceRateFresh(match);
 
       case FxRateProviderFailure(message: final String message):

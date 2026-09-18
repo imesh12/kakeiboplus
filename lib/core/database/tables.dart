@@ -482,3 +482,83 @@ class TransactionExchangeRates extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
+
+/// The CURRENT/reference exchange-rate cache — Checkpoint 9.3 (schema
+/// v7). Persists `ReferenceFxRate`
+/// (`lib/core/fx/reference_fx_rate.dart`) so `DriftReferenceFxRateCache`
+/// survives an app restart; `InMemoryReferenceFxRateCache` remains
+/// available for tests and any context a database isn't appropriate for
+/// (see `lib/core/fx/reference_fx_rate_providers.dart`).
+///
+/// # Do not confuse this with [TransactionExchangeRates]
+///
+/// [TransactionExchangeRates] is an immutable historical fact permanently
+/// attached to one specific transaction (ADR-009/ADR-010) — it is never
+/// replaced, and this table is never joined to it, read from it, or
+/// written from it. This table is a replaceable, refreshable,
+/// freshness-based CURRENT market quote with no connection to any
+/// transaction (ADR-011: "FX rates are reference data") — see
+/// `lib/core/fx/reference_fx_rate.dart`'s own class doc for the same
+/// separation stated from the domain-model side. Two independent
+/// lifecycles, on purpose.
+///
+/// # Primary key — an intentional departure from this file's usual
+/// surrogate-`id` convention
+///
+/// Every other table in this file uses a surrogate `TextColumn id` as its
+/// primary key, even where an obvious natural key exists (e.g.
+/// [SavingsGoalContributions]), because those rows are independent
+/// financial events/entities that other tables may need to reference by
+/// a stable id, soft-delete, etc. A reference-rate cache row has no such
+/// independent identity — it simply IS "the current cached rate for
+/// `(baseCurrency, quoteCurrency)`", nothing else in the schema
+/// references it by id, and CP9.3 requires "at most one row per ordered
+/// pair" with deterministic replace-on-conflict (cache) behavior, not the
+/// reject-a-second-write behavior [TransactionExchangeRates] enforces at
+/// the repository layer for a completely different reason (immutability).
+/// Declaring `(baseCurrency, quoteCurrency)` as the actual composite
+/// primary key gets that invariant enforced by SQLite itself and lets
+/// `DriftReferenceFxRateCache.put` use Drift's `insertOnConflictUpdate`
+/// (`INSERT ... ON CONFLICT(...) DO UPDATE`) directly, with no separate
+/// UNIQUE index or manual check-then-insert-or-update dance.
+///
+/// `(USD, JPY)` and `(JPY, USD)` are different primary keys — this table
+/// never inverts, merges, or otherwise conflates a pair with its reverse
+/// (see [FxRate]'s own directional-rate contract).
+class ReferenceExchangeRates extends Table {
+  /// ISO 4217 code, canonical/upper-case — see
+  /// `CurrencyRegistry`/`FxRate.baseCurrencyCode`. Half of the composite
+  /// primary key.
+  TextColumn get baseCurrency => text()();
+
+  /// ISO 4217 code, canonical/upper-case. Half of the composite primary
+  /// key — `(baseCurrency, quoteCurrency)` and `(quoteCurrency,
+  /// baseCurrency)` are always distinct rows, never merged or inverted.
+  TextColumn get quoteCurrency => text()();
+
+  /// Full-precision decimal string — e.g. "150.25", "0.006666666667".
+  /// Deliberately TEXT, never REAL — identical reasoning to
+  /// [TransactionExchangeRates.rate] (ADR-018): an exchange rate must
+  /// never be rounded merely by virtue of how it's stored.
+  TextColumn get rate => text()();
+
+  /// Free-text provenance. Matches [TransactionExchangeRates.provider]'s
+  /// column-naming precedent within this schema file (the corresponding
+  /// domain field is `ReferenceFxRate.source` — same
+  /// column-name-vs-domain-field-name mapping
+  /// `TransactionExchangeRateRepository` already uses for the sibling
+  /// table).
+  TextColumn get provider => text()();
+
+  /// When the provider says this rate was actually observed/quoted. A
+  /// genuine instant — see `ReferenceFxRate.observedAt`.
+  DateTimeColumn get observedAt => dateTime()();
+
+  /// When this rate was fetched/cached. A genuine instant — see
+  /// `ReferenceFxRate.fetchedAt`. `ReferenceFxRateService`'s freshness
+  /// comparison is measured against this column, never [observedAt].
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{baseCurrency, quoteCurrency};
+}

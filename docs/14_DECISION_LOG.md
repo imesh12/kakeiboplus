@@ -890,3 +890,55 @@ math, and without ever letting a notification post a transaction itself.
    from a version that may not be what gets resolved.
 
 Status: Approved 2026-09-05 (Beta 1 Task 4B).
+
+## ADR-025 — Checkpoint 9.3: persistent reference-rate cache is schema v7, and is architecturally separate from historical FX snapshots
+
+Decision: schema version 7 adds exactly one new table,
+`reference_exchange_rates` (see `03_DATABASE_SCHEMA.md`), to hold the
+CURRENT/reference FX-rate cache introduced in Checkpoint 9.2
+(`ReferenceFxRate`/`ReferenceFxRateCache`/`ReferenceFxRateService`).
+Checkpoint 9.2 shipped only an in-memory implementation of that cache
+(restart-volatile); this migration is what lets `DriftReferenceFxRateCache`
+persist it.
+
+1. `reference_exchange_rates` is a brand-new table, not a reuse of
+   `transaction_exchange_rates`. The two are deliberately independent and
+   must never be confused: `transaction_exchange_rates` is ADR-009/
+   ADR-010's immutable historical snapshot, permanently attached to one
+   transaction, never replaced. `reference_exchange_rates` is a
+   replaceable, freshness-based CURRENT market quote (ADR-011: "FX rates
+   are reference data") with no connection to any transaction, account,
+   budget, or goal. Nothing in this migration reads, rewrites, or deletes
+   a row of the historical table.
+2. Its primary key is the composite `(base_currency, quote_currency)`
+   pair — the only table in this schema to use a composite key instead of
+   a surrogate `id` — because a cache row's identity genuinely IS the
+   ordered currency pair, nothing else in the schema references it by id,
+   and the cache's own contract requires "at most one row per ordered
+   pair" with deterministic replace-on-conflict (upsert) behavior, which
+   the composite key enforces at the database level rather than the
+   application layer. `(USD, JPY)` and `(JPY, USD)` remain independent
+   rows.
+3. `rate` is stored as TEXT (a plain decimal string), never REAL/`double`
+   — identical reasoning to `transaction_exchange_rates.rate` (ADR-018).
+4. This reconciles `03_DATABASE_SCHEMA.md`'s original aspirational
+   `exchange_rates`/`user_currency_pairs`/`rate_alerts` blueprint section:
+   `reference_exchange_rates` is what actually shipped for the first of
+   those three, under a different name and a different key strategy than
+   originally sketched (see that doc's own updated note); a favorites
+   table (`user_currency_pairs`) and rate alerts remain unimplemented and
+   out of this checkpoint's scope.
+5. This checkpoint is database-only: no real `FxRateProvider` vendor
+   integration, no FX UI, and no automatic/background refresh were added.
+   `InMemoryReferenceFxRateCache` was kept (not deleted) for tests; normal
+   application code now receives `DriftReferenceFxRateCache` via
+   `referenceFxRateCacheProvider`.
+
+Reason: a real persistent cache needs real storage, and this is the
+narrowest schema change that provides it without touching any existing
+table's shape or any financial data, and without conflating "current
+market quote" with "historical transaction fact" — the exact distinction
+ADR-009/ADR-010/ADR-011 already established and this checkpoint is
+required to preserve.
+
+Status: Approved 2026-09-18 (Checkpoint 9.3).
