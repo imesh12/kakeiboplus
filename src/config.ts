@@ -1,0 +1,34 @@
+/** Launch settings: never imply availability until a real destination is supplied. */
+export const marketing = {
+  name: 'KakeiboPlus',
+  launchStatus: 'prelaunch' as const,
+  signupUrl: '',
+  stores: { apple: '', google: '' },
+  legal: { privacy: '', terms: '', contact: '' },
+  pricing: { trialDays: 30, monthlyAmount: 2, currency: 'USD', finalized: false },
+  languagesReady: false,
+};
+
+export const languages = [
+  { code: 'en', name: 'English', greeting: 'A little clarity, every day.', balance: 'Total balance', budget: 'Monthly budget', saved: 'Saved this month', dir: 'ltr' },
+  { code: 'ja', name: '日本語', greeting: '毎日のお金に、ちょっと安心。', balance: '総残高', budget: '今月の予算', saved: '今月の貯金', dir: 'ltr' },
+  { code: 'ko', name: '한국어', greeting: '매일 조금 더 명확하게.', balance: '총 잔액', budget: '월 예산', saved: '이번 달 저축', dir: 'ltr' },
+  { code: 'vi', name: 'Tiếng Việt', greeting: 'Hiểu rõ hơn mỗi ngày.', balance: 'Tổng số dư', budget: 'Ngân sách tháng', saved: 'Tiết kiệm tháng này', dir: 'ltr' },
+  { code: 'ne', name: 'नेपाली', greeting: 'हरेक दिन, अझ स्पष्ट।', balance: 'कुल मौज्दात', budget: 'मासिक बजेट', saved: 'यस महिनाको बचत', dir: 'ltr' },
+  { code: 'it', name: 'Italiano', greeting: 'Un po’ di chiarezza, ogni giorno.', balance: 'Saldo totale', budget: 'Budget mensile', saved: 'Risparmi del mese', dir: 'ltr' },
+  { code: 'ar', name: 'العربية', greeting: 'وضوح أكثر، كل يوم.', balance: 'الرصيد الإجمالي', budget: 'الميزانية الشهرية', saved: 'مدخرات هذا الشهر', dir: 'rtl' },
+  { code: 'hi', name: 'हिन्दी', greeting: 'हर दिन, थोड़ी और स्पष्टता।', balance: 'कुल शेष राशि', budget: 'मासिक बजट', saved: 'इस महीने की बचत', dir: 'ltr' },
+  { code: 'si', name: 'සිංහල', greeting: 'සෑම දිනකම, තව ටිකක් පැහැදිලිව.', balance: 'මුළු ශේෂය', budget: 'මාසික අයවැය', saved: 'මේ මාසයේ ඉතිරිය', dir: 'ltr' },
+] as const;
+
+export const currencies = [
+  { code: 'JPY', symbol: '¥', flag: '🇯🇵', name: 'Japanese yen' },
+  { code: 'USD', symbol: '$', flag: '🇺🇸', name: 'US dollar' },
+  { code: 'INR', symbol: '₹', flag: '🇮🇳', name: 'Indian rupee' },
+  { code: 'NPR', symbol: 'रू', flag: '🇳🇵', name: 'Nepalese rupee' },
+  { code: 'VND', symbol: '₫', flag: '🇻🇳', name: 'Vietnamese đồng' },
+  { code: 'KRW', symbol: '₩', flag: '🇰🇷', name: 'South Korean won' },
+  { code: 'EUR', symbol: '€', flag: '🇪🇺', name: 'Euro' },
+  { code: 'SAR', symbol: '﷼', flag: '🇸🇦', name: 'Saudi riyal' },
+  { code: 'LKR', symbol: 'Rs', flag: '🇱🇰', name: 'Sri Lankan rupee' },
+];
