@@ -1,3 +1,4 @@
+import { companion } from './components/companion';
 export function icon(name: string, size = 20): string {
   const paths: Record<string, string> = {
     arrow: '<path d="M4 12h15m-6-6 6 6-6 6"/>',
@@ -25,25 +26,7 @@ export function icon(name: string, size = 20): string {
 
 export const brand = (light = false) => `<a class="brand ${light ? 'brand-light' : ''}" href="#" aria-label="KakeiboPlus home"><img src="/icon.svg" alt="" width="35" height="35"/><span>Kakeibo<span class="brand-plus">Plus</span></span></a>`;
 
-/** Original, replaceable SVG companion. No third-party or Rive artwork. */
-export function pet(state = 'idle', className = ''): string {
-  return `<svg class="pet pet-${state} ${className}" viewBox="0 0 200 200" role="img" aria-label="Sprout companion, ${state}">
-    <ellipse cx="100" cy="179" rx="49" ry="8" fill="#164E3B" opacity=".09"/>
-    <path class="pet-leaf" d="M101 66C70 67 58 43 65 25c25-1 40 17 36 41Z" fill="#4BA86D"/>
-    <path class="pet-leaf" d="M101 67c-3-30 17-46 39-43 3 23-13 41-39 43Z" fill="#88D344"/>
-    <path d="M101 74V46" stroke="#357E46" stroke-width="5" stroke-linecap="round"/>
-    <path d="M57 122c-18-4-23 8-13 14l15 3m86-17c18-4 23 8 13 14l-15 3" fill="#85BFA4"/>
-    <path d="M74 161c-4 12-3 19 6 19 8 0 11-8 12-14m21-5c4 12 3 19-6 19-8 0-11-8-12-14" fill="#6BAA8D"/>
-    <path d="M51 111c0-37 19-53 49-53s50 16 50 53v23c0 29-21 40-50 40s-49-11-49-40Z" fill="#ADD5BE"/>
-    <path d="M58 105c0-29 20-43 42-43 21 0 40 12 43 36-22-11-58-9-85 7Z" fill="#C8E5D4" opacity=".65"/>
-    ${state === 'sleeping' ? '<path d="m75 116 9 2m32 0 9-2" stroke="#204C3B" stroke-width="3" stroke-linecap="round"/><text x="150" y="74" fill="#47725D" font-family="sans-serif" font-size="18">z z</text>' : state === 'happy' || state === 'celebrate' ? '<path d="M75 116q5-8 10 0m30 0q5-8 10 0" fill="none" stroke="#204C3B" stroke-width="3" stroke-linecap="round"/>' : '<ellipse cx="81" cy="114" rx="3.5" ry="5" fill="#204C3B"/><ellipse cx="119" cy="114" rx="3.5" ry="5" fill="#204C3B"/>'}
-    <ellipse cx="69" cy="126" rx="8" ry="4" fill="#EAAD8D" opacity=".7"/><ellipse cx="131" cy="126" rx="8" ry="4" fill="#EAAD8D" opacity=".7"/>
-    <path d="M94 127q6 7 12 0" fill="none" stroke="#204C3B" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M90 149h20" stroke="#6BAA8D" stroke-width="3" stroke-linecap="round"/>
-    ${state === 'celebrate' ? '<path d="m33 67 3 7 7 2-7 3-3 7-3-7-7-3 7-2Zm126 31 3 7 7 2-7 3-3 7-3-7-7-3 7-2Z" fill="#FFC83D"/>' : ''}
-    ${state === 'warning' ? '<circle cx="159" cy="85" r="13" fill="#FFE2A0"/><path d="M159 77v8m0 5v1" stroke="#80591B" stroke-width="3" stroke-linecap="round"/>' : ''}
-  </svg>`;
-}
+export function pet(state = 'idle'): string { return companion('dog', state); }
 
 export function bars(): string {
   return `<div class="bar-chart" role="img" aria-label="Illustrative weekly spending chart, highest on Thursday">${[40, 64, 48, 88, 56, 73, 43].map((v, i) => `<div><span style="--bar-height:${v}%;--i:${i}" class="${i === 3 ? 'active' : ''}"></span><small>${['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}</small></div>`).join('')}</div>`;

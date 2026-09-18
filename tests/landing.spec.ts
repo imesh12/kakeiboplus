@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-for (const width of [320, 375, 430, 768, 1024, 1440, 1920]) {
+for (const width of [320, 375, 390, 430, 768, 1024, 1440, 1920]) {
   test(`responsive layout at ${width}px has no horizontal overflow or console errors`, async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
@@ -29,7 +29,7 @@ test('language previews, currencies, conversions, input validation, and swapping
   await expect(page.locator('#language-preview')).toHaveAttribute('lang', 'ar');
   await expect(page.locator('#language-preview')).toHaveAttribute('dir', 'rtl');
   await page.locator('[data-currency="NPR"]').click();
-  await expect(page.locator('#wallet-amount')).toHaveText('रू 240,000');
+  await expect(page.locator('#wallet-amount')).toHaveText(new Intl.NumberFormat('ne-NP', { style: 'currency', currency: 'NPR', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }).format(240000));
   await page.locator('#fx-amount').fill('150');
   await expect(page.locator('#fx-result')).toHaveText('1.00');
   await page.locator('[data-pair="JPY,NPR"]').click();
@@ -106,3 +106,4 @@ test('automated WCAG checks on desktop and mobile', async ({ page }) => {
     expect(results.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) }))).toEqual([]);
   }
 });
+

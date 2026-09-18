@@ -1,0 +1,23 @@
+import { languages } from './config';
+export type Readiness = 'supported' | 'beta' | 'planned';
+export type PhoneLabel = 'greeting' | 'balance' | 'income' | 'expense' | 'budget' | 'recent' | 'lunch' | 'train' | 'saved' | 'goal' | 'nudge' | 'home' | 'activity' | 'goals' | 'reports' | 'more';
+const labels: Record<string, string[]> = {
+  en: ['Good morning, Alex', 'Total balance', 'Income', 'Expenses', 'Monthly budget', 'Recent transactions', 'Lunch', 'Train', 'Saved this month', 'Emergency fund', 'A little check-in goes a long way.', 'Home', 'Activity', 'Goals', 'Reports', 'More'],
+  ja: ['おはよう、Alex', '総残高', '収入', '支出', '今月の予算', '最近の取引', 'ランチ', '電車', '今月の貯金', 'もしもの備え', '毎日の記録を、大切な習慣に。', 'ホーム', '取引', '目標', 'レポート', 'その他'],
+  ko: ['좋은 아침이에요, Alex', '총 잔액', '수입', '지출', '월 예산', '최근 거래', '점심', '기차', '이번 달 저축', '비상금', '작은 기록이 좋은 습관이 돼요.', '홈', '거래', '목표', '보고서', '더 보기'],
+  vi: ['Chào buổi sáng, Alex', 'Tổng số dư', 'Thu nhập', 'Chi tiêu', 'Ngân sách tháng', 'Giao dịch gần đây', 'Bữa trưa', 'Tàu', 'Tiết kiệm tháng này', 'Quỹ dự phòng', 'Một chút ghi chép mỗi ngày.', 'Trang chủ', 'Giao dịch', 'Mục tiêu', 'Báo cáo', 'Thêm'],
+  ne: ['शुभ प्रभात, Alex', 'कुल मौज्दात', 'आम्दानी', 'खर्च', 'मासिक बजेट', 'हालका कारोबार', 'खाना', 'रेल', 'यस महिनाको बचत', 'आपत्कालीन कोष', 'सानो अभिलेख, राम्रो बानी।', 'गृह', 'कारोबार', 'लक्ष्य', 'रिपोर्ट', 'थप'],
+  it: ['Buongiorno, Alex', 'Saldo totale', 'Entrate', 'Uscite', 'Budget mensile', 'Transazioni recenti', 'Pranzo', 'Treno', 'Risparmi del mese', 'Fondo emergenze', 'Una piccola abitudine, ogni giorno.', 'Home', 'Attività', 'Obiettivi', 'Report', 'Altro'],
+  ar: ['صباح الخير، Alex', 'الرصيد الإجمالي', 'الدخل', 'المصروفات', 'الميزانية الشهرية', 'المعاملات الأخيرة', 'الغداء', 'القطار', 'مدخرات هذا الشهر', 'صندوق الطوارئ', 'خطوة صغيرة كل يوم تصنع عادة.', 'الرئيسية', 'المعاملات', 'الأهداف', 'التقارير', 'المزيد'],
+  hi: ['सुप्रभात, Alex', 'कुल शेष राशि', 'आमदनी', 'खर्च', 'मासिक बजट', 'हाल के लेन-देन', 'दोपहर का खाना', 'ट्रेन', 'इस महीने की बचत', 'आपातकालीन निधि', 'छोटी शुरुआत, अच्छी आदत।', 'होम', 'लेन-देन', 'लक्ष्य', 'रिपोर्ट', 'अधिक'],
+  si: ['සුබ උදෑසනක්, Alex', 'මුළු ශේෂය', 'ආදායම', 'වියදම්', 'මාසික අයවැය', 'මෑත ගනුදෙනු', 'දිවා ආහාරය', 'දුම්රිය', 'මේ මාසයේ ඉතිරිය', 'හදිසි අරමුදල', 'කුඩා සටහනක්, හොඳ පුරුද්දක්.', 'මුල් පිටුව', 'ගනුදෙනු', 'ඉලක්ක', 'වාර්තා', 'තවත්'],
+};
+const keys: PhoneLabel[] = ['greeting', 'balance', 'income', 'expense', 'budget', 'recent', 'lunch', 'train', 'saved', 'goal', 'nudge', 'home', 'activity', 'goals', 'reports', 'more'];
+const locales: Record<string, string> = { en: 'en-US', ja: 'ja-JP', ko: 'ko-KR', vi: 'vi-VN', ne: 'ne-NP', it: 'it-IT', ar: 'ar-SA', hi: 'hi-IN', si: 'si-LK' };
+export const languageProfiles = languages.map(l => ({ ...l, locale: locales[l.code], readiness: 'planned' as Readiness, labels: Object.fromEntries(keys.map((key, i) => [key, labels[l.code][i]])) as Record<PhoneLabel, string> }));
+export function languageProfile(code: string) { return languageProfiles.find(l => l.code === code) || languageProfiles[0]; }
+export function formatMoney(amount: number, currency = 'JPY', locale = 'en-US') {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency, currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }).format(amount);
+}
+export const currencyLocales: Record<string, string> = { JPY: 'ja-JP', USD: 'en-US', INR: 'en-IN', NPR: 'ne-NP', VND: 'vi-VN', KRW: 'ko-KR', EUR: 'it-IT', SAR: 'ar-SA', LKR: 'si-LK' };
+export const walletAmounts: Record<string, number> = { JPY: 128450, USD: 1250, INR: 48000, NPR: 240000, VND: 8500000, KRW: 1450000, EUR: 1180, SAR: 4680, LKR: 125000 };

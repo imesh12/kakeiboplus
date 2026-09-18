@@ -1,8 +1,13 @@
 import './style.css';
-import { icon, pet } from './art';
-import { currencies, languages, marketing } from './config';
+import './premium.css';
+import { icon } from './art';
+import { companion, type PetKind } from './components/companion';
+import { mobileScreen } from './components/phone';
+import { initProductMotion } from './motion';
+import { mountDownloadCounter } from './downloads';
+import { formatMoney, currencyLocales, walletAmounts } from './localization';
+import { currencies, marketing } from './config';
 import { demoFxProvider } from './fx.mjs';
-import * as sections from './sections';
 import { renderLanding } from './render';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -42,29 +47,8 @@ document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => {
   });
 });
 
-function selectLanguage(code: string) {
-  const language = languages.find(l => l.code === code) || languages[0];
-  const preview = document.querySelector<HTMLElement>('#language-preview')!;
-  preview.lang = language.code;
-  preview.dir = language.dir;
-  document.querySelector('#language-greeting')!.textContent = language.greeting;
-  document.querySelector('#language-balance-label')!.textContent = language.balance;
-  document.querySelector('#language-budget')!.textContent = language.budget;
-  document.querySelector('#language-saved')!.textContent = language.saved;
-  document.querySelector('#language-current')!.textContent = language.name;
-  document.querySelector('.preview-lang')!.textContent = language.code.toUpperCase();
-  document.querySelectorAll<HTMLButtonElement>('[data-language]').forEach(button => {
-    button.classList.toggle('active', button.dataset.language === code);
-    button.setAttribute('aria-pressed', String(button.dataset.language === code));
-  });
-  document.querySelector<HTMLSelectElement>('#footer-language')!.value = code;
-  if (!reducedMotion.matches) preview.animate([{ opacity: .5, transform: 'translateY(5px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 250 });
-}
-document.querySelectorAll<HTMLButtonElement>('[data-language]').forEach(button => button.addEventListener('click', () => selectLanguage(button.dataset.language!)));
-document.querySelector('#footer-language')!.addEventListener('change', e => {
-  selectLanguage((e.target as HTMLSelectElement).value);
-  document.querySelector('#languages')!.scrollIntoView({ behavior: reducedMotion.matches ? 'instant' : 'smooth' });
-});
+initProductMotion();
+void mountDownloadCounter();
 
 const walletExamples: Record<string, [string, string]> = { JPY: ['Japan Wallet', '¥128,450'], USD: ['US Wallet', '$1,250'], INR: ['India Wallet', '₹48,000'], NPR: ['Nepal Wallet', 'रू 240,000'], VND: ['Vietnam Wallet', '₫8,500,000'], KRW: ['Korea Wallet', '₩1,450,000'], EUR: ['Europe Wallet', '€1,180'], SAR: ['Saudi Wallet', '﷼4,680'], LKR: ['Sri Lanka Wallet', 'Rs 125,000'] };
 document.querySelectorAll<HTMLButtonElement>('[data-currency]').forEach(button => button.addEventListener('click', () => {
@@ -72,7 +56,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-currency]').forEach(button =
   document.querySelector('#wallet-flag')!.textContent = currency.flag;
   document.querySelector('#wallet-code')!.textContent = currency.code;
   document.querySelector('#wallet-name')!.textContent = walletExamples[currency.code][0];
-  document.querySelector('#wallet-amount')!.textContent = walletExamples[currency.code][1];
+  document.querySelector('#wallet-amount')!.textContent = formatMoney(walletAmounts[currency.code], currency.code, currencyLocales[currency.code]);
   document.querySelectorAll<HTMLButtonElement>('[data-currency]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); });
   if (!reducedMotion.matches) document.querySelector('.wallet-japan')!.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-8px)' }, { transform: 'translateY(0)' }], { duration: 320 });
 }));
@@ -119,12 +103,19 @@ document.querySelectorAll<HTMLButtonElement>('[data-pair]').forEach(button => bu
   void updateFx();
 }));
 
+let companionKind: PetKind = 'dog';
 const message = document.querySelector('#pet-message')!;
 const actions = document.querySelector('#pet-actions')!;
 function setPetState(state: string) {
-  document.querySelector('#main-pet')!.innerHTML = pet(state);
+  document.dispatchEvent(new Event('companion-interaction'));
+  document.querySelector('#main-pet')!.innerHTML = companion(companionKind, state);
   document.querySelectorAll<HTMLButtonElement>('[data-pet-state]').forEach(b => { b.classList.toggle('active', b.dataset.petState === state); b.setAttribute('aria-pressed', String(b.dataset.petState === state)); });
 }
+document.querySelectorAll<HTMLButtonElement>('[data-companion-kind]').forEach(button => button.addEventListener('click', () => {
+  companionKind = button.dataset.companionKind as PetKind;
+  document.querySelectorAll<HTMLButtonElement>('[data-companion-kind]').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+  petReset();
+}));
 function petReset() {
   message.textContent = 'Did you buy anything today?';
   actions.innerHTML = `<button data-pet-action="yes">Yes, I did ${icon('arrow', 14)}</button><button data-pet-action="no">Not today</button>`;
@@ -171,7 +162,7 @@ const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-feature]')]
 function selectFeature(button: HTMLButtonElement) {
   tabs.forEach(b => { b.setAttribute('aria-selected', String(b === button)); b.tabIndex = b === button ? 0 : -1; });
   const panel = document.querySelector('#feature-panel')!;
-  panel.innerHTML = sections.featureContent(button.dataset.feature!);
+  document.querySelector('#showcase-center')!.innerHTML = mobileScreen(button.dataset.feature!);
   panel.setAttribute('aria-labelledby', button.id);
 }
 tabs.forEach((button, index) => {
@@ -195,17 +186,5 @@ if ('IntersectionObserver' in window && !reducedMotion.matches) {
   }, { threshold: .08 });
   document.querySelectorAll('.reveal').forEach(el => { el.classList.add('will-reveal'); observer.observe(el); });
 }
-if (!reducedMotion.matches) {
-  const counter = document.querySelector<HTMLElement>('[data-count]')!;
-  const start = performance.now();
-  const total = Number(counter.dataset.count);
-  const tick = (now: number) => {
-    const progress = Math.min((now - start) / 1200, 1);
-    counter.textContent = Math.round(total * (1 - Math.pow(1 - progress, 4))).toLocaleString('en-US');
-    if (progress < 1 && !reducedMotion.matches) requestAnimationFrame(tick);
-    else counter.textContent = total.toLocaleString('en-US');
-  };
-  requestAnimationFrame(tick);
-}
-
+document.documentElement.dataset.enhanced = 'true';
 
