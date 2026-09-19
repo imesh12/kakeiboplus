@@ -1401,6 +1401,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'≈ {amount} (cached)'**
   String approxAmountStaleLabel(String amount);
+
+  /// No description provided for @currencyConverterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Currency Converter'**
+  String get currencyConverterTitle;
+
+  /// No description provided for @currencyConverterFromLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get currencyConverterFromLabel;
+
+  /// No description provided for @currencyConverterToLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'To'**
+  String get currencyConverterToLabel;
+
+  /// No description provided for @currencyConverterAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount'**
+  String get currencyConverterAmountLabel;
+
+  /// No description provided for @currencyConverterSwapTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Swap currencies'**
+  String get currencyConverterSwapTooltip;
+
+  /// No description provided for @currencyConverterSameCurrencyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'From and To are the same currency, so the converted amount is exactly what you entered.'**
+  String get currencyConverterSameCurrencyMessage;
+
+  /// No description provided for @currencyConverterEnterAmountMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount to convert.'**
+  String get currencyConverterEnterAmountMessage;
+
+  /// No description provided for @amountTooLargeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The converted amount is too large to display.'**
+  String get amountTooLargeMessage;
+
+  /// No description provided for @favoritePairsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite pairs'**
+  String get favoritePairsSectionTitle;
+
+  /// No description provided for @favoritePairsSessionNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite pairs are remembered for this session only.'**
+  String get favoritePairsSessionNote;
+
+  /// No description provided for @noFavoritePairsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No favorite pairs yet.'**
+  String get noFavoritePairsMessage;
+
+  /// No description provided for @addFavoritePairTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add favorite pair'**
+  String get addFavoritePairTooltip;
+
+  /// No description provided for @removeFavoritePairTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove favorite pair'**
+  String get removeFavoritePairTooltip;
+
+  /// favoritePairsLimitReachedMessage
+  ///
+  /// In en, this message translates to:
+  /// **'You can save up to {limit} favorite pairs.'**
+  String favoritePairsLimitReachedMessage(int limit);
 }
 
 class _AppLocalizationsDelegate

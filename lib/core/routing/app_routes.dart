@@ -59,4 +59,11 @@ abstract class AppRoutes {
   /// Personalization Foundation). Reached from the Profile/Settings
   /// screen's new "Appearance" row.
   static const String themeCustomization = '/theme-customization';
+
+  /// The Currency Converter screen -- Checkpoint 9.6. Reached from
+  /// International Preferences' Currency section, exactly like
+  /// [internationalPreferences]/[themeCustomization] above are reached
+  /// from Profile/Settings -- no new bottom-nav destination (see
+  /// `docs/14_DECISION_LOG.md` ADR-028).
+  static const String currencyConverter = '/currency-converter';
 }

@@ -10,6 +10,7 @@ import '../../../core/locale/app_language.dart';
 import '../../../core/locale/date_format_preference.dart';
 import '../../../core/locale/number_format_preference.dart';
 import '../../../core/locale/timezone_preference.dart';
+import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../onboarding/domain/country_registry.dart';
@@ -248,6 +249,20 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                 ReferenceRateCard(
                   homeCurrencyCode: _homeCurrency!,
                   livingCurrencyCode: _livingCurrency!,
+                ),
+                const SizedBox(height: 12),
+                // Checkpoint 9.6: the Currency Converter's entry point --
+                // reached from this screen's own Currency section,
+                // directly below the Reference Rate card it's built on
+                // top of. A plain nav row (no local state of its own on
+                // this screen, never participates in `_ensureSeeded`/
+                // `_save`) -- same pattern `SettingsScreen`'s own nav rows
+                // already use.
+                OutlinedButton.icon(
+                  key: const Key('currencyConverterNavButton'),
+                  onPressed: () => context.push(AppRoutes.currencyConverter),
+                  icon: const Icon(Icons.calculate_outlined),
+                  label: Text(l10n.currencyConverterTitle),
                 ),
                 const SizedBox(height: 24),
                 Text(l10n.languageAndFormatSection, style: context.appTypography.sectionTitle),

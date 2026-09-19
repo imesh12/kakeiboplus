@@ -1104,4 +1104,75 @@ dependencies.
 
 Status: Approved 2026-09-18 (Checkpoint 9.5).
 
+## ADR-028 — Checkpoint 9.6: Currency Converter is presentation-only on the existing FX engine — session-only favorites, no schema/dependency change
+
+Context: Checkpoint 9.6 adds a user-facing Currency Converter and a
+lightweight favorite-currency-pairs feature, entirely on top of the
+CP9.1–CP9.5 FX engine (`FxRate`, `FxConverter`, `ReferenceFxRateService`,
+`referenceRateProvider`, `ReferenceRateView`, `ReferenceFxRateFormatter`).
+No new conversion, formatting, or freshness/caching logic was written —
+every number on this screen is produced by calling that existing engine
+exactly the way `ReferenceRateCard`/Home's `_LivingCurrencyEquivalentLine`
+already do. Several decisions were genuinely worth recording:
+
+1. **Favorite currency pairs are SESSION-ONLY presentation state in V1,
+   not durably persisted, and this is intentional.** The audit found no
+   schema-migration-free, dependency-free way to persist them: `profiles`
+   has no generic key-value/JSON column to repurpose, and no
+   `shared_preferences`-equivalent package exists in `pubspec.yaml`.
+   CP9.6's own explicit boundary forbids adding either "merely for this
+   feature," so favorites persistence STOPped per that boundary and is
+   implemented instead as a plain in-memory
+   `favoriteCurrencyPairsProvider` (`StateProvider<List<(String,
+   String)>>` — see `lib/features/settings/presentation/
+   favorite_currency_pairs_provider.dart`) that resets on every app
+   restart. The screen says so explicitly
+   (`favoritePairsSessionNote`) rather than letting a user believe a
+   starred pair survives a restart. A durable `favorite_currency_pairs`
+   table (a genuine, additive schema v7 -> v8 migration, same shape as
+   CP9.3's `reference_exchange_rates` addition) is the natural follow-up
+   whenever favorites durability is prioritized as its own checkpoint.
+2. **A currency-pair swap always issues a new ordered-pair request —
+   never a client-side reciprocal.** Swapping From/To only changes which
+   `(base, quote)` record key `_ReferenceRateStatus`/`_ConversionResult`
+   watch on `referenceRateProvider`; `ReferenceFxRateService` resolves
+   `to -> from` on its own terms (cache first, then provider) exactly
+   like any other pair request. No `1 / rate` inversion is computed
+   anywhere in `currency_converter_screen.dart`. The typed amount is
+   deliberately left as-is across a swap (not replaced by the prior
+   converted result) — `MoneyTextField`'s existing `didUpdateWidget`
+   re-validation (already shipped, unmodified by this checkpoint) simply
+   reinterprets the same digits under the newly-selected From currency's
+   own minor-unit precision, the same behavior every other currency-aware
+   amount field in this app already has when its currency changes.
+3. **Amount changes never trigger a new FX request.** The
+   `referenceRateProvider` watch is keyed by `(fromCurrency,
+   toCurrency)` alone; the typed amount is not part of that key and only
+   ever drives local `FxConverter.convert` arithmetic on top of whatever
+   rate is already resolved. Riverpod's own family-provider caching means
+   re-watching the same key on every keystroke's rebuild never re-invokes
+   the provider function — no debounce/throttle logic was written or
+   needed to satisfy this.
+4. **No schema migration, no new dependency.** `reference_exchange_rates`
+   (schema v7) and every other table are read/written exactly as before;
+   this checkpoint adds no column and no table. No package was added —
+   the screen is built entirely from existing shared widgets
+   (`AppCard`/`AppSectionHeader`/`AppStatusChip`/`MoneyTextField`) and the
+   existing FX/money engine.
+5. **The converter remains strictly informational.** It never creates a
+   `Transactions` row, never touches an account balance/budget/goal/
+   income/expense figure, never writes `transaction_exchange_rates`
+   (CP9.1's immutable historical-snapshot table stays architecturally
+   untouched, exactly as `ReferenceExchangeRates`'s own doc comment
+   requires), and cross-currency transfers remain rejected exactly as
+   before — this checkpoint adds no new path around that rule.
+
+Reason: a V1 converter should expose the existing, already-correct FX
+engine to the user with no new conversion/rounding/caching logic of its
+own, and a feature whose only safe persistence options are "add a
+migration" or "add a dependency" should say so plainly and ship as
+session-only rather than pretend a lighter option existed.
+
+Status: Approved 2026-09-19 (Checkpoint 9.6).
+
 Status: Approved 2026-09-18 (Checkpoint 9.4).

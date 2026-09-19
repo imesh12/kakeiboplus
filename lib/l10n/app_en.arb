@@ -465,5 +465,27 @@
         "type": "String"
       }
     }
+  },
+  "currencyConverterTitle": "Currency Converter",
+  "currencyConverterFromLabel": "From",
+  "currencyConverterToLabel": "To",
+  "currencyConverterAmountLabel": "Amount",
+  "currencyConverterSwapTooltip": "Swap currencies",
+  "currencyConverterSameCurrencyMessage": "From and To are the same currency, so the converted amount is exactly what you entered.",
+  "currencyConverterEnterAmountMessage": "Enter an amount to convert.",
+  "amountTooLargeMessage": "The converted amount is too large to display.",
+  "favoritePairsSectionTitle": "Favorite pairs",
+  "favoritePairsSessionNote": "Favorite pairs are remembered for this session only.",
+  "noFavoritePairsMessage": "No favorite pairs yet.",
+  "addFavoritePairTooltip": "Add favorite pair",
+  "removeFavoritePairTooltip": "Remove favorite pair",
+  "favoritePairsLimitReachedMessage": "You can save up to {limit} favorite pairs.",
+  "@favoritePairsLimitReachedMessage": {
+    "description": "favoritePairsLimitReachedMessage",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
   }
 }

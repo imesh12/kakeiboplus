@@ -749,4 +749,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String approxAmountStaleLabel(String amount) {
     return '≈ $amount (cached)';
   }
+
+  @override
+  String get currencyConverterTitle => 'Currency Converter';
+
+  @override
+  String get currencyConverterFromLabel => 'From';
+
+  @override
+  String get currencyConverterToLabel => 'To';
+
+  @override
+  String get currencyConverterAmountLabel => 'Amount';
+
+  @override
+  String get currencyConverterSwapTooltip => 'Swap currencies';
+
+  @override
+  String get currencyConverterSameCurrencyMessage =>
+      'From and To are the same currency, so the converted amount is exactly what you entered.';
+
+  @override
+  String get currencyConverterEnterAmountMessage =>
+      'Enter an amount to convert.';
+
+  @override
+  String get amountTooLargeMessage =>
+      'The converted amount is too large to display.';
+
+  @override
+  String get favoritePairsSectionTitle => 'Favorite pairs';
+
+  @override
+  String get favoritePairsSessionNote =>
+      'Favorite pairs are remembered for this session only.';
+
+  @override
+  String get noFavoritePairsMessage => 'No favorite pairs yet.';
+
+  @override
+  String get addFavoritePairTooltip => 'Add favorite pair';
+
+  @override
+  String get removeFavoritePairTooltip => 'Remove favorite pair';
+
+  @override
+  String favoritePairsLimitReachedMessage(int limit) {
+    return 'You can save up to $limit favorite pairs.';
+  }
 }

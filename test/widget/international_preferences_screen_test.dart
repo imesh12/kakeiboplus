@@ -536,7 +536,22 @@ void main() {
     expect(find.text('言語・地域設定'), findsOneWidget); // internationalPreferences (AppBar title)
     expect(find.text('地域'), findsOneWidget); // locationSection
     expect(find.text('通貨'), findsOneWidget); // currencySection
-    expect(find.text('言語と表示形式'), findsOneWidget); // languageAndFormatSection
+
+    // Repair Pass #1 (Failure 7): CP9.6 added a "Currency Converter" entry
+    // point inside the Currency section, directly after ReferenceRateCard.
+    // That extra content pushed this next section header below what used
+    // to be reachable without scrolling in the test surface's default
+    // viewport -- the screen itself is unchanged in every other respect and
+    // remains fully scrollable, so this is a test-only fix, exactly the
+    // same "start scrolling for this assertion" treatment the '保存' (Save)
+    // button check right below already gets.
+    final Finder languageAndFormatHeader = find.text('言語と表示形式'); // languageAndFormatSection
+    await scrollPageUntilVisible(
+      tester,
+      languageAndFormatHeader,
+      description: "The '言語と表示形式' section header",
+    );
+    expect(languageAndFormatHeader, findsOneWidget);
 
     final Finder saveButton = find.text('保存'); // save
     await scrollPageUntilVisible(tester, saveButton, description: "The '保存' (Save) button");

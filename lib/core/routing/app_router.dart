@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/accounts/presentation/accounts_screen.dart';
 import '../../features/budgets/presentation/budgets_screen.dart';
 import '../../features/categories/presentation/categories_screen.dart';
+import '../../features/settings/presentation/currency_converter_screen.dart';
 import '../../features/dashboard/presentation/home_screen.dart';
 import '../../features/goals/presentation/goal_detail_screen.dart';
 import '../../features/goals/presentation/savings_goals_screen.dart';
@@ -93,6 +94,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.themeCustomization,
         builder: (context, state) => const ThemeCustomizationScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.currencyConverter,
+        builder: (context, state) => const CurrencyConverterScreen(),
       ),
     ],
   );

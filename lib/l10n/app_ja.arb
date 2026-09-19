@@ -465,5 +465,27 @@
         "type": "String"
       }
     }
+  },
+  "currencyConverterTitle": "通貨換算",
+  "currencyConverterFromLabel": "変換元",
+  "currencyConverterToLabel": "変換先",
+  "currencyConverterAmountLabel": "金額",
+  "currencyConverterSwapTooltip": "通貨を入れ替え",
+  "currencyConverterSameCurrencyMessage": "変換元と変換先が同じ通貨のため、入力した金額がそのまま換算結果になります。",
+  "currencyConverterEnterAmountMessage": "金額を入力してください。",
+  "amountTooLargeMessage": "換算結果が大きすぎて表示できません。",
+  "favoritePairsSectionTitle": "お気に入りの通貨ペア",
+  "favoritePairsSessionNote": "お気に入りの通貨ペアはこのセッション中のみ保持されます。",
+  "noFavoritePairsMessage": "お気に入りの通貨ペアはまだありません。",
+  "addFavoritePairTooltip": "お気に入りに追加",
+  "removeFavoritePairTooltip": "お気に入りから削除",
+  "favoritePairsLimitReachedMessage": "お気に入りの通貨ペアは最大{limit}件まで保存できます。",
+  "@favoritePairsLimitReachedMessage": {
+    "description": "favoritePairsLimitReachedMessage",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
   }
 }

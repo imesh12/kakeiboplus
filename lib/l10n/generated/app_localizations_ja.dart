@@ -730,4 +730,49 @@ class AppLocalizationsJa extends AppLocalizations {
   String approxAmountStaleLabel(String amount) {
     return '≈ $amount（キャッシュ）';
   }
+
+  @override
+  String get currencyConverterTitle => '通貨換算';
+
+  @override
+  String get currencyConverterFromLabel => '変換元';
+
+  @override
+  String get currencyConverterToLabel => '変換先';
+
+  @override
+  String get currencyConverterAmountLabel => '金額';
+
+  @override
+  String get currencyConverterSwapTooltip => '通貨を入れ替え';
+
+  @override
+  String get currencyConverterSameCurrencyMessage =>
+      '変換元と変換先が同じ通貨のため、入力した金額がそのまま換算結果になります。';
+
+  @override
+  String get currencyConverterEnterAmountMessage => '金額を入力してください。';
+
+  @override
+  String get amountTooLargeMessage => '換算結果が大きすぎて表示できません。';
+
+  @override
+  String get favoritePairsSectionTitle => 'お気に入りの通貨ペア';
+
+  @override
+  String get favoritePairsSessionNote => 'お気に入りの通貨ペアはこのセッション中のみ保持されます。';
+
+  @override
+  String get noFavoritePairsMessage => 'お気に入りの通貨ペアはまだありません。';
+
+  @override
+  String get addFavoritePairTooltip => 'お気に入りに追加';
+
+  @override
+  String get removeFavoritePairTooltip => 'お気に入りから削除';
+
+  @override
+  String favoritePairsLimitReachedMessage(int limit) {
+    return 'お気に入りの通貨ペアは最大$limit件まで保存できます。';
+  }
 }
