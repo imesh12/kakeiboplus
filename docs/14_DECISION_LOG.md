@@ -1176,3 +1176,91 @@ session-only rather than pretend a lighter option existed.
 Status: Approved 2026-09-19 (Checkpoint 9.6).
 
 Status: Approved 2026-09-18 (Checkpoint 9.4).
+
+## ADR-029 — Checkpoint 9.7: V1 FX is hardened and frozen; Receipt OCR moves to V2
+
+Context: Checkpoint 9.7 was explicitly a closeout pass, not an expansion
+checkpoint — verify the existing CP9.1–CP9.6 FX stack (`FxRate`/
+`FxConverter` exact deterministic engine, `ReferenceFxRateService` +
+`DriftReferenceFxRateCache` reference-rate infrastructure,
+`ExchangeRateApiFxRateProvider`, Home/Reference-Rate-card/Currency-Converter
+presentation, and session favorite pairs), fix only genuine gaps, and then
+freeze FX for V1. Product scope was also narrowed in the same checkpoint:
+Receipt OCR is removed from V1 and becomes the first item of V2.
+
+The audit read every production file under `lib/core/fx/`,
+`lib/core/network/`, `lib/core/money/`, `lib/core/currency/`, the FX-facing
+parts of `lib/features/dashboard/` and `lib/features/settings/`, and every
+corresponding existing test, against the seventeen-task checklist (offline/
+provider-failure determinism; exact provider ingestion; the full Money
+precision matrix; signed-64-bit overflow safety; rate direction/no
+inversion; Drift cache hardening; network request discipline; presentation
+failure safety; freshness-boundary determinism; historical-FX
+non-regression; security/privacy sanity). Every one of those requirements
+was found to already be correctly implemented and already covered by
+existing tests, with two narrow exceptions — both pure test-coverage gaps,
+with **zero production defects and zero production changes**:
+
+1. **Provider ingestion edge cases** (`exchangerate_api_fx_rate_provider_test.dart`,
+   6 new groups): a non-object `"rates"` field, a boolean rate value, a
+   nested-object rate value, an unrelated string field containing a stray
+   `}`, escaped quotes/braces inside a string, and whitespace around a
+   rate token. Hand-tracing `_extractRawRateToken`/`_matchingBraceIndex`
+   against each case confirmed the existing brace-depth-and-string-aware
+   scanner and the trailing-lookahead regex already reject or skip every
+   one of these correctly (no partial exponent-notation acceptance, no
+   double-based coercion, one malformed quote never poisons the rest of
+   the batch) — these tests document and lock in behavior the production
+   code already had.
+2. **FxConverter boundary cases** (`fx_converter_test.dart`, 4 new tests
+   added to the existing "large values near the signed 64-bit boundary"
+   group): a conversion whose BigInt intermediate vastly exceeds int64
+   magnitude but whose final rounded result is valid (a maxInt64 USD ->
+   EUR conversion at a 12-nines rate), the exact positive and negative
+   int64 boundaries landing precisely as valid results, and an overflow
+   rejected by the smallest margin the 12-fraction-digit rate precision
+   cap can produce. All four expected values were hand-derived with exact
+   integer arithmetic and independently cross-checked with a standalone
+   script mirroring `_roundHalfUpAwayFromZero`/`_requireFitsInInt64`
+   before being written, per this project's standing rule against
+   asserting "whatever the code currently returns."
+
+No schema change, no new/removed dependency, and no `lib/` production file
+was touched. KRW was deliberately not given its own dedicated FxConverter
+test: it shares the identical `minorUnits == 0` code path already
+exhaustively proven by the existing JPY and VND cases (identity conversion
+plus both ROUND HALF UP boundaries), so a KRW-specific duplicate would have
+only inflated the suite without proving anything new.
+
+V1 FX is hereby defined as closed and frozen at exactly this surface:
+deterministic exact conversion (`FxRate`/`FxConverter`); current/reference
+rates via `ReferenceFxRateService`; a persistent Drift reference-rate
+cache, isolated from the immutable historical `transaction_exchange_rates`
+snapshot table; retrieval from a single open, keyless
+ExchangeRate-API-compatible provider with source/timestamp/staleness
+tracking; Home living-currency equivalents; the Currency Converter screen;
+and session-only favorite currency pairs (ADR-028). Explicitly deferred
+beyond V1, and not to be added without a new checkpoint: durable favorite
+persistence; rate history/charts; alerts; background refresh/polling;
+multiple FX providers or provider selection; remittance comparison;
+bank-specific rates; trading features; cross-currency transfers; automatic
+transaction FX conversion; FX gain/loss accounting. Receipt OCR is likewise
+deferred, but as a product-scope decision rather than an FX one — it is now
+the first planned item of V2 and was never part of this checkpoint's file
+set.
+
+Reason: a V1 release needs one point where FX is declared "done" rather
+than perpetually extensible, and the correct way to reach that point after
+five prior FX checkpoints is to verify exhaustively, close only
+demonstrated test gaps, and explicitly write down what is deferred —
+not to keep adding FX surface area on the strength of momentum.
+
+Status: Approved 2026-09-19 (Checkpoint 9.7). Pending Windows verification
+(`flutter analyze`; `flutter test test/core/fx/`; `flutter test
+test/core/network/`; `flutter test
+test/features/settings/presentation/currency_converter_screen_test.dart`;
+`flutter test
+test/features/settings/presentation/reference_rate_card_test.dart`;
+`flutter test test/widget/home_screen_test.dart`; full `flutter test`) —
+this sandbox has no Dart/Flutter toolchain and cannot itself execute or
+confirm test results.

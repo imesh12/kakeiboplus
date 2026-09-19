@@ -298,6 +298,89 @@ void main() {
         ),
       );
     });
+
+    // CP9.7 (V1 FX final hardening): Task 5 explicitly calls for "a
+    // conversion whose BigInt intermediate exceeds int64 but final result
+    // is valid, if mathematically possible under the current
+    // implementation". The four cases below were absent -- the existing
+    // overflow tests above only ever exercise a JPY (0dp) source with a
+    // whole-number rate, which makes the denominator 1 and so never
+    // demonstrates a *shrinking* division back down into range. All four
+    // expected values were hand-computed with exact integer arithmetic
+    // (also cross-checked with a standalone Python script mirroring
+    // FxConverter's own numerator/denominator/round-half-up-away-from-zero
+    // algorithm) before being written here.
+    test(
+      'BigInt intermediate vastly exceeds int64 magnitude but final rounded result is valid',
+      () {
+        // maxInt64 (USD, 2dp) * 999999999999 (significand of
+        // "0.999999999999", scale 12) * 10^2 (EUR, 2dp)
+        // / 10^(12+2) = 9223372036854775807 * 999999999999 * 100 / 10^14.
+        // The numerator itself is a ~110-bit BigInt
+        // (922337203684555243496314522419300), far outside signed 64-bit
+        // range -- but dividing by the 10^14 denominator brings the
+        // truncated quotient down to 9223372036845552434 with remainder
+        // 96314522419300; doubling the remainder (192629044838600) is
+        // >= the denominator, so ROUND HALF UP away from zero bumps the
+        // result up by 1 to 9223372036845552435, which fits comfortably
+        // inside int64.
+        final Money result = FxConverter.convert(
+          source: Money.fromMinorUnits(_maxInt64, 'USD'),
+          targetCurrencyCode: 'EUR',
+          rate: FxRate(baseCurrencyCode: 'USD', quoteCurrencyCode: 'EUR', rate: '0.999999999999'),
+        );
+        expect(result, Money.fromMinorUnits(9223372036845552435, 'EUR'));
+      },
+    );
+
+    test('exact positive int64 boundary is a valid result, not rejected as overflow', () {
+      // maxInt64 (USD, 2dp) * 1 (significand of "1", scale 0) * 10^2
+      // (CAD, 2dp) / 10^(0+2) = maxInt64 * 100 / 100 = maxInt64 exactly,
+      // landing precisely on the signed-64-bit ceiling with zero rounding.
+      final Money result = FxConverter.convert(
+        source: Money.fromMinorUnits(_maxInt64, 'USD'),
+        targetCurrencyCode: 'CAD',
+        rate: FxRate(baseCurrencyCode: 'USD', quoteCurrencyCode: 'CAD', rate: '1'),
+      );
+      expect(result, Money.fromMinorUnits(_maxInt64, 'CAD'));
+    });
+
+    test('exact negative int64 boundary is a valid result, not rejected as overflow', () {
+      // minInt64 (USD, 2dp) * 1 * 10^2 (CAD, 2dp) / 10^2 = minInt64
+      // exactly, landing precisely on the signed-64-bit floor with zero
+      // rounding.
+      final Money result = FxConverter.convert(
+        source: Money.fromMinorUnits(_minInt64, 'USD'),
+        targetCurrencyCode: 'CAD',
+        rate: FxRate(baseCurrencyCode: 'USD', quoteCurrencyCode: 'CAD', rate: '1'),
+      );
+      expect(result, Money.fromMinorUnits(_minInt64, 'CAD'));
+    });
+
+    test('overflow by the smallest margin the 12-fraction-digit rate cap can produce', () {
+      // maxInt64 (USD, 2dp) * 1000000000001 (significand of
+      // "1.000000000001", scale 12) * 10^2 (CAD, 2dp) / 10^14. The exact
+      // BigInt-rounded result is 9223372036863999179 -- only 9223372 over
+      // maxInt64 -- the tightest overflow margin obtainable given
+      // FxRate's 12-fraction-digit precision cap, proving the boundary
+      // check itself (not just "obviously huge" overflows) is exact.
+      expect(
+        () => FxConverter.convert(
+          source: Money.fromMinorUnits(_maxInt64, 'USD'),
+          targetCurrencyCode: 'CAD',
+          rate: FxRate(baseCurrencyCode: 'USD', quoteCurrencyCode: 'CAD', rate: '1.000000000001'),
+        ),
+        throwsA(
+          isA<MoneyOverflowException>()
+              .having((e) => e.currencyCode, 'currencyCode', 'CAD')
+              .having(
+                (e) => e.exactMinorUnits,
+                'exactMinorUnits',
+                BigInt.parse('9223372036863999179'),
+              ),
+        ),
+      );
+    });
   });
 
   group('FxConverter — G: rate direction is explicit, never silently inverted', () {

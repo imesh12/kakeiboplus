@@ -538,6 +538,129 @@ void main() {
     }
   });
 
+  group('23. CP9.7 -- "rates" present but not a JSON object', () {
+    test('a string "rates" value becomes a deterministic failure', () async {
+      final _FakeHttpTransport transport = _FakeHttpTransport(
+        response: const HttpTransportResponse(
+          statusCode: 200,
+          body: '{"result": "success", "base_code": "USD", "rates": "not-an-object"}',
+        ),
+      );
+      final FxRateProviderResult result = await providerWith(transport).fetchRates(
+        baseCurrencyCode: 'USD',
+        quoteCurrencyCodes: <String>{'JPY'},
+      );
+      expect(result, isA<FxRateProviderFailure>());
+    });
+
+    test('an array "rates" value becomes a deterministic failure', () async {
+      final _FakeHttpTransport transport = _FakeHttpTransport(
+        response: const HttpTransportResponse(
+          statusCode: 200,
+          body: '{"result": "success", "base_code": "USD", "rates": [1, 2, 3]}',
+        ),
+      );
+      final FxRateProviderResult result = await providerWith(transport).fetchRates(
+        baseCurrencyCode: 'USD',
+        quoteCurrencyCodes: <String>{'JPY'},
+      );
+      expect(result, isA<FxRateProviderFailure>());
+    });
+  });
+
+  group('24. CP9.7 -- boolean rate value', () {
+    test('a bare "true"/"false" rate value is excluded, never coerced to a number', () async {
+      final _FakeHttpTransport transport = _FakeHttpTransport(
+        response: const HttpTransportResponse(
+          statusCode: 200,
+          body: '{"result": "success", "base_code": "USD", "rates": {"JPY": true}}',
+        ),
+      );
+      final FxRateProviderResult result = await providerWith(transport).fetchRates(
+        baseCurrencyCode: 'USD',
+        quoteCurrencyCodes: <String>{'JPY'},
+      );
+      expect((result as FxRateProviderSuccess).rates, isEmpty);
+    });
+  });
+
+  group('25. CP9.7 -- nested object rate value', () {
+    test('a nested JSON object in place of a rate value is excluded, never partially read', () async {
+      final _FakeHttpTransport transport = _FakeHttpTransport(
+        response: const HttpTransportResponse(
+          statusCode: 200,
+          body: '{"result": "success", "base_code": "USD", "rates": {"JPY": {"nested": 1}, "EUR": 0.92}}',
+        ),
+      );
+      final FxRateProviderResult result = await providerWith(transport).fetchRates(
+        baseCurrencyCode: 'USD',
+        quoteCurrencyCodes: <String>{'JPY', 'EUR'},
+      );
+      final List<ReferenceFxRate> rates = (result as FxRateProviderSuccess).rates;
+      // JPY's nested-object value is skipped; EUR's ordinary numeric value
+      // is unaffected -- the malformed field never poisons the rest of
+      // the batch (CP9.7 Task 3: "unrelated malformed/unrequested fields
+      // must be handled according to existing provider contract").
+      expect(rates.map((ReferenceFxRate r) => r.quoteCurrencyCode).toSet(), <String>{'EUR'});
+    });
+  });
+
+  group('26. CP9.7 -- braces inside an unrelated string value', () {
+    test('a "}" character inside a sibling string field never confuses the rates-object scan', () async {
+      final _FakeHttpTransport transport = _FakeHttpTransport(
+        response: const HttpTransportResponse(
+          statusCode: 200,
+          body: '{"result": "success", "base_code": "USD", '
+              '"rates": {"JPY": 149.85, "note": "contains a closing brace } inside a string"}}',
+        ),
+      );
+      final FxRateProviderResult result = await providerWith(transport).fetchRates(
+        baseCurrencyCode: 'USD',
+        quoteCurrencyCodes: <String>{'JPY'},
+      );
+      expect((result as FxRateProviderSuccess).rates.single.rate.rateAsString, '149.85');
+    });
+  });
+
+  group('27. CP9.7 -- escaped quotes and braces inside a string value', () {
+    test('escaped quotes and a "}" together inside a sibling string field are still handled correctly', () async {
+      final _FakeHttpTransport transport = _FakeHttpTransport(
+        response: const HttpTransportResponse(
+          statusCode: 200,
+          body: '{"result": "success", "base_code": "USD", '
+              '"rates": {"JPY": 149.85, "note": "she said \\"hi\\" and a brace }"}}',
+        ),
+      );
+      final FxRateProviderResult result = await providerWith(transport).fetchRates(
+        baseCurrencyCode: 'USD',
+        quoteCurrencyCodes: <String>{'JPY'},
+      );
+      expect((result as FxRateProviderSuccess).rates.single.rate.rateAsString, '149.85');
+    });
+  });
+
+  group('28. CP9.7 -- whitespace around the rate token', () {
+    test('extra whitespace around the key/colon/value/delimiter still extracts the exact token', () async {
+      final _FakeHttpTransport transport = _FakeHttpTransport(
+        response: const HttpTransportResponse(
+          statusCode: 200,
+          body: '{"result": "success", "base_code": "USD", '
+              '"rates": {  "JPY"   :    149.85   , "EUR": 0.9 } }',
+        ),
+      );
+      final FxRateProviderResult result = await providerWith(transport).fetchRates(
+        baseCurrencyCode: 'USD',
+        quoteCurrencyCodes: <String>{'JPY', 'EUR'},
+      );
+      final List<ReferenceFxRate> rates = (result as FxRateProviderSuccess).rates;
+      expect(rates.map((ReferenceFxRate r) => r.quoteCurrencyCode).toSet(), <String>{'JPY', 'EUR'});
+      expect(
+        rates.firstWhere((ReferenceFxRate r) => r.quoteCurrencyCode == 'JPY').rate.rateAsString,
+        '149.85',
+      );
+    });
+  });
+
   group('request behavior', () {
     test('the requested URL is built from the canonical base currency, and the configured timeout is passed through', () async {
       final _FakeHttpTransport transport = _FakeHttpTransport(
