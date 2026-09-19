@@ -1038,4 +1038,70 @@ exchange rate, and without smuggling caching/staleness policy into the
 vendor-specific layer that CP9.2's architecture deliberately keeps
 ignorant of it.
 
+## ADR-027 — Checkpoint 9.5: Reference Rate is a presentation-only V1 surface — fixed home→living direction, per-currency-card Home equivalents, no schema/dependency change
+
+Context: Checkpoints 9.1–9.4 built the entire reference-FX engine (`FxRate`,
+`FxConverter`, `ReferenceFxRateService`, `ReferenceFxRateCache`, a real
+network provider) with no consumer at all — by design, so no UI-facing
+policy would be invented ahead of an actual screen needing it. Checkpoint
+9.5 is that first consumer: a small "Reference Rate" card in International
+Preferences, and a quiet Home/Living equivalent line on the Home
+dashboard's per-currency cards. Three product/architecture decisions were
+made that are genuinely worth recording (not routine implementation
+detail):
+
+1. **`ReferenceFxRateService` is now wired as a Riverpod provider, with a
+   record-keyed family for a specific ordered pair.**
+   `referenceFxRateServiceProvider` (plain `Provider`, app-lifetime,
+   mirrors `referenceFxRateCacheProvider`) constructs the service from
+   the existing `fxRateProviderProvider`/`referenceFxRateCacheProvider`.
+   `referenceRateProvider` is `FutureProvider.autoDispose.family` keyed
+   by a `(String base, String quote)` record — chosen over a bespoke key
+   class purely because Dart records already give correct value
+   equality, the same "record as key" idiom `FxConverter._decompose`
+   already uses for an unrelated purpose. `.autoDispose` because a
+   specific pair's resolved future is screen-scoped (no reason to keep
+   it alive once nothing on screen is watching it); the persistent cache
+   underneath is what actually avoids redundant network calls across
+   dispose/recreate cycles, not this provider's own lifetime.
+2. **The Reference Rate settings card always requests
+   `homeCurrency -> livingCurrency`, never the inverse, and this
+   direction is a fixed product choice, not a user-facing control.**
+   International Preferences already frames both currencies from a
+   consistent "home vs. living" perspective (see its own field labels);
+   showing "1 [home] = [rate] [living]" reads naturally in that same
+   frame ("what is my home currency worth here"). Building a
+   direction-swap control was explicitly out of this checkpoint's speed/
+   scope rule ("do not expand into a converter screen").
+3. **The Home/Living equivalent (Task F) never needed a mixed-currency
+   aggregate, and therefore never triggered its own STOP condition.**
+   `dashboardCurrencySummariesProvider` was already, by design since
+   ADR-017, a per-currency LIST rather than a single combined figure —
+   each `CurrencyDashboardSummary` is already a deterministic,
+   single-currency amount. The Home/Living equivalent converts each such
+   card's own balance individually (one `FxConverter.convert` call per
+   card, `sourceCurrency = that card's currency`, `target =
+   livingCurrency`) and renders the result as an additional, visually
+   quieter second figure beside that card's still-authoritative balance
+   — it never sums balances across cards or currencies. Scoped
+   deliberately to the balance figure alone (not income/expense/daily-
+   pace) to keep this a small V1 addition rather than three more
+   equivalent lines per card.
+4. **No schema migration, no new dependency.** `reference_exchange_rates`
+   (schema v7, CP9.3) is read/written exactly as before — CP9.5 adds no
+   column and no table. No package was added; the new UI is built
+   entirely from existing shared widgets (`AppCard`/`AppSectionHeader`/
+   `AppStatusChip`) and a small new pure-Dart formatter
+   (`ReferenceFxRateFormatter`) that never touches `double`, mirroring
+   (but never reusing, since an FX rate is not a `Money`)
+   `MoneyFormatter`'s own grouping approach.
+
+Reason: a V1 "make the existing FX engine visible" checkpoint should add
+exactly one, deterministic, well-justified answer to "which direction" and
+"which aggregate" rather than leaving either as an implicit per-screen
+choice, while changing nothing about accounting truth, schema, or
+dependencies.
+
+Status: Approved 2026-09-18 (Checkpoint 9.5).
+
 Status: Approved 2026-09-18 (Checkpoint 9.4).

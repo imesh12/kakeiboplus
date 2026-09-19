@@ -7,6 +7,8 @@ import 'exchangerate_api_fx_rate_provider.dart';
 import 'fx_rate_provider.dart';
 import 'in_memory_reference_fx_rate_cache.dart';
 import 'reference_fx_rate_cache.dart';
+import 'reference_fx_rate_service.dart';
+import 'reference_rate_result.dart';
 
 /// The app-lifetime reference-rate cache normal application code should
 /// inject.
@@ -70,19 +72,67 @@ final Provider<FxRateProvider> fxRateProviderProvider =
   ),
 );
 
-// A `ReferenceFxRateService` DI provider is deliberately still NOT
-// defined here, even though CP9.4 finally gives it a real
-// [FxRateProvider] to pair with the persistent cache above. CP9.3's own
-// reasoning here is unchanged by CP9.4:
-//   - no UI screen or widget consumes a reference rate yet (see CP9.4's
-//     explicit "Do NOT add FX UI yet" prohibition -- unchanged from
-//     CP9.2/CP9.3), and
-//   - CP9.4 is explicitly network/provider infrastructure only -- it
-//     does not start automatic/background refresh, and does not add a
-//     consumer to exercise a service provider.
-// Wiring a service provider with no consumer to serve would be exactly
-// the "UI-facing complexity without a consumer" CP9.2's audit already
-// warned against, and neither CP9.3 nor CP9.4 changes that calculus.
-// `ReferenceFxRateService` remains directly constructible (see its own
-// constructor) -- trivial to wire once a real consumer exists -- from
-// `fxRateProviderProvider` and `referenceFxRateCacheProvider` above.
+/// The app-lifetime [ReferenceFxRateService] normal application code
+/// should inject -- Checkpoint 9.5 Task B finally wires this. CP9.3/
+/// CP9.4 deliberately left this unwired ("no UI consumer exists yet");
+/// CP9.5 is that consumer (the Reference Rate settings card and the Home
+/// dashboard's Home/Living equivalent -- see [referenceRateProvider]
+/// below).
+///
+/// A plain `Provider` (not `.autoDispose`): the service object itself is
+/// stateless glue over [fxRateProviderProvider]/[referenceFxRateCacheProvider]
+/// (it owns no state of its own beyond those two collaborators) and
+/// constructing it performs no I/O -- see [ReferenceFxRateService]'s own
+/// constructor. Same "exactly one for the app's lifetime" reasoning as
+/// `referenceFxRateCacheProvider` above.
+final Provider<ReferenceFxRateService> referenceFxRateServiceProvider =
+    Provider<ReferenceFxRateService>(
+  (ref) => ReferenceFxRateService(
+    provider: ref.watch(fxRateProviderProvider),
+    cache: ref.watch(referenceFxRateCacheProvider),
+  ),
+);
+
+/// Resolves the current reference rate for one specific, ordered
+/// `(baseCurrencyCode, quoteCurrencyCode)` pair -- Checkpoint 9.5 Task
+/// B's family/parameterized provider. The 2-tuple record key gives
+/// natural value equality (Dart records compare structurally) with no
+/// extra key class to define or maintain -- the same record-as-key
+/// pattern `FxConverter._decompose` already uses for a different
+/// purpose in this codebase.
+///
+/// # Direction is never inverted
+///
+/// The pair is always `(base, quote)` in the exact order the caller
+/// means "1 base = ? quote" -- see [ReferenceFxRateService.referenceRate]
+/// and [FxRate]'s own directional contract (imported transitively via
+/// [ReferenceRateResult]). This provider does not (and must not) serve a
+/// request for `(quote, base)` from an entry resolved for `(base,
+/// quote)`, or vice versa -- a request for the inverse pair is a
+/// genuinely different provider call (a different cache entry, a
+/// different vendor query), never a client-side inversion of this one's
+/// result. Every call site is responsible for requesting the pair in the
+/// direction it actually needs, exactly as
+/// `ReferenceFxRateService`/`FxConverter` already require of their own
+/// callers.
+///
+/// `.autoDispose`: this provider's value is screen-scoped (the Reference
+/// Rate settings card, and each Home dashboard currency card's
+/// Home/Living equivalent line) -- unlike the app-lifetime service/cache
+/// above, there is no reason to keep a specific pair's resolved future
+/// alive once nothing on screen is asking for it. The underlying
+/// [ReferenceFxRateService] still consults the persistent cache first on
+/// the next request, so disposing and re-creating this provider never by
+/// itself forces a new network call for a pair that's still within the
+/// freshness window. No periodic/background refresh is started by this
+/// provider -- re-evaluation only ever happens because a widget
+/// (re)mounted and started watching it, or a caller explicitly
+/// `ref.invalidate`s it (e.g. a manual "Refresh" affordance) -- Task G's
+/// "simple V1 refresh" boundary.
+final AutoDisposeFutureProviderFamily<ReferenceRateResult, (String, String)> referenceRateProvider =
+    FutureProvider.autoDispose.family<ReferenceRateResult, (String, String)>(
+  (ref, pair) {
+    final ReferenceFxRateService service = ref.watch(referenceFxRateServiceProvider);
+    return service.referenceRate(baseCurrencyCode: pair.$1, quoteCurrencyCode: pair.$2);
+  },
+);

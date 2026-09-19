@@ -6,6 +6,12 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_contribution_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_repository.dart';
+import 'package:ai_financial_coach/core/fx/fx_rate.dart';
+import 'package:ai_financial_coach/core/fx/fx_rate_provider.dart';
+import 'package:ai_financial_coach/core/fx/in_memory_reference_fx_rate_cache.dart';
+import 'package:ai_financial_coach/core/fx/reference_fx_rate.dart';
+import 'package:ai_financial_coach/core/fx/reference_fx_rate_cache.dart';
+import 'package:ai_financial_coach/core/fx/reference_fx_rate_providers.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
@@ -33,6 +39,37 @@ import '../support/rtl_harness.dart';
 // never combining currencies, the negative-balance treatment, that the
 // narrow-screen layout doesn't throw, and the two forward-compatible
 // empty states (budget, upcoming commitments).
+//
+// Checkpoint 9.5 Task F adds `_LivingCurrencyEquivalentLine` to every
+// hero/secondary currency card whose own currency differs from the
+// profile's living currency -- which is most of the scenarios already
+// seeded below (e.g. JPY living + LKR home). Every `ProviderContainer`
+// in this file therefore now ALSO overrides `fxRateProviderProvider`/
+// `referenceFxRateCacheProvider` with `_AlwaysUnavailableFxRateProvider`/
+// a fresh `InMemoryReferenceFxRateCache` by default -- fully offline,
+// deterministic, and (since the provider always fails with an empty
+// cache) resolves to `ReferenceRateUnavailable`, which
+// `_LivingCurrencyEquivalentLine` already renders as nothing at all.
+// This keeps every pre-existing assertion in this file unaffected while
+// guaranteeing none of them make a real network call merely because
+// Home now has a reference-rate-aware widget. The dedicated "9. Task F"
+// group at the end of this file overrides these two providers again,
+// per test, with real success/stale/failure scripts to actually exercise
+// the equivalent line's own rendering.
+
+/// A stateless [FxRateProvider] fake that always fails immediately, with
+/// no I/O of any kind. The safe, deterministic default for every test in
+/// this file that isn't specifically about Task F's equivalent line --
+/// see this file's own top-of-file comment.
+class _AlwaysUnavailableFxRateProvider implements FxRateProvider {
+  @override
+  Future<FxRateProviderResult> fetchRates({
+    required String baseCurrencyCode,
+    required Set<String> quoteCurrencyCodes,
+  }) async {
+    return const FxRateProviderFailure('no reference rate configured for this test');
+  }
+}
 
 class _SeedAccount {
   const _SeedAccount({required this.name, required this.currencyCode, this.openingBalance});
@@ -191,7 +228,11 @@ void main() {
         ],
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -238,7 +279,11 @@ void main() {
         ],
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -295,7 +340,11 @@ void main() {
         ],
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -326,7 +375,11 @@ void main() {
         accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -367,7 +420,11 @@ void main() {
         amount: Money.fromMinorUnits(120000, 'JPY'), // ¥120,000
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -407,7 +464,11 @@ void main() {
         amount: Money.fromMinorUnits(120000, 'JPY'),
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -432,7 +493,11 @@ void main() {
         accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -492,7 +557,11 @@ void main() {
         startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -551,7 +620,11 @@ void main() {
         startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -576,7 +649,11 @@ void main() {
         accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -616,7 +693,11 @@ void main() {
         amount: Money.fromMinorUnits(30000, 'JPY'),
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -657,7 +738,11 @@ void main() {
         amount: Money.fromMinorUnits(50000, 'JPY'),
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -695,7 +780,11 @@ void main() {
         amount: Money.fromMinorUnits(30000, 'JPY'),
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -747,7 +836,11 @@ void main() {
         amount: Money.fromMinorUnits(5000, 'JPY'), // ¥5,000
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -786,7 +879,11 @@ void main() {
         amount: Money.fromMinorUnits(999999999, 'VND'), // ₫999,999,999
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -827,7 +924,11 @@ void main() {
         amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -865,7 +966,11 @@ void main() {
         amount: Money.fromMinorUnits(99999999, 'JPY'), // ¥99,999,999
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -904,7 +1009,11 @@ void main() {
         // (per `CurrencyRegistry`), not 0 -- see report note.
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -947,7 +1056,11 @@ void main() {
         amount: Money.fromMinorUnits(500000000, 'VND'), // ₫500,000,000
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1006,7 +1119,11 @@ void main() {
         startDate: DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day),
       );
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1059,7 +1176,11 @@ void main() {
         );
       final AccountRow account = (await accountQuery.get()).first;
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1119,7 +1240,11 @@ void main() {
         );
       final AccountRow account = (await accountQuery.get()).first;
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1198,7 +1323,11 @@ void main() {
         );
       final AccountRow account = (await accountQuery.get()).first;
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1265,7 +1394,11 @@ void main() {
         );
       final AccountRow account = (await accountQuery.get()).first;
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1314,7 +1447,11 @@ void main() {
         );
       final AccountRow account = (await accountQuery.get()).first;
       final ProviderContainer container = ProviderContainer(
-        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
       );
       addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1367,7 +1504,11 @@ void main() {
       );
     final AccountRow account = (await accountQuery.get()).first;
     final ProviderContainer container = ProviderContainer(
-      overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
     );
     addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1425,7 +1566,11 @@ void main() {
           accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1457,7 +1602,11 @@ void main() {
           accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1497,7 +1646,11 @@ void main() {
           accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1538,7 +1691,11 @@ void main() {
           accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1577,7 +1734,11 @@ void main() {
           amount: Money.fromMinorUnits(12345678, 'KWD'), // د.ك12,345.678
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1613,7 +1774,11 @@ void main() {
           ],
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1669,7 +1834,11 @@ void main() {
           amount: Money.fromMinorUnits(30000, 'JPY'),
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1707,7 +1876,11 @@ void main() {
           amount: Money.fromMinorUnits(999999999, 'MMK'), // K9,999,999.99
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1733,7 +1906,11 @@ void main() {
           accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
         );
         final ProviderContainer container = ProviderContainer(
-          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          overrides: <Override>[
+          appDatabaseProvider.overrideWithValue(db),
+          fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+          referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+        ],
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
@@ -1746,6 +1923,208 @@ void main() {
         await tester.tap(ctaFinder);
         await tester.pumpAndSettle();
         expect(find.text('BUDGETS_SCREEN_STUB'), findsOneWidget);
+      },
+    );
+  });
+
+  group('9. Checkpoint 9.5 Task F -- Home/Living currency equivalent', () {
+    // NOTE (Repair #2): fetchedAt/observedAt default to the real wall
+    // clock, not a hardcoded calendar date -- same root cause and same
+    // fix as the analogous bug in reference_rate_provider_test.dart's own
+    // `_referenceRate` helper (Repair #1, Task 4). Production wires
+    // ReferenceFxRateService without an injected NowUtc override, so its
+    // freshness check always runs against the real wall clock here too;
+    // a fixed past default (DateTime.utc(2026, 6, 1)) eventually falls
+    // outside the 1-hour freshness window purely because real time moved
+    // on, silently flipping a test meant to exercise the FRESH path into
+    // exercising the STALE fallback instead (extra "(cached)" text).
+    // Callers that explicitly want a stale entry still pass their own
+    // relative-to-now `fetchedAt` (see the "(cached)" test below), which
+    // this default leaves untouched.
+    ReferenceFxRate referenceRate(String base, String quote, String value, {DateTime? fetchedAt}) =>
+        ReferenceFxRate(
+          rate: FxRate(baseCurrencyCode: base, quoteCurrencyCode: quote, rate: value),
+          source: 'exchangerate-api.com',
+          observedAt: fetchedAt ?? DateTime.now().toUtc(),
+          fetchedAt: fetchedAt ?? DateTime.now().toUtc(),
+        );
+
+    testWidgets(
+      'a secondary card whose currency differs from the living currency shows a quiet '
+      '"≈ <living currency amount>" line once a fresh reference rate resolves',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'LKR',
+          accounts: <_SeedAccount>[
+            const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY'),
+            _SeedAccount(
+              name: 'LKR Wallet',
+              currencyCode: 'LKR',
+              // 1000.00 LKR (2 minor units) = 100000 minor units.
+              openingBalance: Money.fromMinorUnits(100000, 'LKR'),
+            ),
+          ],
+        );
+        final ReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
+        await cache.put(referenceRate('LKR', 'JPY', '0.50'));
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(cache),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        // 1000 LKR * 0.50 (LKR -> JPY) = 500 JPY, formatted with
+        // MoneyFormatter -- never fabricated, never summed with the JPY
+        // card's own balance.
+        expect(find.byKey(const Key('livingCurrencyEquivalent_LKR')), findsOneWidget);
+        expect(find.text('≈ ¥500'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'the hero card gets its own equivalent line too when the hero currency differs '
+      'from the living currency',
+      (tester) async {
+        useTallSurface(tester);
+        // Living currency VND, but the user holds no VND account -- the
+        // hero card ends up being whichever currency sorts first
+        // (JPY, alphabetically before USD here), which is NOT the
+        // living currency, so the hero card itself needs an equivalent
+        // line exactly like a secondary card would.
+        final AppDatabase db = await seededDb(
+          living: 'VND',
+          home: 'JPY',
+          accounts: <_SeedAccount>[
+            _SeedAccount(
+              name: 'JPY Wallet',
+              currencyCode: 'JPY',
+              // 100 JPY (0 minor units) = 100 minor units.
+              openingBalance: Money.fromMinorUnits(100, 'JPY'),
+            ),
+          ],
+        );
+        final ReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
+        await cache.put(referenceRate('JPY', 'VND', '164.50'));
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(cache),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('heroCurrencyCard_JPY')), findsOneWidget);
+        expect(find.byKey(const Key('livingCurrencyEquivalent_JPY')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a card whose currency already IS the living currency shows no equivalent line at all',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('livingCurrencyEquivalent_JPY')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a stale cached rate still shows the equivalent line, with a "(cached)" indicator',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'LKR',
+          accounts: <_SeedAccount>[
+            const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY'),
+            _SeedAccount(
+              name: 'LKR Wallet',
+              currencyCode: 'LKR',
+              // 1000.00 LKR (2 minor units) = 100000 minor units.
+              openingBalance: Money.fromMinorUnits(100000, 'LKR'),
+            ),
+          ],
+        );
+        final ReferenceFxRateCache cache = InMemoryReferenceFxRateCache();
+        await cache.put(
+          referenceRate(
+            'LKR',
+            'JPY',
+            '0.50',
+            fetchedAt: DateTime.now().toUtc().subtract(const Duration(hours: 5)),
+          ),
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(cache),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        expect(find.text('≈ ¥500 (cached)'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'an unavailable reference rate (no cache, provider failing) shows no equivalent line, '
+      'and never throws',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'LKR',
+          accounts: <_SeedAccount>[
+            const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY'),
+            const _SeedAccount(name: 'LKR Wallet', currencyCode: 'LKR'),
+          ],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('livingCurrencyEquivalent_LKR')), findsOneWidget);
+        expect(find.textContaining('≈'), findsNothing);
       },
     );
   });

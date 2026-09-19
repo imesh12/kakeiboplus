@@ -14,6 +14,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../onboarding/domain/country_registry.dart';
 import '../../onboarding/presentation/profile_providers.dart';
+import 'reference_rate_card.dart';
 
 /// International / Localization Foundation Checkpoint 3B: one lightweight
 /// screen for viewing/editing the 8 preference fields CP3A's
@@ -234,6 +235,19 @@ class _InternationalPreferencesScreenState extends ConsumerState<InternationalPr
                     labelFor: _currencyLabel,
                   ),
                   onChanged: (String v) => setState(() => _livingCurrency = v),
+                ),
+                const SizedBox(height: 12),
+                // CP9.5 Task D: a small, additive, read-only Reference
+                // Rate card previewing the current home/living currency
+                // pair -- reads this screen's own local (possibly
+                // unsaved) `_homeCurrency`/`_livingCurrency` state,
+                // exactly like the two dropdowns just above it. Never
+                // participates in `_ensureSeeded`/`_save` -- it has no
+                // local state of its own on this screen and never writes
+                // anything.
+                ReferenceRateCard(
+                  homeCurrencyCode: _homeCurrency!,
+                  livingCurrencyCode: _livingCurrency!,
                 ),
                 const SizedBox(height: 24),
                 Text(l10n.languageAndFormatSection, style: context.appTypography.sectionTitle),

@@ -702,4 +702,51 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get themeCustomizationPrivacyDisclaimer =>
       'All themes keep your data 100% secure and 100% local.';
+
+  @override
+  String get referenceRateSectionTitle => 'Reference Rate';
+
+  @override
+  String get referenceRateExplanation =>
+      'An approximate market rate for reference only -- not guaranteed for an actual exchange or transfer.';
+
+  @override
+  String referenceRateEquation(String base, String rate, String quote) {
+    return '1 $base = $rate $quote';
+  }
+
+  @override
+  String get referenceRateSameCurrencyMessage =>
+      'Your home and living currency are the same, so there\'s no reference rate to show.';
+
+  @override
+  String referenceRateSourceLabel(String source) {
+    return 'Source: $source';
+  }
+
+  @override
+  String referenceRateUpdatedLabel(String timestamp) {
+    return 'Updated $timestamp';
+  }
+
+  @override
+  String get referenceRateStaleIndicator =>
+      'Showing the last rate we could fetch';
+
+  @override
+  String get referenceRateUnavailableMessage =>
+      'Reference rate isn\'t available right now.';
+
+  @override
+  String get referenceRateRefreshTooltip => 'Refresh';
+
+  @override
+  String approxAmountLabel(String amount) {
+    return '≈ $amount';
+  }
+
+  @override
+  String approxAmountStaleLabel(String amount) {
+    return '≈ $amount (cached)';
+  }
 }

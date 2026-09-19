@@ -684,4 +684,50 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get themeCustomizationPrivacyDisclaimer =>
       'すべてのテーマで、データは100%安全かつローカルに保存されます。';
+
+  @override
+  String get referenceRateSectionTitle => '参考レート';
+
+  @override
+  String get referenceRateExplanation =>
+      'あくまで参考用の概算レートです。実際の両替や送金のレートを保証するものではありません。';
+
+  @override
+  String referenceRateEquation(String base, String rate, String quote) {
+    return '1 $base = $rate $quote';
+  }
+
+  @override
+  String get referenceRateSameCurrencyMessage =>
+      '基準通貨と生活通貨が同じため、参考レートは表示されません。';
+
+  @override
+  String referenceRateSourceLabel(String source) {
+    return '提供元: $source';
+  }
+
+  @override
+  String referenceRateUpdatedLabel(String timestamp) {
+    return '更新: $timestamp';
+  }
+
+  @override
+  String get referenceRateStaleIndicator =>
+      '最新の情報を取得できなかったため、前回取得したレートを表示しています';
+
+  @override
+  String get referenceRateUnavailableMessage => '現在、参考レートを取得できません。';
+
+  @override
+  String get referenceRateRefreshTooltip => '更新';
+
+  @override
+  String approxAmountLabel(String amount) {
+    return '≈ $amount';
+  }
+
+  @override
+  String approxAmountStaleLabel(String amount) {
+    return '≈ $amount（キャッシュ）';
+  }
 }

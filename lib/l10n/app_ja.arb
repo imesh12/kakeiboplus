@@ -408,5 +408,62 @@
   "themeStyleOcean": "オーシャン",
   "themeStyleForest": "フォレスト",
   "themeSelectedSemanticLabel": "選択中",
-  "themeCustomizationPrivacyDisclaimer": "すべてのテーマで、データは100%安全かつローカルに保存されます。"
+  "themeCustomizationPrivacyDisclaimer": "すべてのテーマで、データは100%安全かつローカルに保存されます。",
+  "referenceRateSectionTitle": "参考レート",
+  "referenceRateExplanation": "あくまで参考用の概算レートです。実際の両替や送金のレートを保証するものではありません。",
+  "referenceRateEquation": "1 {base} = {rate} {quote}",
+  "@referenceRateEquation": {
+    "description": "referenceRateEquation",
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      },
+      "quote": {
+        "type": "String"
+      }
+    }
+  },
+  "referenceRateSameCurrencyMessage": "基準通貨と生活通貨が同じため、参考レートは表示されません。",
+  "referenceRateSourceLabel": "提供元: {source}",
+  "@referenceRateSourceLabel": {
+    "description": "referenceRateSourceLabel",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "referenceRateUpdatedLabel": "更新: {timestamp}",
+  "@referenceRateUpdatedLabel": {
+    "description": "referenceRateUpdatedLabel",
+    "placeholders": {
+      "timestamp": {
+        "type": "String"
+      }
+    }
+  },
+  "referenceRateStaleIndicator": "最新の情報を取得できなかったため、前回取得したレートを表示しています",
+  "referenceRateUnavailableMessage": "現在、参考レートを取得できません。",
+  "referenceRateRefreshTooltip": "更新",
+  "approxAmountLabel": "≈ {amount}",
+  "@approxAmountLabel": {
+    "description": "approxAmountLabel",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "approxAmountStaleLabel": "≈ {amount}（キャッシュ）",
+  "@approxAmountStaleLabel": {
+    "description": "approxAmountStaleLabel",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  }
 }

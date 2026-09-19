@@ -1335,6 +1335,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'All themes keep your data 100% secure and 100% local.'**
   String get themeCustomizationPrivacyDisclaimer;
+
+  /// No description provided for @referenceRateSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reference Rate'**
+  String get referenceRateSectionTitle;
+
+  /// No description provided for @referenceRateExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'An approximate market rate for reference only -- not guaranteed for an actual exchange or transfer.'**
+  String get referenceRateExplanation;
+
+  /// referenceRateEquation
+  ///
+  /// In en, this message translates to:
+  /// **'1 {base} = {rate} {quote}'**
+  String referenceRateEquation(String base, String rate, String quote);
+
+  /// No description provided for @referenceRateSameCurrencyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your home and living currency are the same, so there\'s no reference rate to show.'**
+  String get referenceRateSameCurrencyMessage;
+
+  /// referenceRateSourceLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {source}'**
+  String referenceRateSourceLabel(String source);
+
+  /// referenceRateUpdatedLabel
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {timestamp}'**
+  String referenceRateUpdatedLabel(String timestamp);
+
+  /// No description provided for @referenceRateStaleIndicator.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the last rate we could fetch'**
+  String get referenceRateStaleIndicator;
+
+  /// No description provided for @referenceRateUnavailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Reference rate isn\'t available right now.'**
+  String get referenceRateUnavailableMessage;
+
+  /// No description provided for @referenceRateRefreshTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get referenceRateRefreshTooltip;
+
+  /// approxAmountLabel
+  ///
+  /// In en, this message translates to:
+  /// **'≈ {amount}'**
+  String approxAmountLabel(String amount);
+
+  /// approxAmountStaleLabel
+  ///
+  /// In en, this message translates to:
+  /// **'≈ {amount} (cached)'**
+  String approxAmountStaleLabel(String amount);
 }
 
 class _AppLocalizationsDelegate

@@ -408,5 +408,62 @@
   "themeStyleOcean": "Ocean",
   "themeStyleForest": "Forest",
   "themeSelectedSemanticLabel": "Selected",
-  "themeCustomizationPrivacyDisclaimer": "All themes keep your data 100% secure and 100% local."
+  "themeCustomizationPrivacyDisclaimer": "All themes keep your data 100% secure and 100% local.",
+  "referenceRateSectionTitle": "Reference Rate",
+  "referenceRateExplanation": "An approximate market rate for reference only -- not guaranteed for an actual exchange or transfer.",
+  "referenceRateEquation": "1 {base} = {rate} {quote}",
+  "@referenceRateEquation": {
+    "description": "referenceRateEquation",
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      },
+      "quote": {
+        "type": "String"
+      }
+    }
+  },
+  "referenceRateSameCurrencyMessage": "Your home and living currency are the same, so there's no reference rate to show.",
+  "referenceRateSourceLabel": "Source: {source}",
+  "@referenceRateSourceLabel": {
+    "description": "referenceRateSourceLabel",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "referenceRateUpdatedLabel": "Updated {timestamp}",
+  "@referenceRateUpdatedLabel": {
+    "description": "referenceRateUpdatedLabel",
+    "placeholders": {
+      "timestamp": {
+        "type": "String"
+      }
+    }
+  },
+  "referenceRateStaleIndicator": "Showing the last rate we could fetch",
+  "referenceRateUnavailableMessage": "Reference rate isn't available right now.",
+  "referenceRateRefreshTooltip": "Refresh",
+  "approxAmountLabel": "≈ {amount}",
+  "@approxAmountLabel": {
+    "description": "approxAmountLabel",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "approxAmountStaleLabel": "≈ {amount} (cached)",
+  "@approxAmountStaleLabel": {
+    "description": "approxAmountStaleLabel",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  }
 }

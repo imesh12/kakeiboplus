@@ -3,9 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/currency/currency_registry.dart';
 import '../../../core/database/app_database.dart';
+import '../../../core/fx/fx_converter.dart';
+import '../../../core/fx/reference_fx_rate_providers.dart';
+import '../../../core/fx/reference_rate_result.dart';
+import '../../../core/fx/reference_rate_view.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
+import '../../../core/money/money_overflow_exception.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_tokens.dart';
@@ -198,11 +204,19 @@ class _CurrencySummarySection extends StatelessWidget {
         final List<CurrencyDashboardSummary> secondary = summaries.skip(1).toList();
         return Column(
           children: <Widget>[
-            _HeroCurrencyCard(summary: primary, badge: _badgeFor(l10n, primary)),
+            _HeroCurrencyCard(
+              summary: primary,
+              badge: _badgeFor(l10n, primary),
+              livingCurrencyCode: livingCurrency,
+            ),
             for (final CurrencyDashboardSummary summary in secondary)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: _SecondaryCurrencyCard(summary: summary, badge: _badgeFor(l10n, summary)),
+                child: _SecondaryCurrencyCard(
+                  summary: summary,
+                  badge: _badgeFor(l10n, summary),
+                  livingCurrencyCode: livingCurrency,
+                ),
               ),
           ],
         );
@@ -251,9 +265,15 @@ class _CurrencyBadge extends StatelessWidget {
 /// without restructuring this card. No mascot code, assets, or
 /// dependency is added by this task.
 class _HeroCurrencyCard extends StatelessWidget {
-  const _HeroCurrencyCard({required this.summary, this.badge});
+  const _HeroCurrencyCard({required this.summary, required this.livingCurrencyCode, this.badge});
 
   final CurrencyDashboardSummary summary;
+
+  /// CP9.5 Task F: the profile's living currency, threaded down purely
+  /// so [_LivingCurrencyEquivalentLine] can decide whether this card
+  /// needs a "≈ `<living currency amount>`" line at all (never when this
+  /// card's own currency already IS the living currency).
+  final String livingCurrencyCode;
   final String? badge;
 
   @override
@@ -332,6 +352,25 @@ class _HeroCurrencyCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                // CP9.5 Task F / Repair #2: a quiet, secondary
+                // "≈ <living currency>" line -- when this card's own
+                // currency already is the living currency, the equivalent
+                // widget is never even constructed (not just rendered
+                // zero-height), so no `livingCurrencyEquivalent_*` key
+                // exists in the tree at all for that card. Still omitted
+                // (zero-height) when no reference rate is available --
+                // see [_LivingCurrencyEquivalentLine]'s own doc for that
+                // case. Never combined with or substituted for the
+                // balance above, which remains the sole authoritative
+                // figure.
+                if (summary.currencyCode != livingCurrencyCode)
+                  _LivingCurrencyEquivalentLine(
+                    key: Key('livingCurrencyEquivalent_${summary.currencyCode}'),
+                    currencyCode: summary.currencyCode,
+                    livingCurrencyCode: livingCurrencyCode,
+                    balance: summary.balance,
+                    tint: colors.onPrimaryContainer.withValues(alpha: 0.85),
+                  ),
                 // Visual System Convergence Checkpoint 7.2: styled with
                 // the shared `eyebrow` typography role (small, muted,
                 // letter-spaced, semibold) instead of a plain
@@ -365,9 +404,16 @@ class _HeroCurrencyCard extends StatelessWidget {
 /// [_HeroCurrencyCard], visually distinct but deliberately less
 /// dominant. Never summed with the hero card's currency.
 class _SecondaryCurrencyCard extends StatelessWidget {
-  const _SecondaryCurrencyCard({required this.summary, this.badge});
+  const _SecondaryCurrencyCard({
+    required this.summary,
+    required this.livingCurrencyCode,
+    this.badge,
+  });
 
   final CurrencyDashboardSummary summary;
+
+  /// See [_HeroCurrencyCard.livingCurrencyCode]'s doc comment.
+  final String livingCurrencyCode;
   final String? badge;
 
   @override
@@ -416,6 +462,16 @@ class _SecondaryCurrencyCard extends StatelessWidget {
               ),
             ],
           ),
+          // CP9.5 Task F / Repair #2: see `_HeroCurrencyCard`'s identical
+          // line for the full doc comment (including why the equivalent
+          // widget is never constructed at all for a same-currency card).
+          if (summary.currencyCode != livingCurrencyCode)
+            _LivingCurrencyEquivalentLine(
+              key: Key('livingCurrencyEquivalent_${summary.currencyCode}'),
+              currencyCode: summary.currencyCode,
+              livingCurrencyCode: livingCurrencyCode,
+              balance: summary.balance,
+            ),
           // CP7.2: shared `eyebrow` role, matching the hero card's own
           // caption above -- see that widget's comment.
           Text(l10n.totalAvailableBalance, style: context.appTypography.eyebrow),
@@ -423,6 +479,104 @@ class _SecondaryCurrencyCard extends StatelessWidget {
           _MonthlyMetricsSection(summary: summary, emphasize: false),
         ],
       ),
+    );
+  }
+}
+
+/// CP9.5 Task F: a quiet "≈ `<balance converted to the living currency>`"
+/// line for a currency card whose own currency ISN'T the living
+/// currency -- e.g. a JPY hero card while living in Vietnam (living
+/// currency VND) shows "≈ ₫1,234,567" beneath its own "¥98,500" balance.
+///
+/// # Why this never needs a mixed-currency aggregate
+///
+/// Every [CurrencyDashboardSummary] this converts FROM is already a
+/// single, deterministic amount in exactly one currency (see
+/// `dashboard_providers.dart`'s own doc comment on why Home never
+/// combines currencies into one figure) -- this widget performs one
+/// single-currency-to-single-currency [FxConverter.convert] per card, it
+/// never sums multiple cards' balances together, and the result is
+/// rendered as an additional, visually quieter SECOND figure beside each
+/// card's own still-authoritative balance, never in place of it. There
+/// is therefore no "mixed-currency aggregate" for this feature to have
+/// stopped on (see CP9.5's Task F STOP condition) -- the ambiguity that
+/// condition guards against does not arise here.
+///
+/// # Presentation only
+///
+/// This never writes anything, never affects any balance/budget/income/
+/// expense/savings-goal calculation, and is never itself the "amount"
+/// used anywhere else -- purely an extra, informational line. Renders
+/// nothing at all (zero height, no loading spinner, no error text) for:
+/// this card's own currency already being the living currency; the
+/// living currency being unrecognized by [CurrencyRegistry] (mirrors
+/// [ReferenceRateCard]'s own guard); the rate still loading; the rate
+/// being genuinely unavailable ([ReferenceRateView.isUnavailable]); or a
+/// conversion that would overflow [Money]'s 64-bit range
+/// ([MoneyOverflowException], astronomically unlikely for a real
+/// balance but never allowed to crash Home if it somehow occurred).
+/// Never colored as positive/negative (Task J) -- always a neutral/muted
+/// tone, optionally [tint]-overridden to match the hero card's own
+/// on-`primaryContainer` caption treatment.
+class _LivingCurrencyEquivalentLine extends ConsumerWidget {
+  const _LivingCurrencyEquivalentLine({
+    required this.currencyCode,
+    required this.livingCurrencyCode,
+    required this.balance,
+    super.key,
+    this.tint,
+  });
+
+  final String currencyCode;
+  final String livingCurrencyCode;
+  final Money balance;
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (currencyCode == livingCurrencyCode) return const SizedBox.shrink();
+    if (CurrencyRegistry.byCode(livingCurrencyCode) == null) return const SizedBox.shrink();
+
+    final AsyncValue<ReferenceRateResult> resultAsync =
+        ref.watch(referenceRateProvider((currencyCode, livingCurrencyCode)));
+
+    return resultAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (Object e, StackTrace st) => const SizedBox.shrink(),
+      data: (ReferenceRateResult result) {
+        final ReferenceRateView view = ReferenceRateView.from(
+          result,
+          baseCurrencyCode: currencyCode,
+          quoteCurrencyCode: livingCurrencyCode,
+        );
+        if (!view.hasUsableRate) return const SizedBox.shrink();
+
+        Money equivalent;
+        try {
+          equivalent = FxConverter.convert(
+            source: balance,
+            targetCurrencyCode: livingCurrencyCode,
+            rate: view.rate,
+          );
+        } on MoneyOverflowException {
+          return const SizedBox.shrink();
+        }
+
+        final AppLocalizations l10n = AppLocalizations.of(context);
+        final Color color = tint ?? Theme.of(context).colorScheme.onSurfaceVariant;
+        final String formattedEquivalent = _formatter.format(equivalent);
+        final String label = view.isStale
+            ? l10n.approxAmountStaleLabel(formattedEquivalent)
+            : l10n.approxAmountLabel(formattedEquivalent);
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            label,
+            style: context.appTypography.eyebrow?.copyWith(color: color),
+          ),
+        );
+      },
     );
   }
 }
