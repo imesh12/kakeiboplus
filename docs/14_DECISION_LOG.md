@@ -1568,3 +1568,128 @@ test/features/recurring/`; `flutter test
 test/widget/recurring_screen_test.dart`; full `flutter test`) — this
 sandbox has no Dart/Flutter toolchain and cannot itself execute or
 confirm test results.
+
+## ADR-032 — Checkpoint 12.1: cloud account + sync architecture audit and V1 contract (no sync implemented)
+
+Context: CP12 is high-risk because cloud sync can affect financial data
+integrity. CP12.1 is an audit-and-contract-definition checkpoint only —
+no cloud sync, authentication, networking, or backend was implemented.
+The full audit, with per-table findings, is
+`docs/21_CLOUD_SYNC_ARCHITECTURE.md`; this entry records the decisions
+that document reaches, for the decision log's own cross-referenced
+history.
+
+**The app remains local-first, unconditionally.** Every existing local
+capability — transaction capture, balance computation, budgets, savings
+goals, recurring rules/occurrences, transaction history — must keep
+working offline, signed out, and with the cloud service unavailable or
+failing. Sync is designed throughout as an additive layer on top of an
+already-sufficient local source of truth, never a new dependency of
+ordinary local operation.
+
+**Schema audit finding: the offline-ID design was already correct.**
+Every syncable table's primary key is a client-generated UUIDv4, minted
+once at creation and never remapped by any repository method — confirmed
+directly in code across all twelve tables. This was a deliberate Beta 0
+decision (the `uuid` package's own `pubspec.yaml` comment: *"Client-
+generated IDs for offline-first writes"*), not something CP12.1 had to
+retrofit. Go/no-go answer for CP12.2+: **GO** — no ID scheme blocks V1
+sync.
+
+**Schema audit finding: two small, additive gaps, and one dormant table.**
+`accounts` (a v1/Beta-0 table) never received the `sync_version`/
+`sync_status` pair every schema-v2-onward table already has.
+`categories` has none of `created_at`/`updated_at`/`deleted_at`/
+`sync_version`/`sync_status` at all, and has no update or delete method
+of any kind today. `transaction_exchange_rates` (reserved since v1,
+still unused in production — nothing calls `attach` from any live
+transaction flow yet) would need the same five columns only once/if it
+is ever wired into a real feature. None of this blocks CP12.1; all three
+are additive migrations for CP12.3, specified in `docs/21_CLOUD_SYNC_ARCHITECTURE.md`
+§11.
+
+**Schema audit finding: `sync_version`/`sync_status` are inert
+placeholders today, not yet real state.** Every write path across every
+table leaves them at their column defaults (`0`/`'localOnly'`) — exactly
+as ADR-020 always intended them to sit until Stage 6. No code increments
+`sync_version` or transitions `sync_status` anywhere yet. CP12.3 must
+give them real semantics (a monotonic per-record mutation counter; a
+genuine pending/pushed/synced/conflict state machine) reusing these exact
+existing columns — this requires no further schema change, only
+application logic.
+
+**Identity decision: the existing `profiles` row must NOT become the
+cloud auth identity.** `ProfileRepository`'s own documented invariant is
+exactly one local profile per install, with no multi-profile concept
+anywhere in its API, no `deleted_at`, and no sync fields at all — the
+wrong shape for a server-verified, multi-device identity. V1 instead
+keeps LOCAL PROFILE (today's table, unchanged, preferences/locale only)
+strictly separate from a new CLOUD IDENTITY concept: a server-assigned
+`cloud_user_id`, linked to the local profile by one small local record,
+resolved server-side from the session on every request and never trusted
+from client input. Household/shared-wallet identity is explicitly left
+to `20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` V2 §6 and is not
+redecided here.
+
+**Sync envelope decision: four distinct numbers, never conflated.** Local
+Drift `schemaVersion` (whole-database shape), per-record `sync_version`
+(client's own mutation count), `server_revision` (server's authoritative
+per-record count, used for conflict detection), and `client_mutation_id`
+(a fresh idempotency key per mutation attempt, reused verbatim across
+retries of that attempt) answer four different questions and must never
+be compared to one another.
+
+**Conflict policy decision: per entity class, never a single global
+last-write-wins.** Preference-shaped fields may auto-merge safely;
+anything that determines an amount, currency, type, active/deleted
+state, or a recurrence-math-relevant date never auto-merges — the
+server-accepted `server_revision` wins and the losing edit is preserved
+and surfaced, never silently discarded or blended into a fabricated
+merged record. Full per-entity table in `docs/21_CLOUD_SYNC_ARCHITECTURE.md`
+§5.
+
+**Deletion decision: tombstones only, indefinitely, for every syncable
+table; the one existing hard delete (`reference_exchange_rates.removeIfPresent`)
+stays exactly what it already is — a device-local cache operation on
+non-financial data, never a precedent for hard-deleting anything else.**
+No retention/purge policy is designed in CP12.1, per the checkpoint's own
+instruction not to invent one prematurely.
+
+**Backend contract decision: the server never trusts a client-supplied
+ownership/user id — every push/pull is scoped to the caller's
+authenticated session identity, resolved server-side, full stop.** This
+is the single most important server-side rule this audit establishes;
+every domain invariant the local repository layer already enforces
+(ADR-017/018/019/021/022/023's precedents) must be re-enforced
+independently on the server, never assumed satisfied because a client
+already checked it.
+
+**What must not sync, decided per item, not by table-by-table
+default:** the reference-FX cache, notification-scheduling artifacts,
+transient UI/filter state, theme/language preference (V1), currency-
+converter favorites, local reminder ids, derived account balances,
+derived subscription estimates, the seeded `currencies`/system-`categories`
+data, and the sync engine's own local bookkeeping (mutation queue, pull
+cursor, device/install id) — each justified individually in
+`docs/21_CLOUD_SYNC_ARCHITECTURE.md` §10 rather than assumed.
+
+No Dart production code was changed for this checkpoint. No Drift
+migration was performed — §11's additive migrations are specified for
+CP12.3, not applied now. `docs/design/` was not inspected or modified.
+
+Reason: CP12 is too high-risk to design the sync engine and the schema
+migration in the same pass as the audit that determines what they need
+to be. Auditing first, against the actual code rather than an assumed
+architecture, is what let this entry conclude "GO" on the hardest
+go/no-go question (ID survivability) with direct evidence, and caught
+two real gaps (`accounts`/`categories` sync-field coverage) and one
+inert-placeholder risk (`sync_version`/`sync_status`'s current
+semantics) that a sync implementation written without this audit could
+easily have missed or gotten wrong on the first attempt.
+
+Status: Approved 2026-09-20 (Checkpoint 12.1 — audit and contract only).
+No Windows verification is required for this checkpoint (no Dart code
+changed, no schema migrated, nothing to `flutter analyze`/`flutter test`
+beyond what CP11's baseline already covers) — the deliverable is
+`docs/21_CLOUD_SYNC_ARCHITECTURE.md` plus this entry. CP12.2 begins
+implementation against the contract this entry and that document define.
