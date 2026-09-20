@@ -91,6 +91,56 @@ class Categories extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+
+/// Checkpoint B (schema v9): a named financial-services provider (e.g.
+/// "MUFG Bank", "Commercial Bank of Ceylon", "Rakuten") that a
+/// `FinancialAccount` (physically still the `accounts` table -- see
+/// this file's `Accounts` class doc) may optionally belong to. Never
+/// balance-holding -- see
+/// `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §12.1 and
+/// ADR-035.
+///
+/// Optional by design: cash and other institution-less products leave
+/// `Accounts.institutionId` null -- this table is never required to
+/// have a row for an account to exist. Checkpoint B creates this table
+/// but deliberately creates zero rows in it and builds no
+/// institution-management UI -- see the Checkpoint B brief. A later
+/// checkpoint (docs/20 §13.4, checkpoint G/H) is what actually lets a
+/// user create/assign institutions.
+@DataClassName('FinancialInstitutionRow')
+class FinancialInstitutions extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+  TextColumn get name => text()();
+
+  /// ISO 3166-1 alpha-2, e.g. "JP", "LK". Optional -- see docs/20 §12.1.
+  TextColumn get countryCode => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete -- same convention as `Accounts`/`Transactions`. An
+  /// institution being archived must never invalidate a
+  /// `FinancialAccount` that references it via `Accounts.institutionId`
+  /// -- see the Checkpoint B brief's "foreign key / relationship
+  /// discipline" section. No FK cascade is configured (this schema
+  /// never configures one -- see e.g. `Transactions.accountId`); a
+  /// referencing account simply keeps its `institutionId` pointing at a
+  /// soft-deleted row, whose `name` the presentation layer may still
+  /// read (a future checkpoint's concern, not this one's).
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// Sync foundation, added from creation -- consistent with every
+  /// table from schema v2 onward (see `Accounts.syncVersion`'s own doc
+  /// for why `accounts` itself was the one exception, now fixed by this
+  /// same checkpoint).
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 @DataClassName('AccountRow')
 class Accounts extends Table {
   TextColumn get id => text()();
@@ -99,6 +149,20 @@ class Accounts extends Table {
 
   /// 'cash' | 'bank' | 'card' | 'wallet' | ... — free-form for Beta 0,
   /// validated at the UI layer rather than a DB CHECK constraint.
+  ///
+  /// Checkpoint B (schema v9) freezes this as presentation-only /
+  /// backward-compatibility metadata going forward -- [balanceClass]
+  /// and [subtype] below are now the authoritative fields for
+  /// accounting semantics (docs/20 §12.2/§13.1, ADR-035). This column is
+  /// deliberately NOT removed or renamed in this checkpoint: existing
+  /// production code (`accounts_screen.dart`, `account_detail_screen
+  /// .dart`, `edit_account_screen.dart`) still reads and
+  /// `AccountRepository.updateAccount` still writes it, and a broad
+  /// presentation migration is out of scope for this checkpoint. A
+  /// migrated legacy 'card' row, for example, keeps `type == 'card'`
+  /// forever unless a user edits it through the existing Edit Account
+  /// screen -- its `subtype` (`legacyCardNeedsReview`) is a completely
+  /// separate column, unaffected by that edit either way.
   TextColumn get type => text()();
   TextColumn get currencyCode => text().references(Currencies, #code)();
 
@@ -109,6 +173,56 @@ class Accounts extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// Checkpoint B (schema v9): the frozen asset/liability classification
+  /// -- `lib/core/finance/balance_class.dart`'s `BalanceClass`, stored
+  /// as `storageValue`. Authoritative for accounting semantics (see
+  /// [type]'s own doc above). Immutable once this account has any
+  /// financial history -- `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE
+  /// .md` §12.2 -- enforced by `AccountRepository`'s update-method shape
+  /// never accepting this field at all, not by a runtime check. Every
+  /// row this checkpoint's migration backfills, and every row the
+  /// current (not yet redesigned) Add Account UX creates, gets `'asset'`
+  /// -- this checkpoint never writes `'liability'` anywhere; see
+  /// `docs/20` §13.1 and the Checkpoint B report.
+  TextColumn get balanceClass =>
+      text().withDefault(const Constant('asset'))();
+
+  /// Checkpoint B (schema v9): the frozen product subtype --
+  /// `lib/core/finance/financial_account_subtype.dart`'s
+  /// `FinancialAccountSubtype`, stored as `storageValue`. Authoritative
+  /// for accounting semantics alongside [balanceClass]. Immutable by
+  /// default once this account has history -- same enforcement
+  /// discipline as [balanceClass]. Defaults to `'legacyUnknownNeedsReview'`
+  /// -- the same conservative fallback this checkpoint's migration uses
+  /// for any legacy [type] string it does not recognize (docs/20
+  /// §13.1) -- so a row inserted without an explicit value (e.g. a test
+  /// fixture that bypasses `AccountRepository.createAccount`) is always
+  /// flagged for review rather than silently misclassified.
+  TextColumn get subtype =>
+      text().withDefault(const Constant('legacyUnknownNeedsReview'))();
+
+  /// Checkpoint B (schema v9): the optional `FinancialInstitutions` this
+  /// account belongs to -- docs/20 §12.1. Null for cash and any other
+  /// institution-less product; this checkpoint never fabricates an
+  /// institution row to populate this during migration (docs/20 §13.1
+  /// / the Checkpoint B brief) -- every migrated and newly-created
+  /// account gets `institutionId == null`.
+  TextColumn get institutionId =>
+      text().nullable().references(FinancialInstitutions, #id)();
+
+  /// Checkpoint B (schema v9) also folds in the already-committed
+  /// `accounts.syncVersion`/`accounts.syncStatus` gap from
+  /// `docs/21_CLOUD_SYNC_ARCHITECTURE.md` §11 / ADR-032 into this same
+  /// version bump, per `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE
+  /// .md` §13.1's explicit instruction not to migrate `accounts` twice.
+  /// `accounts` was the one table from schema v2 onward missing this
+  /// pair -- see every other table in this file for the identical
+  /// convention. Forward-compatible per ADR-020's precedent -- inert
+  /// until Stage 6 (cloud/sync); this checkpoint always writes 0 /
+  /// "localOnly" and never reads these outside of that constant.
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};

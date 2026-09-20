@@ -59,6 +59,7 @@ part 'app_database.g.dart';
     Profiles,
     Categories,
     Accounts,
+    FinancialInstitutions,
     Transactions,
     TransactionExchangeRates,
     Budgets,
@@ -78,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// v1 -> v2 (Beta 1 Task 2): adds the `budgets` table. No existing
   /// table changes shape and no historical data is touched -- see
@@ -131,6 +132,31 @@ class AppDatabase extends _$AppDatabase {
   /// new table (every existing install is, by definition, local-only /
   /// not linked to any cloud account yet -- there is nothing to
   /// backfill it with).
+  ///
+  /// Schema version 9 (Checkpoint B, unified `FinancialAccount`
+  /// classification foundation) adds `balance_class`, `subtype`, and
+  /// `institution_id` to `accounts`, folds in the already-committed
+  /// `accounts.sync_version`/`accounts.sync_status` gap from
+  /// `docs/21_CLOUD_SYNC_ARCHITECTURE.md` §11 / ADR-032 into this same
+  /// version bump (per `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE
+  /// .md` §13.1's explicit instruction not to migrate `accounts`
+  /// twice), and adds the new `financial_institutions` table -- see
+  /// `docs/14_DECISION_LOG.md` ADR-035 and `tables.dart`'s
+  /// `FinancialInstitutions`/`Accounts` doc comments for the full
+  /// rationale. Every pre-existing `accounts` row is conservatively
+  /// backfilled: `balance_class` becomes `'asset'` for every row with
+  /// NO exception (a legacy `type: 'card'` row is never guessed as a
+  /// liability), and `subtype` becomes `'cash'`/`'bank'`/`'wallet'` for
+  /// the three unambiguous legacy `type` strings, `'legacyCardNeeds
+  /// Review'` for `'card'`, or the conservative fallback
+  /// `'legacyUnknownNeedsReview'` (already the column's default -- see
+  /// `Accounts.subtype`'s doc) for any other/unrecognized legacy `type`
+  /// string. No existing `accounts` row's `id`/`name`/`type`/
+  /// `currencyCode`/`openingBalanceMinorUnits`/`isActive`/`createdAt`/
+  /// `updatedAt`/`deletedAt` is read, rewritten, or reinterpreted by
+  /// this migration, no `transactions` row is touched at all, and zero
+  /// `financial_institutions` rows are created (institution assignment
+  /// is a later checkpoint's UI, not this one's).
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -171,6 +197,44 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 8) {
             await m.createTable(cloudAccountLinks);
+          }
+          if (from < 9) {
+            // Checkpoint B -- see the doc comment above `schemaVersion`
+            // for the full rationale. Additive-only: every statement
+            // below either adds a new nullable/defaulted column, adds a
+            // brand-new empty table, or corrects a just-added column's
+            // value on a per-row basis. No existing column changes
+            // shape, no existing row is deleted, and `transactions` is
+            // never touched.
+            await m.createTable(financialInstitutions);
+            await m.addColumn(accounts, accounts.balanceClass);
+            await m.addColumn(accounts, accounts.subtype);
+            await m.addColumn(accounts, accounts.institutionId);
+            await m.addColumn(accounts, accounts.syncVersion);
+            await m.addColumn(accounts, accounts.syncStatus);
+            // `accounts.balanceClass` already defaulted every row to
+            // 'asset' via the `addColumn` above -- correct here per
+            // docs/20 §13.1: no row is EVER corrected to 'liability' by
+            // this migration. `accounts.subtype` already defaulted
+            // every row to 'legacyUnknownNeedsReview' via the
+            // `addColumn` above; the four statements below correct it
+            // for every row whose legacy `type` is one of the three
+            // unambiguous values or the one genuinely ambiguous 'card'
+            // value -- any other/unrecognized `type` string is left at
+            // the conservative default. These string literals
+            // intentionally are NOT computed from
+            // `lib/core/finance/financial_account_subtype.dart`'s
+            // `FinancialAccountSubtype` enum -- a shipped migration
+            // must remain a frozen, self-contained historical artifact
+            // that keeps working even if that enum is refactored later.
+            // `financial_account_classification_migration_test.dart`
+            // asserts these literals match the enum's current values.
+            await customStatement("UPDATE accounts SET subtype = 'cash' WHERE type = 'cash'");
+            await customStatement("UPDATE accounts SET subtype = 'bank' WHERE type = 'bank'");
+            await customStatement("UPDATE accounts SET subtype = 'wallet' WHERE type = 'wallet'");
+            await customStatement(
+              "UPDATE accounts SET subtype = 'legacyCardNeedsReview' WHERE type = 'card'",
+            );
           }
         },
       );
