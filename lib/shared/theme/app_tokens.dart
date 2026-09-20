@@ -42,19 +42,67 @@ class AppSpacing {
 /// rounded chips/badges (`BorderRadius.circular(999)` is already how
 /// `_CurrencyBadge` and every status-chip pattern on Home get a pill
 /// shape — this just names it).
+///
+/// [xl] -- Checkpoint 10 (Icon-Led UI Foundation) addition: the approved
+/// 8-screen reference's hero/feature cards (the Home balance card, the
+/// Family Wallet balance card) round more generously than [large] (20) --
+/// visually closer to 24. Purely additive: every pre-existing call site
+/// that reads [small]/[medium]/[large]/[pill] is completely unaffected,
+/// since this is a new field with its own default, not a change to any
+/// existing one.
 @immutable
 class AppRadii {
-  const AppRadii({this.small = 8, this.medium = 16, this.large = 20, this.pill = 999});
+  const AppRadii({
+    this.small = 8,
+    this.medium = 16,
+    this.large = 20,
+    this.xl = 24,
+    this.pill = 999,
+  });
 
   final double small;
   final double medium;
   final double large;
+
+  /// Hero/feature-card radius -- see the class doc comment.
+  final double xl;
   final double pill;
 
   BorderRadius get smallRadius => BorderRadius.circular(small);
   BorderRadius get mediumRadius => BorderRadius.circular(medium);
   BorderRadius get largeRadius => BorderRadius.circular(large);
+  BorderRadius get xlRadius => BorderRadius.circular(xl);
   BorderRadius get pillRadius => BorderRadius.circular(pill);
+}
+
+/// Checkpoint 10 (Icon-Led UI Foundation): named container/glyph sizes for
+/// [AppIconTile] (`lib/shared/widgets/app_icon_tile.dart`), so a screen
+/// picks one of three named tiers instead of a magic pixel size. Values
+/// match what already exists in the app today rather than inventing new
+/// ones: [medium] (40 container / 20 icon) is exactly
+/// `TransactionIconBadge`'s pre-existing size (see that widget, which this
+/// checkpoint refactors to build on [AppIconTile] at this same tier), so
+/// converging a transaction row onto the shared tile is a pure rename,
+/// not a resize. [small] and [large] are new tiers for denser rows (an
+/// account/subscription list item, matching the reference's compact list
+/// icon size) and more prominent single-icon contexts respectively.
+@immutable
+class AppIconSizes {
+  const AppIconSizes({
+    this.smallContainer = 32,
+    this.smallIcon = 16,
+    this.mediumContainer = 40,
+    this.mediumIcon = 20,
+    this.largeContainer = 48,
+    this.largeIcon = 24,
+  });
+
+  final double smallContainer;
+  final double smallIcon;
+  final double mediumContainer;
+  final double mediumIcon;
+  final double largeContainer;
+  final double largeIcon;
 }
 
 /// Surface/border/status colors that either have no direct [ColorScheme]
@@ -81,6 +129,8 @@ class AppSemanticColors {
     required this.negative,
     required this.secondaryText,
     required this.mutedText,
+    required this.info,
+    required this.ambientGradient,
   });
 
   /// The standard card/surface background — matches
@@ -123,6 +173,31 @@ class AppSemanticColors {
   /// levels of de-emphasis rather than reaching for opacity hacks.
   final Color mutedText;
 
+  /// Checkpoint 10 (Icon-Led UI Foundation) addition: informational,
+  /// non-alarming status (e.g. a neutral "reference rate"/"pending"
+  /// indicator) — distinct from [warning] (caution) and [negative]
+  /// (error/expense). Material 3's stable [ColorScheme] has no dedicated
+  /// "info" role either, same situation [warning] already solved by
+  /// borrowing `tertiary` — [info] borrows the one remaining distinct
+  /// chromatic role, `colorScheme.secondary`, so all four semantic states
+  /// (positive/warning/negative/info) resolve to four visually distinct
+  /// [ColorScheme] roles on every theme without inventing a hard-coded
+  /// color.
+  final Color info;
+
+  /// Checkpoint 10 (Icon-Led UI Foundation) addition: a restrained,
+  /// theme-derived two-stop gradient for the "subtle ambient gradient"
+  /// decorative treatment the approved reference uses behind a screen's
+  /// hero header (see the reference's Home/Family Wallet top status-bar
+  /// wash). Deliberately just [colorScheme.primary]/[colorScheme.secondary]
+  /// at a low, fixed alpha rather than new literal colors -- so every
+  /// theme (including a theme this checkpoint doesn't know about yet)
+  /// produces a tasteful, on-brand wash automatically, and "themes must
+  /// not recolor the entire application" is satisfied by construction:
+  /// this is consumed by exactly one decorative background layer, never
+  /// spread across arbitrary surfaces.
+  final List<Color> ambientGradient;
+
   /// [positiveOverride] -- Checkpoint 8.1 addition, optional and
   /// defaulting to `null` (= unchanged behavior: [positive] is
   /// `colorScheme.primary`, exactly as it always was for every theme
@@ -147,6 +222,12 @@ class AppSemanticColors {
       negative: colorScheme.error,
       secondaryText: colorScheme.onSurfaceVariant,
       mutedText: colorScheme.outline,
+      info: colorScheme.secondary,
+      ambientGradient: <Color>[
+        colorScheme.primary.withValues(alpha: 0.10),
+        colorScheme.secondary.withValues(alpha: 0.06),
+        colorScheme.surface.withValues(alpha: 0),
+      ],
     );
   }
 }
@@ -163,11 +244,23 @@ class AppSemanticColors {
 /// giant one").
 @immutable
 class AppTokens extends ThemeExtension<AppTokens> {
-  const AppTokens({required this.spacing, required this.radii, required this.colors});
+  const AppTokens({
+    required this.spacing,
+    required this.radii,
+    required this.colors,
+    this.iconSizes = const AppIconSizes(),
+  });
 
   final AppSpacing spacing;
   final AppRadii radii;
   final AppSemanticColors colors;
+
+  /// Checkpoint 10 (Icon-Led UI Foundation) addition -- see
+  /// [AppIconSizes]. Defaults to `const AppIconSizes()` so every
+  /// pre-existing construction of [AppTokens] (there is exactly one,
+  /// [AppTokens.fromColorScheme] below) keeps compiling and behaving
+  /// identically without having to pass this explicitly.
+  final AppIconSizes iconSizes;
 
   /// [positiveOverride] passes straight through to
   /// [AppSemanticColors.fromColorScheme] -- see that factory's own doc
@@ -178,15 +271,22 @@ class AppTokens extends ThemeExtension<AppTokens> {
       spacing: const AppSpacing(),
       radii: const AppRadii(),
       colors: AppSemanticColors.fromColorScheme(colorScheme, positiveOverride: positiveOverride),
+      iconSizes: const AppIconSizes(),
     );
   }
 
   @override
-  AppTokens copyWith({AppSpacing? spacing, AppRadii? radii, AppSemanticColors? colors}) {
+  AppTokens copyWith({
+    AppSpacing? spacing,
+    AppRadii? radii,
+    AppSemanticColors? colors,
+    AppIconSizes? iconSizes,
+  }) {
     return AppTokens(
       spacing: spacing ?? this.spacing,
       radii: radii ?? this.radii,
       colors: colors ?? this.colors,
+      iconSizes: iconSizes ?? this.iconSizes,
     );
   }
 

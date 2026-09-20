@@ -19,7 +19,12 @@ import 'package:ai_financial_coach/shared/theme/app_theme.dart';
 import 'package:ai_financial_coach/shared/theme/app_theme_style.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:ai_financial_coach/shared/widgets/app_card.dart';
+import 'package:ai_financial_coach/shared/widgets/app_filter_chip.dart';
+import 'package:ai_financial_coach/shared/widgets/app_finance_list_row.dart';
+import 'package:ai_financial_coach/shared/widgets/app_icon_tile.dart';
 import 'package:ai_financial_coach/shared/widgets/app_money_text.dart';
+import 'package:ai_financial_coach/shared/widgets/app_progress_bar.dart';
+import 'package:ai_financial_coach/shared/widgets/app_segmented_control.dart';
 import 'package:ai_financial_coach/shared/widgets/app_status_chip.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -213,7 +218,7 @@ void main() {
   });
 
   group('Phase 5.5: Settings/Profile renders cleanly under Dark', () {
-    testWidgets('every nav row and the Beta 0 disclaimer render without exceptions', (
+    testWidgets('every nav row and the product disclaimer render without exceptions', (
       tester,
     ) async {
       final (AppDatabase db, String profileId, String accountId) = await seededDb();
@@ -229,7 +234,12 @@ void main() {
       // The disclaimer is the ListView's last child -- see the CP8.1
       // verification fix in `settings_screen_test.dart` for why this
       // needs a scroll to become mounted before it can be asserted on.
-      final Finder disclaimer = find.textContaining('Beta 0');
+      // Checkpoint 10 Visual Convergence Pass: the disclaimer copy no
+      // longer says "Beta 0" (stale-copy correction -- see
+      // `app_en.arb`'s updated `beta0DisclaimerMessage` and
+      // `settings_screen_test.dart`'s matching fix) -- matched here on
+      // its new, accurate opening phrase instead.
+      final Finder disclaimer = find.textContaining('Multi-currency tracking');
       await tester.scrollUntilVisible(disclaimer, 300.0);
       await tester.pumpAndSettle();
       expect(disclaimer, findsOneWidget);
@@ -462,5 +472,100 @@ void main() {
       // scale tests use).
       expect(find.text('Profile'), findsOneWidget);
     });
+  });
+
+  // Checkpoint 10 (Icon-Led UI Foundation): the new shared foundation
+  // primitives (AppIconTile, AppFinanceListRow, AppSegmentedControl,
+  // AppProgressBar, AppFilterChip, AppCard's softShadow) each already have
+  // their own dedicated test file under `test/widget/shared/` proving
+  // their individual contracts -- this group instead proves what those
+  // per-widget files can't: that all of them render together, without
+  // exception, under every one of the app's 5 themes, matching this
+  // file's own existing "cross-theme smoke" pattern (Phase 5.1-5.8) --
+  // plus that CP10's new `info` semantic color and `ambientGradient`
+  // token stay visually distinct/restrained on every theme, the same way
+  // Phase 5.9 already guards `positive` for Forest.
+  group('Phase 6.1: every CP10 foundation primitive renders under every theme', () {
+    for (final AppThemeStyle style in AppThemeStyle.values) {
+      testWidgets('AppThemeStyle.$style', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.resolve(style),
+            home: Scaffold(
+              body: ListView(
+                children: <Widget>[
+                  const AppIconTile(icon: Icons.restaurant, color: Colors.deepOrange),
+                  const AppCard(
+                    softShadow: true,
+                    child: AppFinanceListRow(
+                      leadingIcon: Icons.movie,
+                      leadingColor: Colors.red,
+                      title: 'Netflix',
+                      subtitle: 'Next: Sep 18, 2026',
+                      trailing: AppMoneyText('-¥1,590'),
+                    ),
+                  ),
+                  AppSegmentedControl<String>(
+                    options: const <AppSegmentedControlOption<String>>[
+                      AppSegmentedControlOption<String>(value: 'all', label: 'All'),
+                      AppSegmentedControlOption<String>(value: 'cash', label: 'Cash'),
+                    ],
+                    selected: 'all',
+                    onChanged: (_) {},
+                  ),
+                  const AppProgressBar(value: 0.65, color: Colors.green),
+                  AppFilterChip(label: 'Expense', selected: true, onSelected: (_) {}),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Netflix'), findsOneWidget);
+        expect(find.text('All'), findsOneWidget);
+      });
+    }
+  });
+
+  group('Phase 6.2 (Semantic Finance Safety, extended): info stays distinct from '
+      'positive/warning/negative on every theme', () {
+    for (final AppThemeStyle style in AppThemeStyle.values) {
+      test('AppThemeStyle.$style', () {
+        final ThemeData theme = AppTheme.resolve(style);
+        final AppTokens tokens = theme.extension<AppTokens>()!;
+        final Set<Color> distinctSemanticColors = <Color>{
+          tokens.colors.positive,
+          tokens.colors.warning,
+          tokens.colors.negative,
+          tokens.colors.info,
+        };
+        expect(
+          distinctSemanticColors,
+          hasLength(4),
+          reason:
+              'positive/warning/negative/info must resolve to 4 visually distinct colors, '
+              'never collapsing onto the same ColorScheme role',
+        );
+      });
+    }
+  });
+
+  group('Phase 6.3: the ambient gradient token stays restrained (never opaque/recoloring)', () {
+    for (final AppThemeStyle style in AppThemeStyle.values) {
+      test('AppThemeStyle.$style', () {
+        final ThemeData theme = AppTheme.resolve(style);
+        final AppTokens tokens = theme.extension<AppTokens>()!;
+        for (final Color stop in tokens.colors.ambientGradient) {
+          expect(
+            stop.a,
+            lessThanOrEqualTo(0.10),
+            reason: 'every ambientGradient stop must stay low-alpha -- decorative only, '
+                'never a solid recolor of the surface it washes over',
+          );
+        }
+      });
+    }
   });
 }

@@ -14,6 +14,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_money_text.dart';
+import '../../../shared/widgets/app_progress_bar.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../domain/savings_goal_calculation.dart';
@@ -183,15 +184,15 @@ class _GoalDetailBody extends ConsumerWidget {
                 style: context.appTypography.secondaryBody,
               ),
               const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  value: ratio.clamp(0.0, 1.0),
-                  minHeight: 8,
-                  backgroundColor: colors.surfaceContainerHighest,
-                  color: statusColor,
-                ),
-              ),
+              // Checkpoint 10 (Icon-Led UI Foundation): now the shared
+              // AppProgressBar primitive (`lib/shared/widgets/
+              // app_progress_bar.dart`) instead of a hand-rolled
+              // ClipRRect+LinearProgressIndicator -- same value/minHeight/
+              // color, and AppProgressBar's own `elevatedSurface` token
+              // resolves to this exact `colorScheme.surfaceContainerHighest`
+              // (see that token's doc comment), so this is a pure rename
+              // with byte-for-byte identical rendered output.
+              AppProgressBar(value: ratio.clamp(0.0, 1.0), color: statusColor),
               const SizedBox(height: 16),
               _DetailRow(
                 label: l10n.remainingLabel,

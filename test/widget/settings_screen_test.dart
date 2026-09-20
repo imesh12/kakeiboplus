@@ -202,9 +202,15 @@ void main() {
       // Scroll it into view using this repo's own established pattern
       // (see `add_transaction_screen_test.dart` / `home_screen_test.dart`)
       // rather than weakening or deleting this assertion.
+      // Checkpoint 10 Visual Convergence Pass: the disclaimer copy was
+      // corrected -- FX and recurring reminders are implemented today, so
+      // the old "not implemented yet" claim about them was stale (see
+      // `app_ja.arb`'s updated `beta0DisclaimerMessage`). This asserts
+      // the new, accurate string with the same rigor the old one had --
+      // an exact match, not a weakened `textContaining`.
       final Finder disclaimer = find.text(
-        'ベータ0 — ローカルの家計管理エンジンです。外貨換算（FX）、レシート、通知、'
-        'クラウド同期、AIコーチングはまだ実装されていません。',
+        '複数通貨の管理、参考為替レート、繰り返しのリマインダーは今すぐご利用いただけます。'
+        'レシート読み取り、クラウド同期、AIコーチングは今後のアップデートで追加予定です。',
       );
       await tester.scrollUntilVisible(disclaimer, 300.0);
       await tester.pumpAndSettle();

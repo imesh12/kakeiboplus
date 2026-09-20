@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/app_icon_tile.dart';
 import '../../categories/domain/category_icon.dart';
 
 /// A small rounded-square tinted icon badge for one transaction row --
@@ -12,6 +13,18 @@ import '../../categories/domain/category_icon.dart';
 /// language, and is entirely [ColorScheme]-driven through the [color]
 /// the caller passes in -- this widget never hardcodes a `Color`
 /// constant of its own.
+///
+/// Checkpoint 10 (Icon-Led UI Foundation): this widget's own 40px/radius-12/
+/// alpha-0.14 shape is now generalized into the shared [AppIconTile]
+/// primitive (`lib/shared/widgets/app_icon_tile.dart`), and this class
+/// delegates to it at [AppIconTileSize.medium] -- [AppIconTile]'s medium
+/// tier was deliberately defined to match this widget's own pre-existing
+/// numbers exactly, so this is a pure internal refactor (evolve, don't
+/// duplicate) with byte-for-byte identical rendered output: same 40x40
+/// container, same radius-12 corners, same 0.14 background alpha, same
+/// 20px glyph. Only [type]/[categoryIconName] -> [IconData] resolution
+/// stays local to this widget; the tinted-container presentation itself
+/// now lives in one place.
 ///
 /// For `type == 'transfer'`, always shows the transfer icon -- a
 /// transfer never carries a category (ADR-025 Correction 2), so
@@ -44,15 +57,6 @@ class TransactionIconBadge extends StatelessWidget {
       'income' => categoryIconName != null ? categoryIconFor(categoryIconName) : Icons.add,
       _ => categoryIconName != null ? categoryIconFor(categoryIconName) : Icons.remove,
     };
-    return Container(
-      width: 40,
-      height: 40,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, color: color, size: 20),
-    );
+    return AppIconTile(icon: icon, color: color, size: AppIconTileSize.medium);
   }
 }

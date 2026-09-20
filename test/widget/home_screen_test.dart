@@ -386,7 +386,17 @@ void main() {
       await tester.pumpWidget(appWithRouter(container));
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.savings_outlined), findsOneWidget);
+      // Checkpoint 10 Visual Convergence follow-up: scoped to the
+      // budget card itself (`Key('budgetCard')`) rather than a bare
+      // `find.byIcon`, which now also matches the unrelated Home
+      // quick-glance row's own budget icon above this card.
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('budgetCard')),
+          matching: find.byIcon(Icons.savings_outlined),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Remaining monthly budget'), findsOneWidget);
       expect(find.textContaining("You haven't set a monthly budget yet"), findsOneWidget);
 
@@ -660,7 +670,17 @@ void main() {
       await tester.pumpWidget(appWithRouter(container));
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.flag_outlined), findsOneWidget);
+      // Checkpoint 10 Visual Convergence follow-up: scoped to the
+      // savings goals card itself (`Key('savingsGoalsCard')`) rather
+      // than a bare `find.byIcon`, which now also matches the unrelated
+      // Home quick-glance row's own goal icon above this card.
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('savingsGoalsCard')),
+          matching: find.byIcon(Icons.flag_outlined),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Savings Goals'), findsOneWidget);
       expect(find.textContaining("You haven't set a savings goal yet"), findsOneWidget);
 
@@ -862,7 +882,16 @@ void main() {
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      tester.view.physicalSize = const Size(320, 900);
+      // Checkpoint 10 Visual Convergence follow-up: 900 -> 2200. Width
+      // (320) and text scale (1.6) are unchanged -- those are what this
+      // test protects. Height only needs to be tall enough that the Home
+      // ListView's Sliver mounts the budget card into the element tree
+      // (see `useTallSurface`'s doc comment above); CP10's new
+      // Budget/Goals quick-glance row added content above this card, so
+      // 900px no longer reaches it. 2200 matches the MMK test directly
+      // below, which already proves that height works post-CP10 at an
+      // even larger 2.0x scale.
+      tester.view.physicalSize = const Size(320, 2200);
       tester.view.devicePixelRatio = 1.0;
       tester.platformDispatcher.textScaleFactorTestValue = 1.6;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -907,7 +936,9 @@ void main() {
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      tester.view.physicalSize = const Size(320, 900);
+      // Checkpoint 10 Visual Convergence follow-up: see the matching
+      // comment on the VND test above -- same reason, same 2200 value.
+      tester.view.physicalSize = const Size(320, 2200);
       tester.view.devicePixelRatio = 1.0;
       tester.platformDispatcher.textScaleFactorTestValue = 1.6;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -949,7 +980,9 @@ void main() {
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      tester.view.physicalSize = const Size(320, 900);
+      // Checkpoint 10 Visual Convergence follow-up: see the matching
+      // comment on the VND test above -- same reason, same 2200 value.
+      tester.view.physicalSize = const Size(320, 2200);
       tester.view.devicePixelRatio = 1.0;
       tester.platformDispatcher.textScaleFactorTestValue = 1.6;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -1577,11 +1610,24 @@ void main() {
         await tester.pumpWidget(appWithRouter(container));
         await tester.pumpAndSettle();
 
+        // Checkpoint 10 Visual Convergence follow-up: scoped to
+        // `Key('budgetCard')` -- a bare `find.byIcon(Icons.savings_outlined)`
+        // now also matches the unrelated Home quick-glance row's budget
+        // icon above this card, which made `tester.element(...)` throw
+        // "Too many elements". The quick-glance row has no `Card`
+        // ancestor at all, so the old `.ancestor(...).first` line below
+        // still happened to resolve correctly, but is switched to the
+        // same explicit key scoping for one deterministic, consistent
+        // way of identifying this card.
+        final Finder budgetCardIcon = find.descendant(
+          of: find.byKey(const Key('budgetCard')),
+          matching: find.byIcon(Icons.savings_outlined),
+        );
         final Finder budgetCard = find
-            .ancestor(of: find.byIcon(Icons.savings_outlined), matching: find.byType(Card))
+            .ancestor(of: budgetCardIcon, matching: find.byType(Card))
             .first;
         final Card card = tester.widget<Card>(budgetCard);
-        final BuildContext context = tester.element(find.byIcon(Icons.savings_outlined));
+        final BuildContext context = tester.element(budgetCardIcon);
         final ColorScheme colors = Theme.of(context).colorScheme;
         final AppTokens tokens = context.appTokens;
 
@@ -1613,13 +1659,29 @@ void main() {
         await tester.pumpWidget(appWithHome(container));
         await tester.pumpAndSettle();
 
-        final BuildContext context = tester.element(find.byIcon(Icons.flag_outlined));
+        // Checkpoint 10 Visual Convergence follow-up: scoped to
+        // `Key('savingsGoalsCard')` -- a bare
+        // `find.byIcon(Icons.flag_outlined)` now also matches the
+        // unrelated Home quick-glance row's goal icon above this card,
+        // which made `tester.element(...)` throw "Too many elements".
+        final Finder savingsGoalsCardIcon = find.descendant(
+          of: find.byKey(const Key('savingsGoalsCard')),
+          matching: find.byIcon(Icons.flag_outlined),
+        );
+        final BuildContext context = tester.element(savingsGoalsCardIcon);
         final ColorScheme colors = Theme.of(context).colorScheme;
         final AppTokens tokens = context.appTokens;
 
         for (final IconData icon in <IconData>[Icons.flag_outlined, Icons.event_note_outlined]) {
+          // Only the goal icon is duplicated by the quick-glance row
+          // (it has no `Card` ancestor at all, so the old bare
+          // `find.byIcon` + `.first` below always resolved to the right
+          // card by luck); scope it the same deterministic way, and
+          // leave the recurring icon's lookup as-is since it was never
+          // ambiguous.
+          final Finder iconFinder = icon == Icons.flag_outlined ? savingsGoalsCardIcon : find.byIcon(icon);
           final Card card = tester.widget<Card>(
-            find.ancestor(of: find.byIcon(icon), matching: find.byType(Card)).first,
+            find.ancestor(of: iconFinder, matching: find.byType(Card)).first,
           );
           expect(card.color, colors.surface, reason: 'card for $icon should be bordered');
           final RoundedRectangleBorder shape = card.shape! as RoundedRectangleBorder;
@@ -2125,6 +2187,135 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byKey(const Key('livingCurrencyEquivalent_LKR')), findsOneWidget);
         expect(find.textContaining('≈'), findsNothing);
+      },
+    );
+  });
+
+  // ============================================================
+  // Checkpoint 10 Visual Convergence Pass: a compact, icon-led
+  // Budgets/Goals "quick glance" row now renders directly below the
+  // relocated Income/Expense/Pace section (see `home_screen.dart`'s
+  // `_BudgetGoalsQuickGlanceRow`) -- reusing the exact same
+  // `monthlyBudgetSummaryProvider`/`homeGoalSelectionProvider` state the
+  // full budget/goals cards further down the page already compute, never
+  // a new calculation. These tests lock in: the honest "Not set" empty
+  // state (no fabricated status/count), a real configured status once
+  // one exists, and that the new row doesn't introduce an overflow at a
+  // narrow width.
+  // ============================================================
+
+  group('10. Checkpoint 10 Visual Convergence -- Budgets/Goals quick glance', () {
+    testWidgets(
+      'shows an honest "Not set" for both Budgets and Goals when neither is configured yet',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Budgets'), findsOneWidget);
+        expect(find.text('Goals'), findsOneWidget);
+        // Never a fabricated status/count -- both tiles honestly read
+        // "Not set" until the user actually configures one.
+        expect(find.text('Not set'), findsNWidgets(2));
+      },
+    );
+
+    testWidgets(
+      'shows the real budget status and priority-goal status once both are configured',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProfileRow? profile = await ProfileRepository(db).getProfile();
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profile!.id,
+          month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+          amount: Money.fromMinorUnits(120000, 'JPY'),
+        );
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profile.id,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        await SavingsGoalContributionRepository(db, goalRepo).addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(30000, 'JPY'),
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Not set'), findsNothing);
+        // The budget is well within limits (¥0 spent of ¥120,000) --
+        // "On track" -- and the goal is neither overdue nor complete, so
+        // it reads "In progress". Both status strings also appear on
+        // their own full cards further down the page (unchanged), so
+        // this only proves the quick-glance tiles ALSO render them, not
+        // that they're the only occurrence.
+        expect(find.text('On track'), findsWidgets);
+        expect(find.text('In progress'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'the Budgets/Goals quick-glance row lays out without overflow on a narrow (320px-wide) '
+      'screen',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1.0;
+
+        final AppDatabase db = await seededDb(
+          living: 'JPY',
+          home: 'JPY',
+          accounts: <_SeedAccount>[const _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY')],
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        final Object? overflowException = tester.takeException();
+        if (overflowException != null) {
+          fail(
+            'Narrow-screen (320px) Budgets/Goals quick-glance row threw an exception:\n\n'
+            '$overflowException',
+          );
+        }
       },
     );
   });

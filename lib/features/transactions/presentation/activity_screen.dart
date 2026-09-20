@@ -11,6 +11,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_tokens.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_filter_chip.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../domain/activity_date_group.dart';
@@ -270,12 +271,16 @@ class _SearchAndFilterBar extends StatelessWidget {
   }
 }
 
-/// One Expense/Income/Transfer selectable filter chip. Wraps the
-/// built-in [FilterChip] rather than a custom widget -- it already
-/// renders a checkmark on its selected state (a non-color signal) and
-/// already exposes `Semantics(selected: ...)`, so this satisfies "color
-/// is not the only selected-state signal" and "each filter chip exposes
-/// selected state" without reinventing either.
+/// One Expense/Income/Transfer selectable filter chip. Checkpoint 10
+/// (Icon-Led UI Foundation): now delegates to the shared [AppFilterChip]
+/// wrapper (`lib/shared/widgets/app_filter_chip.dart`) instead of calling
+/// [FilterChip] directly -- [AppFilterChip] itself still renders a plain
+/// [FilterChip] with the exact same `label`/`selected`/`onSelected`
+/// wiring, so this remains a pure rename: the built-in checkmark on
+/// selected state (a non-color signal) and `Semantics(selected: ...)`
+/// this class's own previous doc comment described are unchanged, and
+/// `TransactionType`-specific plumbing (the `(type, selected)` callback
+/// shape `ActivityFilter` needs) stays local to this private class.
 class _TypeFilterChip extends StatelessWidget {
   const _TypeFilterChip({
     required this.label,
@@ -291,8 +296,8 @@ class _TypeFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text(label),
+    return AppFilterChip(
+      label: label,
       selected: selected,
       onSelected: (bool value) => onSelected(type, value),
     );

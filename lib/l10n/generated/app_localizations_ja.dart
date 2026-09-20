@@ -615,7 +615,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get beta0DisclaimerMessage =>
-      'ベータ0 — ローカルの家計管理エンジンです。外貨換算（FX）、レシート、通知、クラウド同期、AIコーチングはまだ実装されていません。';
+      '複数通貨の管理、参考為替レート、繰り返しのリマインダーは今すぐご利用いただけます。レシート読み取り、クラウド同期、AIコーチングは今後のアップデートで追加予定です。';
+
+  @override
+  String get homeQuickGlanceNotSet => '未設定';
+
+  @override
+  String get homeGoalsQuickGlanceLabel => '目標';
 
   @override
   String couldNotSavePreferencesMessage(String error) {

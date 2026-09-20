@@ -33,6 +33,7 @@ class AppCard extends StatelessWidget {
     this.margin = EdgeInsets.zero,
     this.onTap,
     this.bordered = false,
+    this.softShadow = false,
   });
 
   final Widget child;
@@ -72,6 +73,21 @@ class AppCard extends StatelessWidget {
   /// opts in.
   final bool bordered;
 
+  /// Checkpoint 10 (Icon-Led UI Foundation) addition: when true, renders a
+  /// restrained, soft drop shadow (`elevation: 3` with a low-alpha
+  /// `shadowColor`) instead of the flat `elevation: 0` every card has used
+  /// since CP7.1 -- matching the approved reference's white feature cards
+  /// (the Home hero balance card, "My Cards"), which read as gently
+  /// lifted rather than flat/bordered. Deliberately restrained (per the
+  /// `financial-app-ui-ux-designer` skill §9: "prefer low or zero
+  /// elevation... before large shadows") -- a small, low-opacity shadow,
+  /// not a heavy Material default one. `false` (the default) is
+  /// pixel-identical to every pre-existing [AppCard] call site -- this
+  /// flag only ever changes elevation/shadow, never radius/color/padding,
+  /// and combining it with [bordered] is allowed (a bordered card can
+  /// also lift) even though no current call site does both.
+  final bool softShadow;
+
   /// Visual System Convergence Checkpoint 7.3: the underlying [Card] now
   /// always sets `clipBehavior: Clip.antiAlias` (previously unset, i.e.
   /// `Clip.none`). Activity's transaction row -- CP7.3's first call site to
@@ -95,7 +111,8 @@ class AppCard extends StatelessWidget {
 
     return Card(
       margin: margin,
-      elevation: 0,
+      elevation: softShadow ? 3 : 0,
+      shadowColor: softShadow ? colorScheme.shadow.withValues(alpha: 0.16) : null,
       clipBehavior: Clip.antiAlias,
       color: color ?? (bordered ? colorScheme.surface : tokens.colors.cardSurface),
       shape: RoundedRectangleBorder(

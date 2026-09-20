@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/routing/app_routes.dart';
 import '../../features/transactions/presentation/add_transaction_sheet.dart';
 import '../../l10n/generated/app_localizations.dart';
+import '../theme/app_tokens.dart';
 
 /// The Beta 0 navigation shell: Home / Activity / Add / Profile — see
 /// `docs/14_DECISION_LOG.md` ADR-015 and Decision 12
@@ -79,44 +80,60 @@ class AppShell extends StatelessWidget {
     // change per locale.
     final AppLocalizations l10n = AppLocalizations.of(context);
 
+    // Checkpoint 10 (Icon-Led UI Foundation): a hairline top border on the
+    // nav bar -- matching the approved reference's subtle separation
+    // between scrollable content and the bottom bar -- instead of the
+    // heavier Material shadow `AppTheme`'s `navigationBarTheme` already
+    // deliberately sets `elevation: 0` to avoid (see that theme's own
+    // "restrained elevation everywhere" doc comment). Purely decorative:
+    // `_currentIndex`/`onDestinationSelected`/the destination list below
+    // are completely untouched, so every existing `app_shell_test.dart`
+    // assertion about selection/navigation/RTL-mirroring keeps passing.
+    final AppTokens tokens = context.appTokens;
+
     return Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex(context),
-        onDestinationSelected: (int index) {
-          switch (index) {
-            case 0:
-              context.go(AppRoutes.home);
-            case 1:
-              context.go(AppRoutes.activity);
-            case 2:
-              showAddTransactionSheet(context);
-            case 3:
-              context.go(AppRoutes.profile);
-          }
-        },
-        destinations: <NavigationDestination>[
-          NavigationDestination(
-            icon: const Icon(Icons.home_outlined),
-            selectedIcon: const Icon(Icons.home),
-            label: l10n.navHome,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.receipt_long_outlined),
-            selectedIcon: const Icon(Icons.receipt_long),
-            label: l10n.navActivity,
-          ),
-          NavigationDestination(
-            icon: _addIcon(colors, Icons.add_circle_outline),
-            selectedIcon: _addIcon(colors, Icons.add_circle),
-            label: l10n.navAdd,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.person_outline),
-            selectedIcon: const Icon(Icons.person),
-            label: l10n.navProfile,
-          ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: tokens.colors.subtleBorder)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex(context),
+          onDestinationSelected: (int index) {
+            switch (index) {
+              case 0:
+                context.go(AppRoutes.home);
+              case 1:
+                context.go(AppRoutes.activity);
+              case 2:
+                showAddTransactionSheet(context);
+              case 3:
+                context.go(AppRoutes.profile);
+            }
+          },
+          destinations: <NavigationDestination>[
+            NavigationDestination(
+              icon: const Icon(Icons.home_outlined),
+              selectedIcon: const Icon(Icons.home),
+              label: l10n.navHome,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.receipt_long_outlined),
+              selectedIcon: const Icon(Icons.receipt_long),
+              label: l10n.navActivity,
+            ),
+            NavigationDestination(
+              icon: _addIcon(colors, Icons.add_circle_outline),
+              selectedIcon: _addIcon(colors, Icons.add_circle),
+              label: l10n.navAdd,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.person_outline),
+              selectedIcon: const Icon(Icons.person),
+              label: l10n.navProfile,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1264,3 +1264,106 @@ test/features/settings/presentation/reference_rate_card_test.dart`;
 `flutter test test/widget/home_screen_test.dart`; full `flutter test`) —
 this sandbox has no Dart/Flutter toolchain and cannot itself execute or
 confirm test results.
+
+## ADR-030 — Checkpoint 10: V1 icon-led UI foundation, evolved from CP7/CP8, not duplicated
+
+Context: an 8-screen finance-app reference image (Home, Accounts, Add
+Transaction, Subscriptions, Budgets, Assets & Liabilities, Credit Card,
+Family Wallet) was supplied as the primary visual reference for a design
+convergence checkpoint. The reference is visual inspiration and a source
+of truth for surface treatment, density, and icon-led interaction — it is
+explicitly **not** a product-scope document. Nothing visible only in the
+mockups (Family Wallet, crypto/property/advanced-asset tracking,
+statements, household functionality, OCR, AI, cloud/sync, a donut progress
+ring, or a change to primary navigation architecture) was implemented on
+the strength of appearing in the image; each remains out of scope until a
+future checkpoint explicitly authorizes it.
+
+The Light theme is the primary baseline the reference was calibrated
+against (near-white background, a subtle low-alpha blue/lavender ambient
+wash confined to the top of the scroll, white rounded cards with soft
+restrained shadows, small tinted rounded-square icon containers, compact
+list rows, pill single-select segments, thin linear progress, one
+dominant hero balance figure). Dark/Pink/Ocean/Forest are true adaptations
+of that same language rather than independent skins: they personalize
+accent/selected-state/decorative-highlight/gradient/icon-container
+treatment only, never by flooding whole surfaces with theme color, and the
+income/positive, expense/negative, warning, and (new this checkpoint)
+info semantics stay 4-way distinct on every theme (`Phase 6.2` in
+`theme_compatibility_test.dart`).
+
+The CP7.1–CP8.1 design-system audit found the foundation already mature
+enough that no second, parallel design system was justified. Existing
+primitives were evolved in place rather than duplicated: `AppTokens`
+gained `AppRadii.xl`, a new `AppIconSizes` class, and new `info`/
+`ambientGradient` fields on `AppSemanticColors` (both required, both
+derived from the existing `ColorScheme` in `fromColorScheme` — no new
+independent color source); `AppTypography` gained `heroMoney` sitting
+above the existing `largeMoney`; `AppCard` gained an opt-in `softShadow`
+bool (default `false`, so every pre-existing call site is pixel-identical
+unless it explicitly opts in); `AppMoneyText`'s `.hero` emphasis was
+repointed from `largeMoney` to the new `heroMoney` (confirmed via grep to
+be the app's only `.hero` call site — Home's balance figure); and
+`TransactionIconBadge`'s hand-rolled tinted `Container`/`BoxDecoration`/
+`Icon` was generalized into a call to the new shared `AppIconTile`,
+proven a pure rename by asserting the new primitive's medium tier
+reproduces the exact pre-existing 40px-container/12px-radius/20px-glyph/
+0.14-alpha shape.
+
+Five genuinely missing reusable primitives were added, each because the
+audit found no existing equivalent to evolve: `AppIconTile` (a
+size-tiered — small/medium/large — tinted rounded-square icon container,
+generalizing the badge idiom above beyond transactions), `AppFinanceListRow`
+(icon-tile + title/subtitle + trailing amount, for any future finance list
+that wants the reference's row shape), `AppSegmentedControl<T>` (a
+pill-track single-select control — a genuinely new shape; the audit found
+no existing segmented-control pattern anywhere in the app to generalize
+from), `AppProgressBar` (a thin rounded `LinearProgressIndicator` wrapper
+taking an explicit semantic color, deliberately not the reference's
+Budgets donut ring, which this checkpoint's spec text scoped out), and
+`AppFilterChip` (a thin `FilterChip` wrapper so filter surfaces pick up
+the app-wide chip theme through one call site instead of each screen
+calling `FilterChip` directly).
+
+Integration this checkpoint was deliberately partial, proving the
+foundation without a screen-by-screen redesign: `AppShell`'s bottom nav
+gained a top hairline border from `AppTokens.colors.subtleBorder`; Home
+gained the ambient-gradient wash behind its existing content (a
+`Positioned` layer added *behind* the untouched `profileAsync.when(...)`
+subtree, so every existing widget/key/text below is unaffected) and its
+hero balance now renders at `heroMoney`; `_MetricTile`'s bare icon and
+`TransactionIconBadge` both now route through `AppIconTile`; Activity's
+type filter and Goal Detail's progress bar now route through
+`AppFilterChip`/`AppProgressBar` respectively. `AppFinanceListRow` and
+`AppSegmentedControl` were built and independently tested this checkpoint
+but deliberately left unwired: Home's only existing "list" is a single
+recurring-item summary with a delicate, test-asserted width-adaptive
+stacked/side-by-side layout that a generic row would regress, and every
+existing segmented-looking surface in the app (Categories' `TabBar`,
+Add Transaction's modal type picker) would need a behavior/navigation
+change, not a pure visual swap, to adopt the new control — out of bounds
+for a visual-foundation checkpoint that must not touch navigation
+architecture or business logic.
+
+No Drift schema migration, no new or removed dependency, and no FX/
+network/OCR/AI/cloud change. The untracked design references under
+`docs/design/` were not touched.
+
+Reason: the reference image's job is to calibrate an existing, evolving
+component system — radius, spacing, icon-container treatment, surface
+tint, typography hierarchy — not to hand the team a new feature list or a
+second design system to maintain alongside CP7/CP8's. Building the
+missing primitives standalone-and-tested first, then integrating only
+where the existing tests already prove it's safe, keeps this checkpoint a
+foundation checkpoint rather than an undisclosed screen-by-screen
+redesign.
+
+Status: Approved 2026-09-19 (Checkpoint 10). Pending Windows verification
+(`flutter analyze`; `flutter test test/widget/shared/`; `flutter test
+test/widget/theme_compatibility_test.dart`; `flutter test
+test/widget/home_screen_test.dart`; `flutter test
+test/widget/activity_screen_test.dart`; `flutter test
+test/widget/goal_detail_screen_test.dart`; `flutter test
+test/widget/app_shell_test.dart`; full `flutter test`) — this sandbox has
+no Dart/Flutter toolchain and cannot itself execute or confirm test
+results.

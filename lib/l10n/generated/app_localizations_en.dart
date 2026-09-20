@@ -632,7 +632,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get beta0DisclaimerMessage =>
-      'Beta 0 -- local money engine. FX, receipts, notifications, cloud sync, and AI coaching are not implemented yet.';
+      'Multi-currency tracking, reference exchange rates, and recurring reminders are ready to use today. Receipt scanning, cloud sync, and AI coaching are coming in a future update.';
+
+  @override
+  String get homeQuickGlanceNotSet => 'Not set';
+
+  @override
+  String get homeGoalsQuickGlanceLabel => 'Goals';
 
   @override
   String couldNotSavePreferencesMessage(String error) {

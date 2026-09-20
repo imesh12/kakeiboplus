@@ -60,6 +60,15 @@ class AppTypography {
 
   TextStyle? get caption => _text.bodySmall?.copyWith(color: _colors.onSurfaceVariant);
 
+  /// Checkpoint 10 (Icon-Led UI Foundation) addition: a step above
+  /// [largeMoney], for the ONE truly dominant balance on a screen (the
+  /// approved reference's Home total-balance figure) -- `headlineLarge`
+  /// (32) + bold, vs. [largeMoney]'s `headlineMedium` (28) + bold.
+  /// Additive only: no existing call site is changed to use this, so
+  /// every current hero-currency-card rendering (still [largeMoney]) is
+  /// byte-for-byte unaffected until a screen deliberately opts in.
+  TextStyle? get heroMoney => _text.headlineLarge?.copyWith(fontWeight: FontWeight.bold);
+
   TextStyle? get largeMoney => _text.headlineMedium?.copyWith(fontWeight: FontWeight.bold);
 
   TextStyle? get mediumMoney => _text.titleLarge?.copyWith(fontWeight: FontWeight.w700);

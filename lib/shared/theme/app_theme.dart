@@ -53,7 +53,23 @@ import 'app_tokens.dart';
 class AppTheme {
   AppTheme._();
 
-  static const Color _seed = Color(0xFF2E7D6B);
+  // Checkpoint 10 Visual Convergence Pass: recalibrated from the
+  // previous teal/green (0xFF2E7D6B) to a calm, confident blue matching
+  // the approved 8-screen reference's primary interaction accent (the
+  // Add button, "See all" links, selected nav state, card gradients).
+  // `light()`/`dark()` both still run through the exact same seeded
+  // `ColorScheme.fromSeed` pipeline every other theme uses -- this is a
+  // one-line recoloring, not an architecture change, and every screen
+  // that already reads `colorScheme.primary`/`AppTokens` (rather than a
+  // literal `Color(...)`) re-themes automatically. `AppSemanticColors
+  // .positive` still derives from `colorScheme.primary` for Light/Dark
+  // with no override (see `app_tokens.dart` and
+  // `test/shared/theme/app_theme_test.dart`'s locked-in "no override for
+  // light/dark" contract) -- this pass does not change that mechanism,
+  // only which literal seed feeds it. Pink/Ocean/Forest keep their own
+  // independent seeds below, completely untouched, so their
+  // personalization is unaffected.
+  static const Color _seed = Color(0xFF2563EB);
 
   /// Pink theme seed -- a warm rose/magenta (Material 3 rose-600
   /// family), matching the approved Claude Design reference's Pink

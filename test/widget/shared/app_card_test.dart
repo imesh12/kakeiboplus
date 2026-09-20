@@ -143,6 +143,33 @@ void main() {
     expect(tappableCard.clipBehavior, Clip.antiAlias);
   });
 
+  // Checkpoint 10 (Icon-Led UI Foundation): `softShadow` -- the restrained
+  // soft-drop-shadow feature-card treatment, matching the approved
+  // reference's white hero/feature cards.
+  testWidgets(
+    'CP10: softShadow defaults to false and is pixel-identical to every pre-existing '
+    'AppCard (elevation 0, no explicit shadowColor)',
+    (tester) async {
+      await tester.pumpWidget(buildApp(const AppCard(child: Text('content'))));
+
+      final Card card = tester.widget<Card>(find.byType(Card));
+      expect(card.elevation, 0);
+      expect(card.shadowColor, isNull);
+    },
+  );
+
+  testWidgets('CP10: softShadow: true renders a restrained, non-zero elevation with a low-alpha shadowColor', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildApp(const AppCard(softShadow: true, child: Text('content'))));
+
+    final BuildContext context = tester.element(find.text('content'));
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Card card = tester.widget<Card>(find.byType(Card));
+    expect(card.elevation, greaterThan(0));
+    expect(card.shadowColor, colors.shadow.withValues(alpha: 0.16));
+  });
+
   testWidgets('renders without exceptions at a narrow 320px width', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);

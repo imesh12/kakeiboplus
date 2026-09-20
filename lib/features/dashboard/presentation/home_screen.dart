@@ -18,6 +18,7 @@ import '../../../shared/theme/app_tokens.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/app_icon_tile.dart';
 import '../../../shared/widgets/app_money_text.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../../../shared/widgets/app_status_chip.dart';
@@ -61,86 +62,122 @@ class HomeScreen extends ConsumerWidget {
         ref.watch(dashboardCurrencySummariesProvider);
     final AppLocalizations l10n = AppLocalizations.of(context);
 
+    // Checkpoint 10 (Icon-Led UI Foundation): a restrained, theme-derived
+    // ambient gradient wash behind the top of the scrollable body --
+    // matching the approved reference's soft blue/lavender header wash.
+    // Purely decorative and purely additive: a `Positioned` layer BEHIND
+    // the existing `profileAsync.when(...)` content in a new outer
+    // `Stack`, so every existing widget/key/text below is completely
+    // unaffected -- it only ever paints in empty space the scaffold
+    // background would otherwise show. Uses `AppTokens.colors.ambientGradient`
+    // (see that token's doc comment) rather than a literal color, so
+    // every theme (Light/Dark/Pink/Ocean/Forest) gets its own on-brand,
+    // low-alpha wash automatically -- this is the ONE place in the app
+    // this token is consumed, per "themes must not recolor the entire
+    // application".
+    final AppTokens tokens = context.appTokens;
+
     return Scaffold(
       appBar: AppBar(title: Text(l10n.navHome)),
-      body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) =>
-            Center(child: Text(l10n.somethingWentWrong(e.toString()))),
-        data: (ProfileRow? profile) {
-          if (profile == null) {
-            // Router redirect should prevent this, but keep the screen
-            // safe on its own rather than crashing on a null profile.
-            return const Center(child: CircularProgressIndicator());
-          }
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(activeProfileProvider);
-              ref.invalidate(accountsProvider);
-            },
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-              children: <Widget>[
-                Text(
-                  l10n.homeGreeting(profile.displayName),
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 20),
-                _CurrencySummarySection(
-                  summariesAsync: summariesAsync,
-                  livingCurrency: profile.livingCurrency,
-                  homeCurrency: profile.homeCurrency,
-                ),
-                const SizedBox(height: 20),
-                const _BudgetCard(),
-                const SizedBox(height: 16),
-                const _SavingsGoalsCard(),
-                const SizedBox(height: 16),
-                const _UpcomingCommitmentsCard(
-                 key: Key('upcomingCommitmentsCardSection'),
-                ),
-                const SizedBox(height: 28),
-                // CP5.1: the "Accounts" label had no flex protection at
-                // all (unlike the analogous header rows on the budget
-                // and recurring cards just above) -- at 320px + 1.6x it
-                // overflowed the row on its own. Letting it yield first
-                // (Expanded + one-line ellipsis) matches those two
-                // existing header rows; the "Manage" button's own
-                // behavior is unchanged.
-                AppSectionHeader(
-                  title: l10n.accountsSectionTitle,
-                  eyebrow: true,
-                  trailing: TextButton(
-                    onPressed: () => context.push(AppRoutes.accounts),
-                    child: Text(l10n.manage),
+      body: Stack(
+        children: <Widget>[
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 220,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: tokens.colors.ambientGradient,
                   ),
                 ),
-                const SizedBox(height: 4),
-                accountsAsync.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (Object e, StackTrace st) =>
-                      Text(l10n.couldNotLoadAccounts(e.toString())),
-                  data: (List<AccountRow> accounts) {
-                    if (accounts.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Text(l10n.noAccountsYetMessage),
-                      );
-                    }
-                    return Column(
-                      children: <Widget>[
-                        for (final AccountRow account in accounts) _AccountTile(account: account),
-                      ],
-                    );
-                  },
-                ),
-              ],
+              ),
             ),
-          );
-        },
+          ),
+          profileAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (Object e, StackTrace st) =>
+                Center(child: Text(l10n.somethingWentWrong(e.toString()))),
+            data: (ProfileRow? profile) {
+              if (profile == null) {
+                // Router redirect should prevent this, but keep the screen
+                // safe on its own rather than crashing on a null profile.
+                return const Center(child: CircularProgressIndicator());
+              }
+              return RefreshIndicator(
+                onRefresh: () async {
+                  ref.invalidate(activeProfileProvider);
+                  ref.invalidate(accountsProvider);
+                },
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                  children: <Widget>[
+                    Text(
+                      l10n.homeGreeting(profile.displayName),
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 20),
+                    _CurrencySummarySection(
+                      summariesAsync: summariesAsync,
+                      livingCurrency: profile.livingCurrency,
+                      homeCurrency: profile.homeCurrency,
+                    ),
+                    const SizedBox(height: 20),
+                    const _BudgetCard(),
+                    const SizedBox(height: 16),
+                    const _SavingsGoalsCard(),
+                    const SizedBox(height: 16),
+                    const _UpcomingCommitmentsCard(
+                     key: Key('upcomingCommitmentsCardSection'),
+                    ),
+                    const SizedBox(height: 28),
+                    // CP5.1: the "Accounts" label had no flex protection at
+                    // all (unlike the analogous header rows on the budget
+                    // and recurring cards just above) -- at 320px + 1.6x it
+                    // overflowed the row on its own. Letting it yield first
+                    // (Expanded + one-line ellipsis) matches those two
+                    // existing header rows; the "Manage" button's own
+                    // behavior is unchanged.
+                    AppSectionHeader(
+                      title: l10n.accountsSectionTitle,
+                      eyebrow: true,
+                      trailing: TextButton(
+                        onPressed: () => context.push(AppRoutes.accounts),
+                        child: Text(l10n.manage),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    accountsAsync.when(
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (Object e, StackTrace st) =>
+                          Text(l10n.couldNotLoadAccounts(e.toString())),
+                      data: (List<AccountRow> accounts) {
+                        if (accounts.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Text(l10n.noAccountsYetMessage),
+                          );
+                        }
+                        return Column(
+                          children: <Widget>[
+                            for (final AccountRow account in accounts) _AccountTile(account: account),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -209,6 +246,33 @@ class _CurrencySummarySection extends StatelessWidget {
               badge: _badgeFor(l10n, primary),
               livingCurrencyCode: livingCurrency,
             ),
+            const SizedBox(height: 16),
+            // Checkpoint 10 Visual Convergence Pass: Income/Expenses/Daily
+            // pace for the primary (hero) currency now render HERE --
+            // compact, icon-led, and outside the hero card's own filled
+            // surface -- instead of crammed inside it ("do not put all
+            // monthly metrics inside the balance hero"). This is the
+            // exact same `_MonthlyMetricsSection` widget and the same
+            // `primary` data the hero card always rendered internally
+            // before this pass -- only its position and tint changed (no
+            // `tint` now, since it no longer sits on a filled
+            // `primaryContainer` background and instead uses the default
+            // on-surface colors) -- so every existing Income/Expense/Pace
+            // assertion still finds exactly the same text, the same
+            // number of times, just one level higher in the tree. Never a
+            // new calculation, never fabricated.
+            _MonthlyMetricsSection(summary: primary, emphasize: true),
+            const SizedBox(height: 16),
+            // Checkpoint 10 Visual Convergence Pass: a second compact,
+            // icon-led row for Budgets/Savings Goals, matching the
+            // approved reference's Home hierarchy (hero, then compact
+            // Income/Expenses/Budgets/Goals tiles). Reuses the exact same
+            // `monthlyBudgetSummaryProvider`/`homeGoalSelectionProvider`
+            // state the full cards further down this screen already
+            // compute -- never a new calculation or a fabricated count
+            // (e.g. no invented "N active goals" figure) -- see
+            // `_BudgetGoalsQuickGlanceRow`'s own doc comment.
+            const _BudgetGoalsQuickGlanceRow(),
             for (final CurrencyDashboardSummary summary in secondary)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -289,7 +353,13 @@ class _HeroCurrencyCard extends StatelessWidget {
         AppCard(
           key: Key('heroCurrencyCard_${summary.currencyCode}'),
           color: colors.primaryContainer,
-          radius: tokens.radii.large,
+          // Checkpoint 10 Visual Convergence: the more generous hero/
+          // feature-card radius `AppRadii.xl` (24) was added specifically
+          // for this card back when it was introduced (see that token's
+          // own doc comment) but never actually wired up here -- this is
+          // that wiring, matching the approved reference's more
+          // generously rounded balance card.
+          radius: tokens.radii.xl,
           padding: EdgeInsets.all(tokens.spacing.lg),
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,12 +456,6 @@ class _HeroCurrencyCard extends StatelessWidget {
                     color: colors.onPrimaryContainer.withValues(alpha: 0.85),
                   ),
                 ),
-                const SizedBox(height: 18),
-                _MonthlyMetricsSection(
-                  summary: summary,
-                  emphasize: true,
-                  tint: colors.onPrimaryContainer,
-                ),
               ],
             ),
         ),
@@ -426,6 +490,13 @@ class _SecondaryCurrencyCard extends StatelessWidget {
     return AppCard(
       key: Key('secondaryCurrencyCard_${summary.currencyCode}'),
       bordered: true,
+      // Checkpoint 10 Visual Convergence Pass: a restrained soft shadow
+      // instead of relying on the border alone for separation -- matches
+      // the approved reference's white feature cards, which read as
+      // gently lifted rather than flat/outlined. Does not change `color`/
+      // `shape`/`border` -- see `AppCard.softShadow`'s own doc comment;
+      // this is additive only.
+      softShadow: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -587,18 +658,18 @@ class _LivingCurrencyEquivalentLine extends ConsumerWidget {
 /// ever forcing three values into one cramped row; Daily Spending Pace
 /// always gets its own full-width tile underneath.
 ///
-/// [tint] overrides every value/label/icon color with a single color
-/// (used on the hero card, which sits on a filled `primaryContainer`
-/// background) — omitted on secondary cards, which use the default
-/// on-surface colors instead. The underlying calculations are untouched;
-/// this widget only formats and lays out what
-/// [dashboardCurrencySummariesProvider] already computed.
+/// Always renders with default on-surface colors -- this section no
+/// longer has a tinted hero placement (Checkpoint 10 Visual Convergence
+/// moved it out from inside the hero card to a sibling position below
+/// it), so the single-color override this widget previously supported
+/// was removed as dead code rather than kept unused. The underlying
+/// calculations are untouched; this widget only formats and lays out
+/// what [dashboardCurrencySummariesProvider] already computed.
 class _MonthlyMetricsSection extends StatelessWidget {
-  const _MonthlyMetricsSection({required this.summary, required this.emphasize, this.tint});
+  const _MonthlyMetricsSection({required this.summary, required this.emphasize});
 
   final CurrencyDashboardSummary summary;
   final bool emphasize;
-  final Color? tint;
 
   @override
   Widget build(BuildContext context) {
@@ -607,9 +678,9 @@ class _MonthlyMetricsSection extends StatelessWidget {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
     final TextStyle? valueStyle = (emphasize ? textTheme.titleLarge : textTheme.titleMedium)
-        ?.copyWith(fontWeight: FontWeight.w700, color: tint);
+        ?.copyWith(fontWeight: FontWeight.w700);
     final TextStyle? labelStyle = textTheme.bodySmall?.copyWith(
-      color: tint ?? colors.onSurfaceVariant,
+      color: colors.onSurfaceVariant,
     );
 
     // Checkpoint 8.2 (Whole-App Theme Compatibility): income reads
@@ -619,12 +690,10 @@ class _MonthlyMetricsSection extends StatelessWidget {
     // (itself green) is never mistaken for the income semantic (see
     // `app_theme.dart`'s `_forestPositiveGreen` doc comment). Every other
     // theme's `positive` still equals `colorScheme.primary`, so this is a
-    // no-op everywhere except Forest. `tint` (set on the hero card, which
-    // already tints its whole metrics section to `onPrimaryContainer`)
-    // still always wins, exactly as before.
+    // no-op everywhere except Forest.
     final Widget incomeTile = _MetricTile(
       icon: Icons.trending_up_rounded,
-      iconColor: tint ?? tokens.colors.positive,
+      iconColor: tokens.colors.positive,
       label: l10n.incomeThisMonth,
       value: summary.income,
       valueStyle: valueStyle,
@@ -632,7 +701,7 @@ class _MonthlyMetricsSection extends StatelessWidget {
     );
     final Widget spendTile = _MetricTile(
       icon: Icons.trending_down_rounded,
-      iconColor: tint ?? colors.error,
+      iconColor: colors.error,
       label: l10n.spentThisMonth,
       value: summary.expense,
       valueStyle: valueStyle,
@@ -671,7 +740,7 @@ class _MonthlyMetricsSection extends StatelessWidget {
             const SizedBox(height: 12),
             _MetricTile(
               icon: Icons.calendar_today_rounded,
-              iconColor: tint ?? colors.tertiary,
+              iconColor: colors.tertiary,
               label: l10n.dailySpendingPace,
               secondaryLabel: l10n.dailySpendingPaceDetail,
               value: summary.dailyPace,
@@ -719,7 +788,15 @@ class _MetricTile extends StatelessWidget {
       children: <Widget>[
         Row(
           children: <Widget>[
-            Icon(icon, size: 18, color: iconColor),
+            // Checkpoint 10 (Icon-Led UI Foundation): the shared
+            // AppIconTile primitive (small tier -- 32/16, close to this
+            // row's pre-existing bare 18px glyph) instead of a plain
+            // Icon, matching the approved reference's tinted-container
+            // icon treatment on every metric/summary tile. Purely
+            // additive visually: still the same `icon`/`iconColor` the
+            // caller already resolved, just presented in a small
+            // rounded-square chip instead of bare.
+            AppIconTile(icon: icon, color: iconColor, size: AppIconTileSize.small),
             const SizedBox(width: 6),
             Flexible(child: Text(label, style: labelStyle, overflow: TextOverflow.ellipsis)),
           ],
@@ -740,6 +817,157 @@ class _MetricTile extends StatelessWidget {
       ],
     );
     return wide ? SizedBox(width: double.infinity, child: content) : content;
+  }
+}
+
+/// Checkpoint 10 Visual Convergence Pass: a compact, icon-led tile for a
+/// short STATUS string (e.g. "On track", "Not set") rather than a
+/// [Money] value -- [_MetricTile]'s own contract is specifically a money
+/// value, so this is a small sibling widget with the same visual
+/// language (an [AppIconTile], a muted label, a strong value line)
+/// instead of overloading [_MetricTile] with a second value type.
+class _StatusMetricTile extends StatelessWidget {
+  const _StatusMetricTile({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            AppIconTile(icon: icon, color: iconColor, size: AppIconTileSize.small),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: valueColor),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+/// Checkpoint 10 Visual Convergence Pass: a compact, icon-led "at a
+/// glance" pair of tiles for Budgets/Savings Goals, sitting directly
+/// below the relocated Income/Expense/Pace section -- matching the
+/// approved reference's Home hierarchy (a hero balance, then compact
+/// Income/Expenses/Budgets/Goals tiles). Reuses the exact same
+/// [monthlyBudgetSummaryProvider]/[homeGoalSelectionProvider] state the
+/// full [_BudgetCard]/[_SavingsGoalsCard] sections further down this
+/// screen already compute -- this never fabricates a number (e.g. no
+/// invented "N active goals" count) and never duplicates a calculation:
+/// it is a second, quieter, glance-level presentation of the exact same
+/// already-truthful state. When a budget/goal genuinely isn't configured
+/// yet, this honestly shows [AppLocalizations.homeQuickGlanceNotSet]
+/// rather than a fake value, matching the empty-state discipline the
+/// full cards below already follow.
+class _BudgetGoalsQuickGlanceRow extends ConsumerWidget {
+  const _BudgetGoalsQuickGlanceRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final MonthlyBudgetSummary budgetSummary = ref.watch(monthlyBudgetSummaryProvider);
+    final AsyncValue<GoalHomeSelection> goalSelectionAsync = ref.watch(homeGoalSelectionProvider);
+
+    // Mirrors `_ConfiguredBudget`'s own status->(color, label) mapping
+    // exactly (same colors, same localized labels) -- this is a second
+    // presentation of that same truth, never a new one. A `null`
+    // calculation (no budget configured for this month at all) is
+    // distinguished from a configured calculation with no specific
+    // status, which keeps `_ConfiguredBudget`'s own existing
+    // "budgetStatusThisMonth" fallback meaning intact.
+    final BudgetCalculation? budgetCalc = budgetSummary.calculation;
+    final (Color budgetColor, String budgetValue) = budgetCalc == null
+        ? (colors.onSurfaceVariant, l10n.homeQuickGlanceNotSet)
+        : switch (budgetCalc.status) {
+            null => (colors.onSurfaceVariant, l10n.budgetStatusThisMonth),
+            BudgetStatus.healthy => (colors.primary, l10n.budgetStatusOnTrack),
+            BudgetStatus.caution => (colors.tertiary, l10n.budgetStatusAheadOfPace),
+            BudgetStatus.overBudget => (colors.error, l10n.budgetStatusOverBudget),
+          };
+
+    final GoalHomeSelection? goalSelection = goalSelectionAsync.valueOrNull;
+    final (Color goalColor, String goalValue) = switch (goalSelection?.kind) {
+      null => (colors.onSurfaceVariant, l10n.homeQuickGlanceNotSet),
+      GoalHomeSelectionKind.empty => (colors.onSurfaceVariant, l10n.homeQuickGlanceNotSet),
+      GoalHomeSelectionKind.allCompleted => (colors.primary, l10n.goalStatusCompleted),
+      GoalHomeSelectionKind.priorityGoal => (
+          goalSelection!.summary!.calculation.status == SavingsGoalStatus.overdue
+              ? colors.error
+              : colors.primary,
+          goalSelection.summary!.calculation.status == SavingsGoalStatus.overdue
+              ? l10n.overdueLabel
+              : l10n.goalStatusInProgress,
+        ),
+    };
+
+    final Widget budgetTile = _StatusMetricTile(
+      icon: Icons.savings_outlined,
+      iconColor: budgetColor,
+      label: l10n.budgetsTitle,
+      value: budgetValue,
+      valueColor: budgetColor,
+    );
+    final Widget goalTile = _StatusMetricTile(
+      icon: Icons.flag_outlined,
+      iconColor: goalColor,
+      label: l10n.homeGoalsQuickGlanceLabel,
+      value: goalValue,
+      valueColor: goalColor,
+    );
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // Same 320px narrow-layout threshold `_MonthlyMetricsSection`
+        // already uses immediately above this row, for the same reason:
+        // two side-by-side tiles below that width compress into
+        // colliding text.
+        final bool narrow = constraints.maxWidth < 320;
+        return narrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[budgetTile, const SizedBox(height: 12), goalTile],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(child: budgetTile),
+                  const SizedBox(width: 12),
+                  Expanded(child: goalTile),
+                ],
+              );
+      },
+    );
   }
 }
 
@@ -764,7 +992,15 @@ class _BudgetCard extends ConsumerWidget {
     final BudgetCalculation? calculation = budget.calculation;
 
     return AppCard(
+      // Checkpoint 10 Visual Convergence follow-up: a stable key so
+      // widget tests can scope `find.descendant` to this specific card
+      // rather than a bare `find.byIcon(Icons.savings_outlined)`/
+      // `find.byType(Card)`, which became ambiguous once the Home quick
+      // -glance row (`_BudgetGoalsQuickGlanceRow`) introduced a second,
+      // unrelated savings icon above this card. Presentation-only.
+      key: const Key('budgetCard'),
       bordered: true,
+      softShadow: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -1042,7 +1278,12 @@ class _SavingsGoalsCard extends ConsumerWidget {
     final GoalHomeSelection? selection = selectionAsync.valueOrNull;
 
     return AppCard(
+      // Checkpoint 10 Visual Convergence follow-up: see the matching
+      // `Key('budgetCard')` comment above -- same reason, for the flag
+      // icon this card shares with the Home quick-glance row's goal tile.
+      key: const Key('savingsGoalsCard'),
       bordered: true,
+      softShadow: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -1188,6 +1429,7 @@ class _UpcomingCommitmentsCard extends ConsumerWidget {
 
     return AppCard(
       bordered: true,
+      softShadow: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -1308,6 +1550,7 @@ class _AccountTile extends ConsumerWidget {
     // change and none is added here.
     return AppCard(
       bordered: true,
+      softShadow: true,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md, vertical: tokens.spacing.sm),
       child: balanceAsync.when(
         loading: () => _AdaptiveAccountRow(

@@ -58,8 +58,17 @@ class AppMoneyText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppTypography typography = context.appTypography;
+    // Checkpoint 10 (Icon-Led UI Foundation): `.hero` now resolves to the
+    // new `AppTypography.heroMoney` role (headlineLarge/32, vs.
+    // `largeMoney`'s headlineMedium/28) -- matching the approved
+    // reference's more dominant total-balance figure. This is a visual
+    // size bump for every existing `.hero`-emphasis call site (today,
+    // exactly one: `home_screen.dart`'s hero currency card balance,
+    // already wrapped in its own `FittedBox(fit: BoxFit.scaleDown)`, so a
+    // larger source style still never overflows). `.primary`/`.secondary`
+    // are completely unchanged.
     final TextStyle? style = switch (emphasis) {
-      AppMoneyEmphasis.hero => typography.largeMoney,
+      AppMoneyEmphasis.hero => typography.heroMoney,
       AppMoneyEmphasis.primary => typography.mediumMoney,
       AppMoneyEmphasis.secondary => typography.smallMoney,
     };

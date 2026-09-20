@@ -1207,8 +1207,20 @@ abstract class AppLocalizations {
   /// No description provided for @beta0DisclaimerMessage.
   ///
   /// In en, this message translates to:
-  /// **'Beta 0 -- local money engine. FX, receipts, notifications, cloud sync, and AI coaching are not implemented yet.'**
+  /// **'Multi-currency tracking, reference exchange rates, and recurring reminders are ready to use today. Receipt scanning, cloud sync, and AI coaching are coming in a future update.'**
   String get beta0DisclaimerMessage;
+
+  /// No description provided for @homeQuickGlanceNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get homeQuickGlanceNotSet;
+
+  /// No description provided for @homeGoalsQuickGlanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Goals'**
+  String get homeGoalsQuickGlanceLabel;
 
   /// couldNotSavePreferencesMessage
   ///

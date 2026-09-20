@@ -371,7 +371,9 @@
     }
   },
   "budgetsTitle": "Budgets",
-  "beta0DisclaimerMessage": "Beta 0 -- local money engine. FX, receipts, notifications, cloud sync, and AI coaching are not implemented yet.",
+  "beta0DisclaimerMessage": "Multi-currency tracking, reference exchange rates, and recurring reminders are ready to use today. Receipt scanning, cloud sync, and AI coaching are coming in a future update.",
+  "homeQuickGlanceNotSet": "Not set",
+  "homeGoalsQuickGlanceLabel": "Goals",
   "couldNotSavePreferencesMessage": "Could not save: {error}",
   "@couldNotSavePreferencesMessage": {
     "description": "couldNotSavePreferencesMessage",
