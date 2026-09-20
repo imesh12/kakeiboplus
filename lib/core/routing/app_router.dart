@@ -13,6 +13,7 @@ import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/onboarding/presentation/profile_providers.dart';
 import '../../features/recurring/presentation/recurring_screen.dart';
 import '../../features/settings/presentation/international_preferences_screen.dart';
+import '../../features/settings/presentation/more_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/settings/presentation/theme_customization_screen.dart';
 import '../../features/transactions/presentation/activity_screen.dart';
@@ -24,15 +25,25 @@ import 'app_routes.dart';
 import 'go_router_refresh_stream.dart';
 
 /// The route tree: onboarding (outside the shell) plus the
-/// Home/Activity/Profile shell destinations, an Accounts screen, a
-/// Categories screen, the shared Add Expense/Income/Transfer screen, a
-/// Budgets screen (Beta 1 Task 2), and a Savings Goals list + detail
-/// screen (Beta 1 Task 3 -- see `docs/14_DECISION_LOG.md` ADR-022).
-/// Goals deliberately gets no new bottom-nav item, same as Budgets --
-/// see `STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §9 for the full navigation
-/// rationale. Checkpoint 8.1 adds the Theme Customization screen the
-/// same way -- reached only from a Profile/Settings row, no new
-/// bottom-nav item.
+/// Home/Activity/Accounts/More shell destinations -- V1 Navigation
+/// Shell Implementation Checkpoint, implementing
+/// `docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md` §26 / ADR-034.
+/// `AccountsScreen` moved INTO the shell here (it is now a primary
+/// destination, reached with the bottom nav visible, not a pushed
+/// detail screen); `SettingsScreen` (Profile) moved OUT of the shell
+/// (it is no longer a bottom-nav tab -- it is pushed from a row on
+/// the new `MoreScreen`, exactly like Budgets/Goals/Recurring/
+/// Categories/International Preferences/Theme Customization/Cloud
+/// Account already were before this checkpoint). A Categories
+/// screen, the shared Add Expense/Income/Transfer screen, a Budgets
+/// screen (Beta 1 Task 2), and a Savings Goals list + detail screen
+/// (Beta 1 Task 3 -- see `docs/14_DECISION_LOG.md` ADR-022) remain
+/// pushed screens with no bottom-nav item of their own -- see
+/// `STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §9 for the original
+/// navigation rationale this checkpoint's ADR-034 supersedes only
+/// for Accounts/Profile/More. Checkpoint 8.1's Theme Customization
+/// screen keeps the same no-new-bottom-nav-item pattern, now reached
+/// from `MoreScreen` instead of `SettingsScreen`.
 final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.home,
@@ -55,7 +66,17 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         routes: <RouteBase>[
           GoRoute(path: AppRoutes.home, builder: (context, state) => const HomeScreen()),
           GoRoute(path: AppRoutes.activity, builder: (context, state) => const ActivityScreen()),
-          GoRoute(path: AppRoutes.profile, builder: (context, state) => const SettingsScreen()),
+          // V1 Navigation Shell Implementation Checkpoint: Accounts
+          // moved in from the top-level route list below -- same
+          // path, same `AccountsScreen()` builder, so every existing
+          // `context.push(AppRoutes.accounts)` call site (Home's
+          // shortcut) keeps working unchanged; it now additionally
+          // renders with the bottom nav visible, since Accounts is a
+          // primary destination.
+          GoRoute(path: AppRoutes.accounts, builder: (context, state) => const AccountsScreen()),
+          // V1 Navigation Shell Implementation Checkpoint: the new
+          // More destination, replacing Profile's former slot here.
+          GoRoute(path: AppRoutes.more, builder: (context, state) => const MoreScreen()),
         ],
       ),
       GoRoute(
@@ -79,7 +100,13 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             EditTransactionScreen(transactionId: state.pathParameters['id']!),
       ),
-      GoRoute(path: AppRoutes.accounts, builder: (context, state) => const AccountsScreen()),
+      // V1 Navigation Shell Implementation Checkpoint: Profile moved
+      // in from the ShellRoute above -- same path, same
+      // `SettingsScreen()` builder, unchanged deep link -- it is now
+      // a pushed screen with no bottom nav of its own, same pattern
+      // every route below it already used, reached from a row on
+      // the new `MoreScreen` (`AppRoutes.profile`).
+      GoRoute(path: AppRoutes.profile, builder: (context, state) => const SettingsScreen()),
       GoRoute(path: AppRoutes.categories, builder: (context, state) => const CategoriesScreen()),
       GoRoute(path: AppRoutes.budgets, builder: (context, state) => const BudgetsScreen()),
       GoRoute(path: AppRoutes.goals, builder: (context, state) => const SavingsGoalsScreen()),

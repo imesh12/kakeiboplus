@@ -3,7 +3,7 @@ import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/settings/presentation/international_preferences_screen.dart';
-import 'package:ai_financial_coach/features/settings/presentation/settings_screen.dart';
+import 'package:ai_financial_coach/features/settings/presentation/more_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -104,11 +104,11 @@ void main() {
 
   Widget appWithRouter(
     ProviderContainer container, {
-    bool startAtSettings = false,
+    bool startAtMore = false,
     Locale locale = const Locale('en'),
   }) {
     final GoRouter router = GoRouter(
-      initialLocation: startAtSettings ? AppRoutes.profile : '/launcher',
+      initialLocation: startAtMore ? AppRoutes.more : '/launcher',
       routes: <RouteBase>[
         GoRoute(
           path: '/launcher',
@@ -121,7 +121,7 @@ void main() {
             ),
           ),
         ),
-        GoRoute(path: AppRoutes.profile, builder: (context, state) => const SettingsScreen()),
+        GoRoute(path: AppRoutes.more, builder: (context, state) => const MoreScreen()),
         GoRoute(
           path: AppRoutes.internationalPreferences,
           builder: (context, state) => const InternationalPreferencesScreen(),
@@ -325,16 +325,26 @@ void main() {
   const Key numberFormatKey = Key('numberFormatField');
   const Key timezoneKey = Key('timezoneField');
 
-  testWidgets('Settings shows the International preferences entry', (tester) async {
+  testWidgets('More shows the International preferences entry', (tester) async {
     final (AppDatabase db, String profileId) = await seededDb();
     final ProviderContainer container =
         ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
     addTearDown(() => disposeInOrder(tester, container, db));
 
-    await tester.pumpWidget(appWithRouter(container, startAtSettings: true));
+    await tester.pumpWidget(appWithRouter(container, startAtMore: true));
     await tester.pumpAndSettle();
 
-    expect(find.text('International preferences'), findsOneWidget);
+    // MoreScreen's "International preferences" row is below the fold at
+    // the default test surface -- reuses this file's own
+    // scrollPageUntilVisible helper (see file-level doc comment, point 1)
+    // rather than assuming it's already mounted.
+    final Finder target = find.text('International preferences');
+    await scrollPageUntilVisible(
+      tester,
+      target,
+      description: 'The "International preferences" row on More',
+    );
+    expect(target, findsOneWidget);
   });
 
   testWidgets('tapping International preferences navigates to the new screen', (tester) async {
@@ -343,9 +353,16 @@ void main() {
         ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
     addTearDown(() => disposeInOrder(tester, container, db));
 
-    await tester.pumpWidget(appWithRouter(container, startAtSettings: true));
+    await tester.pumpWidget(appWithRouter(container, startAtMore: true));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('International preferences'));
+
+    final Finder target = find.text('International preferences');
+    await scrollPageUntilVisible(
+      tester,
+      target,
+      description: 'The "International preferences" row on More',
+    );
+    await tester.tap(target);
     await tester.pumpAndSettle();
 
     expect(find.byType(InternationalPreferencesScreen), findsOneWidget);

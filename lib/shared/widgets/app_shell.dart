@@ -6,39 +6,40 @@ import '../../features/transactions/presentation/add_transaction_sheet.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../theme/app_tokens.dart';
 
-/// The Beta 0 navigation shell: Home / Activity / Add / Profile — see
-/// `docs/14_DECISION_LOG.md` ADR-015 and Decision 12
-/// (`STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §9). No Goals destination yet;
-/// "Add" opens a modal sheet rather than being its own screen.
+/// The V1 navigation shell -- Home / Activity / Add / Accounts / More.
 ///
-/// Beta 1 Transaction UX Phase B, Checkpoint 6 gave the Add destination
-/// a visually stronger circular tonal icon; Visual System Convergence
-/// Checkpoint 7.2 takes this further, converging on the approved Claude
-/// Design reference's raised, solid-color, floating-looking Add button
-/// (see [_addIcon]) -- larger, filled with `colorScheme.primary` rather
-/// than the softer tonal `primaryContainer`, genuinely elevated via a
-/// [Material] with non-zero `elevation`, and nudged upward with
-/// [Transform.translate] so it visually "pops" above the bar line. This
-/// is STILL presentation-only: `_currentIndex`, `onDestinationSelected`,
-/// and the destination count are all unchanged from before either
-/// checkpoint -- Add remains index 2, remains an action rather than a
-/// routable destination, and is still exactly the widget passed to
-/// `NavigationDestination.icon`/`selectedIcon`, so the bar's own
-/// semantics/tap-target/RTL-mirroring behavior (already proven by
-/// `app_shell_test.dart`'s CP5.5/CP5.6/CP6.1 groups) is untouched --
-/// `Transform.translate` only repaints (and re-hit-tests) this one
-/// child, it doesn't change the destination's own layout box, so tapping
-/// "Add" anywhere in its destination area keeps working exactly as
-/// before.
+/// V1 Navigation Shell Implementation Checkpoint: implements the
+/// approved five-destination primary navigation frozen by
+/// `docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md` §26 and
+/// `docs/14_DECISION_LOG.md` ADR-034, replacing the Beta 0 shell (Home /
+/// Activity / Add / Profile -- see ADR-015 and Decision 12,
+/// `STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §9) this widget implemented
+/// before this checkpoint. Accounts is promoted from a Profile-reached
+/// detail screen into a primary destination; Profile is removed from
+/// primary navigation but not from the app -- it remains a real,
+/// reachable route (`AppRoutes.profile`), now pushed from a row on the
+/// new More destination instead of being a bottom-nav tab itself (see
+/// `more_screen.dart`). "Add" is still a center ACTION, not a routable
+/// destination -- unchanged from every prior checkpoint.
 class AppShell extends StatelessWidget {
   const AppShell({required this.child, super.key});
 
   final Widget child;
 
+  /// V1 Navigation Shell Implementation Checkpoint: five destinations
+  /// (0 Home, 1 Activity, 2 Add [action, never matched here], 3
+  /// Accounts, 4 More). `AppRoutes.profile` is deliberately absent from
+  /// this list -- it is no longer a ShellRoute child (see
+  /// `app_router.dart`), so `GoRouterState.of(context).matchedLocation`
+  /// is never `/profile` while this widget is actually mounted, exactly
+  /// like every other pushed-on-top screen (Budgets, Goals, Recurring,
+  /// Categories, International Preferences, ...) that was already true
+  /// before this checkpoint.
   int _currentIndex(BuildContext context) {
     final String location = GoRouterState.of(context).matchedLocation;
     if (location.startsWith(AppRoutes.activity)) return 1;
-    if (location.startsWith(AppRoutes.profile)) return 3;
+    if (location.startsWith(AppRoutes.accounts)) return 3;
+    if (location.startsWith(AppRoutes.more)) return 4;
     return 0;
   }
 
@@ -50,7 +51,9 @@ class AppShell extends StatelessWidget {
   /// Claude Design reference's raised center Add button. `ColorScheme`
   /// only, still no hard-coded finance colors. This is purely the widget
   /// passed to `NavigationDestination.icon`/`selectedIcon`; the bar's own
-  /// built-in tap handling and semantics are untouched.
+  /// built-in tap handling and semantics are untouched. Unchanged by the
+  /// V1 Navigation Shell Implementation Checkpoint -- Add stays index 2,
+  /// still an action, still exactly this same widget.
   Widget _addIcon(ColorScheme colors, IconData icon) {
     return Transform.translate(
       offset: const Offset(0, -10),
@@ -71,13 +74,12 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    // CP6.1 (Localization Phase 1): the four destination labels are now
-    // ARB-backed (`navHome`/`navActivity`/`navAdd`/`navProfile` in
-    // `lib/l10n/app_en.arb`/`app_ja.arb`) instead of literal English --
-    // Japanese becomes a real end-to-end proof language for the shell
-    // itself. Routing/selection logic above (`_currentIndex`,
-    // `onDestinationSelected`) is untouched: only the `label:` strings
-    // change per locale.
+    // The five destination labels are ARB-backed
+    // (`navHome`/`navActivity`/`navAdd`/`navAccounts`/`navMore` in
+    // `lib/l10n/app_en.arb`/`app_ja.arb`), same pattern every prior
+    // checkpoint already used for the four Beta 0 labels. `navProfile`
+    // is untouched and still used by `SettingsScreen`'s own AppBar
+    // title -- Profile just no longer appears on this bar.
     final AppLocalizations l10n = AppLocalizations.of(context);
 
     // Checkpoint 10 (Icon-Led UI Foundation): a hairline top border on the
@@ -86,9 +88,7 @@ class AppShell extends StatelessWidget {
     // heavier Material shadow `AppTheme`'s `navigationBarTheme` already
     // deliberately sets `elevation: 0` to avoid (see that theme's own
     // "restrained elevation everywhere" doc comment). Purely decorative:
-    // `_currentIndex`/`onDestinationSelected`/the destination list below
-    // are completely untouched, so every existing `app_shell_test.dart`
-    // assertion about selection/navigation/RTL-mirroring keeps passing.
+    // unchanged by this checkpoint.
     final AppTokens tokens = context.appTokens;
 
     return Scaffold(
@@ -108,7 +108,9 @@ class AppShell extends StatelessWidget {
               case 2:
                 showAddTransactionSheet(context);
               case 3:
-                context.go(AppRoutes.profile);
+                context.go(AppRoutes.accounts);
+              case 4:
+                context.go(AppRoutes.more);
             }
           },
           destinations: <NavigationDestination>[
@@ -127,10 +129,24 @@ class AppShell extends StatelessWidget {
               selectedIcon: _addIcon(colors, Icons.add_circle),
               label: l10n.navAdd,
             ),
+            // V1 Navigation Shell Implementation Checkpoint: Accounts
+            // promoted to a primary destination -- same wallet glyph
+            // `SettingsScreen`'s former Accounts row used, so the icon's
+            // meaning carries over rather than being reinvented.
             NavigationDestination(
-              icon: const Icon(Icons.person_outline),
-              selectedIcon: const Icon(Icons.person),
-              label: l10n.navProfile,
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              selectedIcon: const Icon(Icons.account_balance_wallet),
+              label: l10n.navAccounts,
+            ),
+            // V1 Navigation Shell Implementation Checkpoint: More
+            // replaces Profile's former bottom-nav slot -- the
+            // conventional "more/overflow" glyph, since this
+            // destination is now a tool/settings directory (see
+            // `more_screen.dart`) rather than a single person's profile.
+            NavigationDestination(
+              icon: const Icon(Icons.more_horiz_outlined),
+              selectedIcon: const Icon(Icons.more_horiz),
+              label: l10n.navMore,
             ),
           ],
         ),

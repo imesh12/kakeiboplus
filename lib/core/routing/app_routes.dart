@@ -15,6 +15,16 @@ abstract class AppRoutes {
   static const String profile = '/profile';
   static const String accounts = '/accounts';
   static const String categories = '/categories';
+
+  /// The "More" destination -- V1 Navigation Shell Implementation
+  /// Checkpoint. Replaces `profile` as the shell's fourth primary
+  /// bottom-navigation destination per
+  /// `docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md` §26 / ADR-034
+  /// (HOME / ACTIVITY / + ADD / ACCOUNTS / MORE). [profile] itself is
+  /// unchanged below and remains a real, reachable route -- it is
+  /// only removed from primary bottom navigation, reached instead as
+  /// a pushed screen from a row on this new [more] destination.
+  static const String more = '/more';
   static const String budgets = '/budgets';
 
   /// Query parameter `type` = `expense` | `income` | `transfer`.

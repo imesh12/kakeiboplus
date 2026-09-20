@@ -200,6 +200,54 @@ abstract class AppLocalizations {
   /// **'Profile'**
   String get navProfile;
 
+  /// No description provided for @navAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get navAccounts;
+
+  /// No description provided for @navMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get navMore;
+
+  /// No description provided for @moreScreenSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage your money tools and preferences'**
+  String get moreScreenSubtitle;
+
+  /// No description provided for @morePlanningSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Planning'**
+  String get morePlanningSectionTitle;
+
+  /// No description provided for @moreMoneyToolsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Money Tools'**
+  String get moreMoneyToolsSectionTitle;
+
+  /// No description provided for @moreOrganizationSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization'**
+  String get moreOrganizationSectionTitle;
+
+  /// No description provided for @morePersonalizationSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Personalization'**
+  String get morePersonalizationSectionTitle;
+
+  /// No description provided for @moreCloudSecuritySectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud & Security'**
+  String get moreCloudSecuritySectionTitle;
+
   /// No description provided for @transactionTypeExpense.
   ///
   /// In en, this message translates to:

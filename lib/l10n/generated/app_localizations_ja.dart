@@ -60,6 +60,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get navProfile => 'プロフィール';
 
   @override
+  String get navAccounts => '口座';
+
+  @override
+  String get navMore => 'その他';
+
+  @override
+  String get moreScreenSubtitle => 'お金の管理ツールと設定';
+
+  @override
+  String get morePlanningSectionTitle => 'プランニング';
+
+  @override
+  String get moreMoneyToolsSectionTitle => 'マネーツール';
+
+  @override
+  String get moreOrganizationSectionTitle => '整理';
+
+  @override
+  String get morePersonalizationSectionTitle => '個人設定';
+
+  @override
+  String get moreCloudSecuritySectionTitle => 'クラウドとセキュリティ';
+
+  @override
   String get transactionTypeExpense => '支出';
 
   @override
@@ -814,7 +838,8 @@ class AppLocalizationsJa extends AppLocalizations {
       'このバージョンではクラウドアカウントはまだ利用できません。入力したデータはすべてこの端末内に保存されます。';
 
   @override
-  String get cloudAccountLocalOnlyExplanation => 'サインインしていません。データはこの端末にのみ保存されます。';
+  String get cloudAccountLocalOnlyExplanation =>
+      'サインインしていません。データはこの端末にのみ保存されます。';
 
   @override
   String cloudAccountSignedInExplanation(String cloudUserId) {

@@ -60,6 +60,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navProfile => 'Profile';
 
   @override
+  String get navAccounts => 'Accounts';
+
+  @override
+  String get navMore => 'More';
+
+  @override
+  String get moreScreenSubtitle => 'Manage your money tools and preferences';
+
+  @override
+  String get morePlanningSectionTitle => 'Planning';
+
+  @override
+  String get moreMoneyToolsSectionTitle => 'Money Tools';
+
+  @override
+  String get moreOrganizationSectionTitle => 'Organization';
+
+  @override
+  String get morePersonalizationSectionTitle => 'Personalization';
+
+  @override
+  String get moreCloudSecuritySectionTitle => 'Cloud & Security';
+
+  @override
   String get transactionTypeExpense => 'Expense';
 
   @override
@@ -859,7 +883,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Signing out never deletes anything saved on this device.';
 
   @override
-  String get cloudAccountDifferentAccountDialogTitle => 'Can\'t switch cloud accounts';
+  String get cloudAccountDifferentAccountDialogTitle =>
+      'Can\'t switch cloud accounts';
 
   @override
   String get cloudAccountDifferentAccountDialogMessage =>

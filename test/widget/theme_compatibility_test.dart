@@ -10,6 +10,7 @@ import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/money/money_formatter.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/accounts_screen.dart';
 import 'package:ai_financial_coach/features/dashboard/presentation/home_screen.dart';
+import 'package:ai_financial_coach/features/settings/presentation/more_screen.dart';
 import 'package:ai_financial_coach/features/settings/presentation/settings_screen.dart';
 import 'package:ai_financial_coach/features/settings/presentation/theme_customization_screen.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/activity_screen.dart';
@@ -217,7 +218,7 @@ void main() {
     });
   });
 
-  group('Phase 5.5: Settings/Profile renders cleanly under Dark', () {
+  group('Phase 5.5: More renders cleanly under Dark', () {
     testWidgets('every nav row and the product disclaimer render without exceptions', (
       tester,
     ) async {
@@ -226,19 +227,26 @@ void main() {
           ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(() => disposeInOrder(tester, container, db));
 
-      await tester.pumpWidget(appWithTheme(container, const SettingsScreen(), AppThemeStyle.dark));
+      // V1 Navigation Shell Implementation Checkpoint: this group used
+      // to pump `SettingsScreen`, which owned every nav row and the
+      // disclaimer under test here. Both moved to the new `MoreScreen`
+      // (see `docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md` §26 /
+      // ADR-034 and `more_screen_test.dart`) -- `SettingsScreen` itself
+      // is now just the identity card, so this dark-theme smoke test
+      // retargets at `MoreScreen` to keep exercising the same rows and
+      // disclaimer it always has, just through their new home.
+      await tester.pumpWidget(appWithTheme(container, const MoreScreen(), AppThemeStyle.dark));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       expect(find.text('Appearance'), findsOneWidget);
       // The disclaimer is the ListView's last child -- see the CP8.1
-      // verification fix in `settings_screen_test.dart` for why this
-      // needs a scroll to become mounted before it can be asserted on.
-      // Checkpoint 10 Visual Convergence Pass: the disclaimer copy no
-      // longer says "Beta 0" (stale-copy correction -- see
-      // `app_en.arb`'s updated `beta0DisclaimerMessage` and
-      // `settings_screen_test.dart`'s matching fix) -- matched here on
-      // its new, accurate opening phrase instead.
+      // verification fix in `settings_screen_test.dart`'s pre-checkpoint
+      // history for why this needs a scroll to become mounted before it
+      // can be asserted on. The disclaimer copy no longer says "Beta 0"
+      // (stale-copy correction -- see `app_en.arb`'s updated
+      // `beta0DisclaimerMessage`) -- matched here on its new, accurate
+      // opening phrase instead.
       final Finder disclaimer = find.textContaining('Multi-currency tracking');
       await tester.scrollUntilVisible(disclaimer, 300.0);
       await tester.pumpAndSettle();
