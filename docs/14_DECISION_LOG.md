@@ -1804,3 +1804,71 @@ foundation implemented; no financial-data sync, no mutation queue, no
 checkpoint's final report for the exact focused test files. CP12.3
 begins the local sync-state/mutation-queue work against the schema
 migrations `docs/21_CLOUD_SYNC_ARCHITECTURE.md` §11 already specifies.
+
+## ADR-034 — Navigation architecture decision: five-destination primary shell (HOME / ACTIVITY / + ADD / ACCOUNTS / MORE)
+
+Status: Approved 2026-09-20 (documentation/architecture decision only; no implementation
+in this checkpoint).
+
+**Decision: replace the primary navigation shell's destination set.** The primary
+bottom-navigation shell moves from the four destinations implemented at HEAD `02dd471`
+(Home / Activity / center Add / Profile) to five approved destinations: **HOME / ACTIVITY
+/ + ADD / ACCOUNTS / MORE**. Add remains a center action, not a fifth tab page. This
+decision is recorded in full, including the final V1 page tree, the More hierarchy, the
+eight-screen UI-reference mapping, and the V2 expansion mapping, in
+`docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md` §26. That section is authoritative for
+navigation; the navigation-related content in that document's earlier sections (1, 4, 5,
+6, 14, 20, 21, 22, 23, 25) is superseded but retained as historical record, per that
+document's own no-silent-rewrite discipline.
+
+**Rationale:**
+
+- Home = financial health at a glance (balance, income/expense, budget/goal status,
+  upcoming) — unchanged in purpose from the previous shell.
+- Activity = financial history (the full transaction ledger) — gets its own permanent
+  slot rather than being reached only through Home links.
+- Add = capture (Expense / Income / Transfer) — unchanged center action.
+- Accounts = money locations and what is owed (cash, bank, cards, credit-card
+  liabilities) — promoted to a primary top-level tab because it is a core financial
+  object, not a secondary tool. It was previously reachable only via a Home shortcut and
+  a Profile row.
+- More = planning tools, recurring, preferences, identity/security, and about — the
+  destination Profile previously occupied, renamed and reorganized (Planning / Recurring
+  / Money Tools / Organization / Personalization / Cloud & Security / About) to match what
+  it actually contains now that Accounts has moved out of it. Profile itself was judged
+  too low-frequency a *destination* to keep a permanent primary slot once Accounts needed
+  one; its content is not dropped, only relocated under More.
+- This five-destination shell is deliberately structured so that V2 growth — Assets &
+  Liabilities (under Accounts), Receipt Scanner/OCR and Family Wallet (under More /
+  +Add), a richer Activity, and receipt-assisted +Add capture — fits inside the existing
+  five destinations without requiring another shell redesign. Receipt OCR remains the
+  first major V2 feature (per ADR-029); Family Wallet remains V2, gated on cloud
+  identity/sync/permissions/invites/conflict handling/audit as recorded in
+  `docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md` §13.
+
+**Explicitly rejected:** copying the user-supplied eight-screen UI reference's own
+navigation row (Home / Accounts / + / Budgets / More) verbatim. That reference keeps
+Budgets as a permanent tab and has no Activity slot; this decision instead gives Activity
+the permanent slot and keeps Budgets as a linked page reachable from Home and More. The
+reference image's navigation was not treated as authoritative even under the previous
+navigation decision, and remains non-authoritative here — only the reference's visual
+language (section 17 of doc 22) is a design target, not its tab bar. Profile, Categories,
+and Budgets are explicitly excluded from the bottom-navigation destination set.
+
+**Scope of this decision: information architecture only.** This ADR and
+`docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md` §26 freeze the approved navigation
+structure for future implementation. They do not modify `AppShell`, `GoRouter`, any
+navigation widget, production Dart, tests, database schema, or localization resources.
+`AppShell`/`app_router.dart` at HEAD `02dd471` continue to implement the previous
+four-destination shell; implementing the five-destination shell approved here is future
+work for a separate, explicitly scoped implementation checkpoint. No Dart, test, schema,
+or routing files were touched to record this decision, and nothing was staged or
+committed by it.
+
+Reason: the product owner determined that Accounts — where money is held and what is
+owed — needed to be a primary navigation destination rather than a secondary shortcut,
+and that this could not be done by simply adding a fifth slot to the existing shell
+without also reconsidering which destination it displaced. Profile's tool-directory role
+survives under a new name (More) rather than being removed, and the resulting
+architecture is designed to absorb the product's near-term V2 roadmap (wealth, OCR,
+household sharing) without forcing a second navigation redesign later.
