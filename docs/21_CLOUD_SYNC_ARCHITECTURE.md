@@ -1,12 +1,21 @@
-# 21. Cloud Account + Sync Architecture (CP12.1 Audit)
+# 21. Cloud Account + Sync Architecture (CP12.1 Audit, CP12.2 Identity/Auth Foundation)
 
-Status: Architecture audit and V1 contract definition ONLY. Checkpoint
-12.1. **No cloud sync, auth, networking, or backend is implemented by
-this document or by CP12.1.** Every table below reflects the schema and
-repository code as of HEAD `2171f82` ("Complete V1 recurring and
-subscriptions"). No Drift migration was performed to produce this
-document -- see §11 for the migrations this audit determines will
-eventually be required, none of which have been applied.
+Status: §1-§14 below are CP12.1's architecture audit and V1 contract
+definition -- unchanged in substance, with a small number of inline
+"(CP12.2 update)" notes pointing forward to what was actually decided.
+CP12.1 itself implemented no cloud sync, auth, networking, or backend.
+Every numbered table in §1-§14 still reflects the schema and repository
+code as of HEAD `2171f82` ("Complete V1 recurring and subscriptions") --
+CP12.2's actual schema/code changes are documented separately in the
+"CP12.2 Implementation Record" section near the end of this document,
+rather than by rewriting the CP12.1 audit tables in place.
+
+**CP12.2 (Cloud Identity / Auth Foundation) is implemented** -- see that
+section. It still implements no financial-data synchronization, no
+mutation queue, and does not touch `sync_version`/`sync_status`
+semantics; the app remains fully usable locally without authentication,
+exactly as this document's governing constraint (immediately below)
+requires.
 
 This document is authoritative for the sync/cloud-identity topics it
 covers. It does not override `00_MASTER_BLUEPRINT.md`, `03_DATABASE_SCHEMA.md`,
@@ -481,6 +490,17 @@ Drift database, never in a synced table (§9).
   which already reserves this space -- this document does not re-decide
   it and CP12.2-12.7 must not attempt it.
 
+**(CP12.2 update)** The `profile_id` <-> `cloud_user_id` link this
+section calls "a real decision for CP12.2, not decided here" is now
+decided and implemented -- a new, tiny, dedicated local table
+(`cloud_account_links`), not a nullable column on `profiles`. See the
+"CP12.2 Implementation Record" section near the end of this document for
+the exact schema, the auth/session provider abstraction, the different-
+account-safety mechanism, and everything else this checkpoint actually
+built. Account deletion (mentioned above as "flagged as a CP12.2+
+decision") remains genuinely undecided and unimplemented -- CP12.2 did
+not touch it; it stays a later checkpoint's decision.
+
 ---
 
 ## 4. V1 sync record / envelope contract
@@ -896,17 +916,40 @@ event replay/rebuild-state-from-events capability for V1).
 
 ## 11. Migration / compatibility audit
 
-**Will V1 sync require a Drift schema migration? Yes, but a small,
-additive one -- go decision: proceed, with the specific additive changes
-below, none of which touch existing data shape or existing columns.**
+**Will V1 sync require a Drift schema migration? Yes -- go decision:
+proceed. Precisely two additive schema migrations are committed for
+CP12.3 (one for `categories`, one for `accounts`, detailed below); a
+third table, `transaction_exchange_rates`, is explicitly NOT committed
+to a migration here -- see the note after the table. None of the
+committed changes touch existing data shape or existing columns.**
 
-| Table | Field/index/constraint | Reason | Backfill | Compatibility |
+*(Correction, CP12.2: an earlier summary of this section referred to
+"four small, additive migrations." That count was a documentation
+miscount, not a fourth hidden migration -- it came from counting the
+table below's individual rows (`categories` was split into three
+illustrative rows) rather than counting migrations-per-table. The table
+below now groups each table's changes into a single row so this doesn't
+recur, and the correct count -- two committed migrations, one explicitly
+deferred/conditional -- is stated plainly above.)*
+
+**Two committed migrations** (one row each -- each is a single schema
+version bump adding all of that table's listed columns together, not
+one bump per column):
+
+| Table | Fields added | Reason | Backfill | Compatibility |
 |---|---|---|---|---|
-| `categories` | add `created_at`, `updated_at` (`DateTimeColumn`, not nullable) | Every other syncable table already has both; sync needs them to order/timestamp category mutations the same way as every other entity. | Backfill every existing row's `created_at`/`updated_at` to the migration's own run time (there is no earlier authentic timestamp to recover -- the same "no historical data existed before this column existed" situation `theme_preference`'s v6 migration already handled). | Additive only; no existing column changes shape; `CategoryRepository`'s existing read/write paths are unaffected until they're deliberately updated to populate these. |
-| `categories` | add `deleted_at` (`DateTimeColumn`, nullable) | No delete path exists at all today (§1.3) -- sync needs a tombstone mechanism before a category can ever be safely deleted across devices. | `NULL` for every existing row (nothing is deleted yet). | Additive; every existing read path in `CategoryRepository` already has no `deleted_at` filter to break, since none exists yet -- this migration and the repository-layer work to actually filter/write it are two separate, sequenced steps (schema first, behavior in CP12.3+). |
-| `categories` | add `sync_version` (`IntColumn`, default `0`), `sync_status` (`TextColumn`, default `'localOnly'`) | Bring this table in line with every schema-v2-onward table's existing placeholder pair (§1.14). | Every existing row defaults to `0`/`'localOnly'`, identical to how every other table's existing rows already sit. | Additive; matches the established v2+ precedent exactly, so this is the least risky migration in this list. |
-| `accounts` | add `sync_version` (`IntColumn`, default `0`), `sync_status` (`TextColumn`, default `'localOnly'`) | `accounts` is the only other financial table missing this pair (§1.4) -- everything created from schema v2 onward already has it. | Same as above. | Additive; no existing column changes shape. |
-| `transaction_exchange_rates` | add `created_at`, `updated_at`, `deleted_at`, `sync_version`, `sync_status` | Bring this dormant table up to the same shape as every other table, **only if/when it is actually wired into a live feature** -- there is no urgency while it holds zero production rows (§1.11). | N/A while empty; trivial backfill if ever needed. | Additive; genuinely zero risk while unused, so this can be deferred past CP12.1-12.7 without blocking V1 sync of the tables that actually matter. |
+| `categories` | `created_at`, `updated_at` (`DateTimeColumn`, not nullable); `deleted_at` (`DateTimeColumn`, nullable); `sync_version` (`IntColumn`, default `0`); `sync_status` (`TextColumn`, default `'localOnly'`) | Every other syncable table already has all four of these (§1.14); `categories` currently has none, and has no delete path at all today (§1.3) -- sync needs a tombstone mechanism before a category can ever be safely deleted across devices. | `created_at`/`updated_at` backfill to the migration's own run time (there is no earlier authentic timestamp to recover -- the same situation `theme_preference`'s v6 migration already handled); `deleted_at` backfills to `NULL` for every existing row (nothing is deleted yet); `sync_version`/`sync_status` default to `0`/`'localOnly'`, identical to every other table's existing rows. | Additive only; no existing column changes shape; `CategoryRepository`'s existing read/write paths are unaffected until they're deliberately updated (CP12.3+) to populate these. |
+| `accounts` | `sync_version` (`IntColumn`, default `0`), `sync_status` (`TextColumn`, default `'localOnly'`) | `accounts` is the only other financial table missing this pair (§1.4) -- everything created from schema v2 onward already has it. `accounts` already has `created_at`/`updated_at`/`deleted_at`, so this migration adds only these two columns. | Every existing row defaults to `0`/`'localOnly'`. | Additive; no existing column changes shape. |
+
+**One table explicitly NOT committed to a migration -- `transaction_exchange_rates`.**
+Per this checkpoint's own instruction: do not migrate it merely because
+it is reserved. It is currently unused in production (§1.11 -- nothing
+calls `attach` from any live transaction/edit flow) and no step in the
+CP12.2-CP12.7 roadmap (§14) plans to wire it up. It would need
+`created_at`/`updated_at`/`deleted_at`/`sync_version`/`sync_status`
+**only if and when** a future checkpoint actually starts writing to it
+for real; until then this is a documented possibility, not a scheduled
+migration, and no version bump is reserved for it.
 
 **Everything else in §1 already has the shape sync needs.** In
 particular, `sync_version`/`sync_status`'s *semantics* (§1.14) need real
@@ -958,7 +1001,7 @@ done correctly before this audit.
 | Server sends an unknown enum/currency | Rejected/skipped the same way, not crashed on -- `CurrencyRegistry.require` already throws a clear `ArgumentError` for an unknown code locally; the pull-apply path must catch that class of error per-record (so one bad record doesn't abort an entire pull batch) and flag it for investigation rather than silently coercing it to a guessed value. |
 | Local schema older than the server's payload shape | The client must recognize and refuse (or safely ignore unknown fields of) a payload shape newer than its own migration level, never attempt to write a field its local schema doesn't have -- this is exactly why `entity_type` + an explicit schema/shape version belongs in the eventual wire contract (a refinement of §4's envelope, decided in detail at CP12.4), so a client can tell "I don't understand this yet" from "this is valid and I should apply it." |
 | User signs out with pending local mutations | Nothing is discarded (§0/§3.4) -- the mutations remain queued locally exactly as an offline queue would; signing back in (to the *same* account) resumes pushing them normally. |
-| User signs into a **different** cloud account on the same device | This is the one case needing an explicit, deliberate product decision this document does not make unilaterally: pending mutations queued under the *previous* account must never be pushed under the new account's identity (that would corrupt ownership). Safe default: refuse to switch accounts while local mutations are still pending for the previous one, prompting the user to let sync finish first -- deferred to CP12.2 for the exact UX, but the invariant ("never push account A's queued mutation as account B") is non-negotiable regardless of which UX is chosen. |
+| User signs into a **different** cloud account on the same device | **CP12.2 update:** with no mutation queue yet (CP12.3+), there are no pending mutations to protect today -- CP12.2 implements the narrower, always-applicable half of this: `CloudAccountLinkRepository.recordSignIn` refuses the sign-in outright (`DifferentCloudAccountLinkedException`) whenever this device already has a `cloud_account_links` row for a different `cloud_user_id`, with no reset/merge flow. The mutation-queue-aware version of this decision (safe default: refuse to switch while mutations are pending, or a deliberate reset flow) remains CP12.5/CP12.6's to design once a queue actually exists; the invariant ("never push account A's queued mutation as account B") is unaffected either way. |
 | User reinstalls the app | All local data is lost (confirmed in §3.4 -- this is today's actual behavior, not hypothetical); signing back in on the fresh install triggers a full pull that reconstructs local state from the server. Until that first pull completes, the local app is in the same "no data yet" state as a genuinely new user -- never a false empty state presented as if it were a legitimate empty account. |
 | Server unavailable for several days | Every local feature keeps working (§0) -- the mutation queue simply grows (bounded only by local disk, §7) and retries with backoff; nothing about the app degrades locally just because sync hasn't succeeded recently. Once the server returns, the queue drains in the ordering §7 already defines. |
 
@@ -1034,16 +1077,23 @@ The checkpoint's proposed shape is well-matched to this audit's findings
 and is adopted as-is, with the audit's own specific findings folded into
 each step's scope:
 
-- **CP12.2 Identity/Auth foundation** -- implements §3: the cloud identity
-  concept, the local-profile-to-cloud-user link, session boundary, and the
-  explicit account-switch-with-pending-mutations decision §12 flags as
-  needing a real UX (not just an invariant).
+- **CP12.2 Identity/Auth foundation** -- **implemented.** See the
+  "CP12.2 Implementation Record" section below for the full detail. It
+  implements §3's cloud identity concept, the local-profile-to-cloud-user
+  link (`cloud_account_links`), and the session boundary. It deliberately
+  does NOT resolve the account-switch-with-pending-mutations UX §12
+  flags -- there is no mutation queue yet for a pending mutation to
+  belong to, so that decision remains CP12.5/CP12.6's to make; CP12.2's
+  own account-switch decision (refuse different-account sign-in outright,
+  no reset/merge flow) is narrower and stands on its own.
 - **CP12.3 Local sync state + mutation queue** -- implements the
   *semantics* half of §1.14/§4/§7: gives `sync_version`/`sync_status` real
-  meaning, builds the durable local mutation queue, and applies the four
-  additive schema migrations §11 specifies (`categories`'
-  `created_at`/`updated_at`/`deleted_at`/`sync_version`/`sync_status`,
-  `accounts`' `sync_version`/`sync_status`). This step touches schema and
+  meaning, builds the durable local mutation queue, and applies the TWO
+  committed additive schema migrations §11 specifies (`categories`'
+  `created_at`/`updated_at`/`deleted_at`/`sync_version`/`sync_status` in
+  one version bump; `accounts`' `sync_version`/`sync_status` in another).
+  `transaction_exchange_rates` stays deferred/conditional, not scheduled
+  here or anywhere in this roadmap (§11). This step touches schema and
   is exactly the kind of "no code changes unless absolutely necessary"
   work CP12.1 deliberately deferred rather than doing prematurely.
 - **CP12.4 Backend sync API + PostgreSQL persistence** -- implements §8:
@@ -1064,6 +1114,251 @@ No step in this sequence changes V1 product scope -- every capability
 audited in §1/§2 keeps working exactly as it does today, offline, for the
 entire CP12.2-12.7 sequence, until the day sync is actually turned on for
 a given user.
+
+---
+
+## CP12.2 Implementation Record (Cloud Identity / Auth Foundation)
+
+This section documents what CP12.2 actually built, as decided against
+the V1 contract §3 lays out. Scope boundary, restated: no financial-data
+synchronization, no mutation queue, no `sync_version`/`sync_status`
+changes -- all still genuinely unimplemented, exactly as before this
+checkpoint.
+
+### CP12.2.1 Migration-wording correction (resolved first, per this
+checkpoint's own instruction)
+
+CP12.1's final chat report said "four small, additive migrations." §11's
+table actually specified two committed migrations (`categories`,
+`accounts`) plus one explicitly-deferred/conditional table
+(`transaction_exchange_rates`) -- a documentation miscount from an
+earlier draft of §11's table that listed `categories`' four new columns
+across three separate illustrative rows, not a real fourth migration.
+Fixed in §11's intro/table, §14's roadmap bullet, and
+`docs/14_DECISION_LOG.md` ADR-032 -- `transaction_exchange_rates` was NOT
+migrated as part of this correction (or at all in CP12.2); it remains
+exactly as dormant/unused as CP12.1 found it.
+
+### CP12.2.2 Identity architecture
+
+Two separate concepts, per §3.2, now both real:
+
+- **LOCAL PROFILE** (`profiles`) -- completely unchanged. CP12.2 adds no
+  column to it and no code path anywhere writes cloud-identity data into
+  it.
+- **CLOUD IDENTITY** -- represented by `CloudAuthSession`
+  (`lib/core/cloud_identity/cloud_auth_session.dart`), an immutable value
+  holding nothing but a server-assigned `cloudUserId`. No token, no
+  email, no display name -- V1 has no real backend to source any of that
+  from truthfully yet.
+
+The link between them is `CloudAccountLinks`, a new local-only Drift
+table -- see CP12.2.4.
+
+### CP12.2.3 Auth/session provider abstraction
+
+`CloudAuthProvider` (`lib/core/cloud_identity/cloud_auth_provider.dart`)
+is the abstract interface every UI/domain call site depends on --
+`isAvailable`, `watchSession()`, `signIn()`, `signOut()`. No UI or domain
+code imports a vendor SDK or talks to a concrete backend directly.
+
+Two implementations exist:
+
+- **`UnavailableCloudAuthProvider`** (production's ONLY implementation,
+  wired with no override in `cloud_account_providers.dart`
+  `cloudAuthProviderProvider`): `isAvailable` is always `false`,
+  `watchSession()` always emits `null`, `signIn()` always throws
+  `CloudAuthNotConfiguredException`. There is no code path in this class
+  that can produce a non-null session -- "do not fake successful
+  production authentication" is true by construction, not convention.
+- **`InMemoryCloudAuthProvider`** (development/test only, never imported
+  by `lib/main.dart`/`lib/app/app.dart`): a deterministic, purely
+  in-memory fake. `isAvailable` is always `true`; sessions are
+  fabricated locally and never reach a network. Exposes a
+  `signInAs(cloudUserId)` method (outside the interface) so tests can
+  simulate a specific account, and a `simulateSessionDroppedWithoutSignOut()`
+  hook for exercising session-expiry reconciliation without a real
+  backend to expire a real token against.
+
+A real FastAPI-backed implementation is explicitly deferred CP12.3+ work
+(see "Deferred work" below) -- adding it later means adding one new class
+behind this same interface, never changing the interface's shape or any
+call site.
+
+### CP12.2.4 Database migration -- `cloud_account_links`
+
+Schema version bumped 7 -> 8. Exactly one new table, purely additive, no
+existing table changed shape, no existing row read/rewritten/deleted, no
+backfill (every pre-existing install has zero rows in the new table --
+there is nothing to backfill a local-only install with).
+
+**Table**: `cloud_account_links` (`lib/core/database/tables.dart`
+`CloudAccountLinks`).
+
+| Column | Type | Why it exists |
+|---|---|---|
+| `profile_id` | `TEXT` (references `profiles.id`), **primary key** | Natural key, not a surrogate `id` -- same departure `reference_exchange_rates` already established in this schema (§11/CP9.3). V1 supports "zero or one active cloud account on a device," and Beta 0/1 already guarantee at most one local profile per install, so at most one legitimate row per install follows by construction rather than by an unenforced application rule. |
+| `cloud_user_id` | `TEXT` | The stable, server-assigned identity (§3.2). Deliberately KEPT after sign-out -- this is what lets `recordSignIn` detect and refuse a different-account sign-in even after an explicit sign-out (CP12.2.5). |
+| `status` | `TEXT` (`'active'` \| `'signedOut'` \| `'sessionExpired'`, via `CloudAccountLinkStatus`) | The 3 persisted states behind the UI's 4th (`unavailable`, which is never persisted -- it is purely a live derivation from `CloudAuthProvider.isAvailable`, see CP12.2.6). |
+| `linked_at` | `DATETIME` | When this profile was FIRST linked to `cloud_user_id`. Never advanced by a later sign-out/sign-back-in into the SAME account. |
+| `updated_at` | `DATETIME` | Advances on every state transition -- same convention every other table in this schema already uses. |
+
+**What is deliberately NOT stored**: no access/refresh token, no
+password, no secret of any kind (enforced by a repository test that
+asserts no column name contains `token`/`password`/`secret`); no email,
+display name, or other cloud-profile field (V1 has no backend to source
+them from); no `device_id`/install id (not needed to satisfy "zero or
+one active cloud account on a device," since this table is already
+scoped to the single local profile via `profile_id`); no
+`deleted_at`/`sync_version`/`sync_status` (this is device-local link
+bookkeeping, never synced user data -- see §10's "what must NOT sync"
+boundary, which this table respects by construction rather than by
+convention).
+
+**Migration/backfill behavior**: `if (from < 8) await m.createTable(cloudAccountLinks);`
+in `AppDatabase.migration`'s `onUpgrade`. No backfill logic at all -- see
+above.
+
+### CP12.2.5 Account-switch / sign-out safety
+
+`CloudAccountLinkRepository`
+(`lib/core/database/repositories/cloud_account_link_repository.dart`):
+
+- **`recordSignIn`**: same `cloud_user_id` as an existing link (whether
+  `active`, `signedOut`, or `sessionExpired`) -> reactivates to `active`,
+  preserving the original `linked_at`. A DIFFERENT `cloud_user_id` than
+  an existing link -> throws `DifferentCloudAccountLinkedException` and
+  writes nothing -- existing local financial data is never silently
+  reassigned between cloud users, whether or not the previous account
+  was ever explicitly signed out of. This is the minimum safe behavior
+  the checkpoint asked for: sign-in with a different account is refused
+  outright, with no reset/merge flow implemented in CP12.2.
+- **`recordSignOut`**: marks the link `signedOut`. Touches no other
+  table -- signing out never deletes or modifies local financial data
+  (verified by a repository test that creates an account + transaction,
+  signs in, signs out, and asserts both are unchanged).
+- **`recordSessionExpired`**: marks an `active` link `sessionExpired`;
+  a no-op on any link that is not currently `active` (so a reactive
+  reconciler can call it repeatedly without corrupting `updated_at` on
+  every rebuild).
+- App restart: covered by a migration-independent persistence test that
+  closes and reopens a file-backed `AppDatabase`/`CloudAccountLinkRepository`
+  and confirms the link survives.
+
+One additional safety fix made during implementation: `signInAndLinkCurrentProfile`
+(`cloud_account_providers.dart`) signs the `CloudAuthProvider` back out
+if `recordSignIn` throws `DifferentCloudAccountLinkedException` --
+otherwise the provider-level session would remain "signed in" as the
+refused account even though the repository correctly refused to persist
+that link, which would make `CloudAccountStatus.resolve` (session always
+takes precedence over the persisted link) report a misleading "signed
+in" state for an account this device's data was never actually
+associated with.
+
+### CP12.2.6 Merged UI status + reconciliation
+
+`CloudAccountStatus`
+(`lib/features/cloud_account/domain/cloud_account_status.dart`) merges
+provider availability, the live session, and the persisted link into
+exactly 4 states (`unavailable` / `localOnly` / `signedIn` /
+`sessionExpired`), precedence: provider unavailable beats everything;
+a live session beats the persisted link; an `active` link with no live
+session means `sessionExpired`; otherwise `localOnly`.
+
+`cloudAccountLinkReconcilerProvider`
+(`lib/features/cloud_account/presentation/cloud_account_providers.dart`)
+persists that `sessionExpired` derivation once a session disappears
+without an explicit sign-out -- the in-memory status is already correct
+the instant it happens; this reconciler is what makes it durable across
+a restart, watched once from `app.dart`'s root build (same
+plain-`Provider<void>`-kept-alive shape as the existing recurring-
+reminder reconciler).
+
+### CP12.2.7 Secure-storage boundary (defined, not yet backed by a real
+implementation -- and why that's correct for V1)
+
+`SecureTokenStore` (`lib/core/cloud_identity/secure_token_store.dart`)
+defines the interface CP12.2 was asked for ("do not store access/refresh
+tokens in ordinary Drift tables; define a secure-storage boundary").
+Only implementation shipped: `InMemorySecureTokenStore`, development/
+test only.
+
+**No dependency was added, and none was needed**: production has no real
+backend (`UnavailableCloudAuthProvider` never produces a real session),
+so there is currently no real token for any implementation to protect.
+**Recommendation for whichever future checkpoint first has a real token
+to persist**: `flutter_secure_storage` (Android Keystore / iOS Keychain
+backed) is the natural choice; adding it is that checkpoint's STOP-and-
+report decision, not retroactively CP12.2's.
+
+### CP12.2.8 UI
+
+New "Cloud Account" row in Profile/Settings
+(`lib/features/settings/presentation/settings_screen.dart`), reusing the
+existing `navRow`/`navGroup` idiom and a new, calm, non-status-implying
+icon tint (`_ProfileRowColors.cloudAccount`). New route
+`AppRoutes.cloudAccount` (`/cloud-account`), registered as a plain
+top-level `GoRoute`, same no-new-bottom-nav-destination pattern as
+Theme Customization/Currency Converter.
+
+New screen `CloudAccountScreen`
+(`lib/features/cloud_account/presentation/cloud_account_screen.dart`):
+renders exactly one of the 4 `CloudAccountStatus` states via the shared
+`AppStatusChip` plus an explanatory sentence, with a Sign in/Sign out
+button where applicable. Never renders "Synced"/"Backed up"/"Up to
+date" -- no string in this checkpoint's ARB additions says any of those,
+and a widget test asserts their absence from the rendered `unavailable`
+state (the only state a real production user can reach today). A
+different-account sign-in attempt shows a blocking `AlertDialog`
+("Can't switch cloud accounts") rather than surfacing
+`DifferentCloudAccountLinkedException` as an unhandled error.
+
+### CP12.2.9 Localization
+
+15 new ARB keys added to both `lib/l10n/app_en.arb` and
+`lib/l10n/app_ja.arb` (`cloudAccountSectionTitle` through
+`cloudAccountDialogDismissLabel`), and hand-synced into the 3 generated
+files (`app_localizations.dart`, `app_localizations_en.dart`,
+`app_localizations_ja.dart`) -- the ARB->Dart `flutter gen-l10n` step
+cannot run in this sandbox, so these were kept in exact sync by hand,
+the same discipline every earlier localization checkpoint in this
+project used.
+
+### CP12.2.10 Tests
+
+New test files: `cloud_account_link_repository_test.dart` (in-memory +
+on-disk persistence), `cloud_account_links_migration_test.dart` (v7->v8
+upgrade + fresh-v8 `onCreate`), `unavailable_cloud_auth_provider_test.dart`,
+`in_memory_cloud_auth_provider_test.dart`, `cloud_account_status_test.dart`
+(the full resolve() decision table), `cloud_account_reconciler_test.dart`,
+`cloud_account_screen_test.dart` (widget tests: production-default
+"unavailable" state and the Synced/Backed-up/Up-to-date absence check,
+full localOnly -> signedIn -> localOnly cycle, session-expiry
+reconciliation, the different-account dialog, Japanese localization,
+320px-width + 1.6x-text-scale compatibility). No existing test was
+modified or weakened.
+
+### CP12.2.11 Deferred work (explicitly not done in CP12.2)
+
+- A real backend-backed `CloudAuthProvider` implementation (FastAPI --
+  §8). Requires selecting/confirming an auth mechanism, which is a
+  STOP-and-report decision for whichever checkpoint does this.
+  A real `SecureTokenStore` implementation (`flutter_secure_storage` or
+  equivalent) -- see CP12.2.7's recommendation, same STOP-and-report
+  requirement, needed at the same time as the real backend since only
+  then does a real token exist to protect.
+- Account deletion (§3.4 flags this as undecided; still undecided).
+- The mutation-queue-aware account-switch UX §12's failure-mode table
+  originally deferred to CP12.2 -- narrowed and partially resolved
+  (CP12.2.5's outright refusal), but the queue-aware version (refuse
+  while mutations are pending vs. an explicit reset flow) needs a real
+  queue to exist first (CP12.3+).
+- Any UI reset/merge flow for switching cloud accounts on a device with
+  existing local data -- V1 implements only the minimum safe behavior
+  (refuse outright); a later checkpoint may add an explicit "wipe this
+  device's local data to switch accounts" flow if the product decides
+  that's worth building.
+
 
 ---
 

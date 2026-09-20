@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/accounts/presentation/accounts_screen.dart';
 import '../../features/budgets/presentation/budgets_screen.dart';
+import '../../features/cloud_account/presentation/cloud_account_screen.dart';
 import '../../features/categories/presentation/categories_screen.dart';
 import '../../features/settings/presentation/currency_converter_screen.dart';
 import '../../features/dashboard/presentation/home_screen.dart';
@@ -98,6 +99,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.currencyConverter,
         builder: (context, state) => const CurrencyConverterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.cloudAccount,
+        builder: (context, state) => const CloudAccountScreen(),
       ),
     ],
   );

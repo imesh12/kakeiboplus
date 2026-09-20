@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_database.dart';
 import 'repositories/account_repository.dart';
 import 'repositories/budget_repository.dart';
+import 'repositories/cloud_account_link_repository.dart';
 import 'repositories/category_repository.dart';
 import 'repositories/currency_repository.dart';
 import 'repositories/profile_repository.dart';
@@ -80,4 +81,15 @@ final Provider<RecurringOccurrenceRepository> recurringOccurrenceRepositoryProvi
     ref.watch(recurringRuleRepositoryProvider),
     ref.watch(transactionRepositoryProvider),
   ),
+);
+
+/// Checkpoint 12.2 (Cloud Identity / Auth Foundation). Same
+/// single-argument `Provider<AppDatabase>`-only wiring shape as
+/// [profileRepositoryProvider] -- this repository has no cross-
+/// repository dependency (it only ever reads/writes its own
+/// `cloud_account_links` table, keyed by a `profileId` string its
+/// callers already have via `activeProfileProvider`).
+final Provider<CloudAccountLinkRepository> cloudAccountLinkRepositoryProvider =
+    Provider<CloudAccountLinkRepository>(
+  (ref) => CloudAccountLinkRepository(ref.watch(appDatabaseProvider)),
 );

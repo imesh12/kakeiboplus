@@ -1596,17 +1596,24 @@ generated IDs for offline-first writes"*), not something CP12.1 had to
 retrofit. Go/no-go answer for CP12.2+: **GO** — no ID scheme blocks V1
 sync.
 
-**Schema audit finding: two small, additive gaps, and one dormant table.**
-`accounts` (a v1/Beta-0 table) never received the `sync_version`/
-`sync_status` pair every schema-v2-onward table already has.
-`categories` has none of `created_at`/`updated_at`/`deleted_at`/
-`sync_version`/`sync_status` at all, and has no update or delete method
-of any kind today. `transaction_exchange_rates` (reserved since v1,
-still unused in production — nothing calls `attach` from any live
-transaction flow yet) would need the same five columns only once/if it
-is ever wired into a real feature. None of this blocks CP12.1; all three
-are additive migrations for CP12.3, specified in `docs/21_CLOUD_SYNC_ARCHITECTURE.md`
-§11.
+**Schema audit finding: two small, additive gaps, and one dormant table
+-- corrected, CP12.2.** `accounts` (a v1/Beta-0 table) never received
+the `sync_version`/`sync_status` pair every schema-v2-onward table
+already has. `categories` has none of
+`created_at`/`updated_at`/`deleted_at`/`sync_version`/`sync_status` at
+all, and has no update or delete method of any kind today. These two
+gaps are the only migrations actually committed for CP12.3, specified in
+`docs/21_CLOUD_SYNC_ARCHITECTURE.md` §11. `transaction_exchange_rates`
+(reserved since v1, still unused in production — nothing calls `attach`
+from any live transaction flow yet) is explicitly **not** a third
+committed migration -- it would need the same five columns only once/if
+it is ever wired into a real feature, and no step in the CP12.2-CP12.7
+roadmap plans to do so. (CP12.1's original final report described this
+as "four small, additive migrations," miscounting an earlier version of
+§11's table that listed `categories`' columns across three separate
+rows; §11 now states the count as two committed migrations plus one
+explicitly deferred/conditional table, and this entry is corrected to
+match.) None of this blocks CP12.1 or CP12.2.
 
 **Schema audit finding: `sync_version`/`sync_status` are inert
 placeholders today, not yet real state.** Every write path across every
@@ -1693,3 +1700,107 @@ changed, no schema migrated, nothing to `flutter analyze`/`flutter test`
 beyond what CP11's baseline already covers) — the deliverable is
 `docs/21_CLOUD_SYNC_ARCHITECTURE.md` plus this entry. CP12.2 begins
 implementation against the contract this entry and that document define.
+
+## ADR-033 — Checkpoint 12.2: cloud identity / auth foundation (no financial sync, no mutation queue)
+
+Context: `docs/21_CLOUD_SYNC_ARCHITECTURE.md` (CP12.1) defined the V1
+cloud identity/account contract (§3) without implementing any of it.
+CP12.2's task was to implement exactly that contract's minimum
+foundation — a local representation of "this profile is linked to one
+authenticated cloud user," a replaceable auth/session provider boundary,
+and the UI to show it — while explicitly not implementing financial-data
+synchronization, the mutation queue, or any change to
+`sync_version`/`sync_status` semantics.
+
+**Identity decision: LOCAL PROFILE and CLOUD IDENTITY stay two separate
+concepts, exactly as §3.2 specified — `profiles` is untouched.** The link
+between them is a new, tiny, local-only table (`cloud_account_links`),
+not a nullable column added to `profiles` — keeping the existing
+profile's access pattern (`ProfileRepository`'s "exactly one row per
+install" contract) completely unchanged, and keeping cloud-identity
+bookkeeping out of a table that is also-read/written for ordinary
+locale/theme preference edits.
+
+**Schema decision: one additive migration, schema version 7 -> 8, one
+new table, no backfill.** `cloud_account_links` uses `profile_id` (a
+foreign key into `profiles`) as its PRIMARY KEY rather than a surrogate
+`id` — the same natural-key departure `reference_exchange_rates`
+established in ADR-011/CP9.3, for the same reason: V1 supports at most
+one cloud account per device, and Beta 0/1 already guarantee at most one
+local profile per install, so a natural key makes "at most one row" true
+by construction rather than by an unenforced application rule. The table
+deliberately has no `deleted_at`/`sync_version`/`sync_status` — this is
+device-local link bookkeeping (which cloud account THIS INSTALL
+currently considers itself linked to), never synced user data, per
+`docs/21_CLOUD_SYNC_ARCHITECTURE.md` §10's "what must not sync" boundary.
+It stores no token, password, or secret of any kind, and no email or
+display name (V1 has no real backend to source those from truthfully).
+
+**Auth provider decision: an abstract `CloudAuthProvider` interface, two
+implementations, exactly one of which production ever sees.**
+`UnavailableCloudAuthProvider` is production's only implementation —
+`isAvailable` is permanently `false`, `signIn()` always throws rather
+than fabricating a session, matching the checkpoint's explicit "do NOT
+fake successful production authentication" instruction as a structural
+guarantee rather than a convention someone could accidentally violate
+later. `InMemoryCloudAuthProvider` is a clearly-labeled, purely
+in-memory development/test-only fake, never imported by
+`lib/main.dart`/`lib/app/app.dart`.
+
+**Dependency decision: no new package was added, and the checkpoint's
+STOP-before-adding-a-dependency instruction was not triggered.** No real
+backend exists yet, so production never has a real token to persist —
+there is nothing today for a real `flutter_secure_storage`-backed
+`SecureTokenStore` implementation to protect. The interface is defined
+now (`lib/core/cloud_identity/secure_token_store.dart`) so that a future
+checkpoint that adds both a real backend and a real token only ever adds
+one new class behind it; adding `flutter_secure_storage` (the recommended
+choice when that day comes) is that future checkpoint's STOP-and-report
+decision, not retroactively this one's.
+
+**Account-switch-safety decision: refuse a different-account sign-in
+outright; no reset/merge flow.** `CloudAccountLinkRepository.recordSignIn`
+throws `DifferentCloudAccountLinkedException` whenever this device
+already has a link to a cloud account other than the one being signed
+into — including after an explicit sign-out, since `cloud_user_id` is
+deliberately remembered across a sign-out specifically to make this
+detectable. This is the minimum safe behavior the checkpoint asked for:
+existing local financial data is never silently reassigned between cloud
+users, full stop, with no UI path around it in V1. `§12`'s original
+"deferred to CP12.2 for the exact UX" note (in
+`docs/21_CLOUD_SYNC_ARCHITECTURE.md`) is only partially resolved by this
+— the mutation-queue-aware version of that decision (refuse while
+mutations are pending vs. an explicit reset flow) still needs a real
+queue to exist first, and remains CP12.5/CP12.6's to design.
+
+**UI decision: 4 truthful states, never a sync claim.** The new Cloud
+Account screen renders `unavailable` / `local-only` / `signed in` /
+`session expired` via the existing `AppStatusChip`, and never renders
+"Synced," "Backed up," or "Up to date" in any state — those claims would
+be false today (financial sync does not exist) regardless of which of
+the 4 identity states is active. `unavailable` is the only state a real
+production user can reach in this checkpoint, since
+`UnavailableCloudAuthProvider` is production's only provider.
+
+No Dart production code outside the paths listed above (and the small
+`app.dart`/`settings_screen.dart`/`app_routes.dart`/`app_router.dart`/
+`providers.dart` wiring edits) was touched. No existing test was
+weakened. `docs/design/` was not inspected or modified.
+
+Reason: CP12.1 identified identity/auth as the one piece of the sync
+architecture that could be built safely before any backend exists,
+precisely because its correct V1 shape is "truthfully represent that
+nothing real has happened yet" rather than "talk to a real system."
+Building the abstraction boundary now — with a truthful production
+implementation and a clearly-fake development one behind the same
+interface — means the eventual real backend integration (CP12.3+)
+changes zero call sites, only adds one class.
+
+Status: Approved 2026-09-20 (Checkpoint 12.2 — cloud identity / auth
+foundation implemented; no financial-data sync, no mutation queue, no
+`sync_version`/`sync_status` change). Windows verification required:
+`dart run build_runner build --delete-conflicting-outputs`, then
+`flutter analyze` and `flutter test` against this branch — see this
+checkpoint's final report for the exact focused test files. CP12.3
+begins the local sync-state/mutation-queue work against the schema
+migrations `docs/21_CLOUD_SYNC_ARCHITECTURE.md` §11 already specifies.

@@ -793,4 +793,55 @@ class AppLocalizationsJa extends AppLocalizations {
   String favoritePairsLimitReachedMessage(int limit) {
     return 'お気に入りの通貨ペアは最大$limit件まで保存できます。';
   }
+
+  @override
+  String get cloudAccountSectionTitle => 'クラウドアカウント';
+
+  @override
+  String get cloudAccountStatusChipUnavailable => '利用不可';
+
+  @override
+  String get cloudAccountStatusChipLocalOnly => 'ローカルのみ';
+
+  @override
+  String get cloudAccountStatusChipSignedIn => 'サインイン済み';
+
+  @override
+  String get cloudAccountStatusChipSessionExpired => 'セッション期限切れ';
+
+  @override
+  String get cloudAccountUnavailableExplanation =>
+      'このバージョンではクラウドアカウントはまだ利用できません。入力したデータはすべてこの端末内に保存されます。';
+
+  @override
+  String get cloudAccountLocalOnlyExplanation => 'サインインしていません。データはこの端末にのみ保存されます。';
+
+  @override
+  String cloudAccountSignedInExplanation(String cloudUserId) {
+    return 'クラウドアカウント $cloudUserId でサインイン中です。財務データの同期はまだ利用できません -- これはサインイン状態を記憶するだけです。';
+  }
+
+  @override
+  String get cloudAccountSessionExpiredExplanation =>
+      'クラウドのセッションが期限切れになりました。続けるには再度サインインしてください。この端末に保存されているデータには影響ありません。';
+
+  @override
+  String get cloudAccountSignInButtonLabel => 'サインイン';
+
+  @override
+  String get cloudAccountSignOutButtonLabel => 'サインアウト';
+
+  @override
+  String get cloudAccountSignOutNeverDeletesLocalDataNote =>
+      'サインアウトしても、この端末に保存されたデータが削除されることはありません。';
+
+  @override
+  String get cloudAccountDifferentAccountDialogTitle => 'クラウドアカウントを切り替えられません';
+
+  @override
+  String get cloudAccountDifferentAccountDialogMessage =>
+      'この端末は既に別のクラウドアカウントに関連付けられています。既存のローカルデータがある端末で別のクラウドアカウントに切り替えることは、現在のバージョンではサポートされていません。ローカルデータは変更されていません。';
+
+  @override
+  String get cloudAccountDialogDismissLabel => 'OK';
 }

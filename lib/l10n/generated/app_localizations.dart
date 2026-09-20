@@ -1521,6 +1521,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You can save up to {limit} favorite pairs.'**
   String favoritePairsLimitReachedMessage(int limit);
+
+  /// No description provided for @cloudAccountSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Account'**
+  String get cloudAccountSectionTitle;
+
+  /// No description provided for @cloudAccountStatusChipUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get cloudAccountStatusChipUnavailable;
+
+  /// No description provided for @cloudAccountStatusChipLocalOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Local only'**
+  String get cloudAccountStatusChipLocalOnly;
+
+  /// No description provided for @cloudAccountStatusChipSignedIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in'**
+  String get cloudAccountStatusChipSignedIn;
+
+  /// No description provided for @cloudAccountStatusChipSessionExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired'**
+  String get cloudAccountStatusChipSessionExpired;
+
+  /// No description provided for @cloudAccountUnavailableExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud accounts aren\'t available in this version yet. Everything you enter stays on this device.'**
+  String get cloudAccountUnavailableExplanation;
+
+  /// No description provided for @cloudAccountLocalOnlyExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re not signed in. Your data stays on this device only.'**
+  String get cloudAccountLocalOnlyExplanation;
+
+  /// cloudAccountSignedInExplanation
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in with cloud account {cloudUserId}. Syncing your financial data isn\'t available yet -- this only remembers who you\'re signed in as.'**
+  String cloudAccountSignedInExplanation(String cloudUserId);
+
+  /// No description provided for @cloudAccountSessionExpiredExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Your cloud session expired. Sign in again to continue. Nothing stored on this device has been affected.'**
+  String get cloudAccountSessionExpiredExplanation;
+
+  /// No description provided for @cloudAccountSignInButtonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in'**
+  String get cloudAccountSignInButtonLabel;
+
+  /// No description provided for @cloudAccountSignOutButtonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get cloudAccountSignOutButtonLabel;
+
+  /// No description provided for @cloudAccountSignOutNeverDeletesLocalDataNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing out never deletes anything saved on this device.'**
+  String get cloudAccountSignOutNeverDeletesLocalDataNote;
+
+  /// No description provided for @cloudAccountDifferentAccountDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t switch cloud accounts'**
+  String get cloudAccountDifferentAccountDialogTitle;
+
+  /// No description provided for @cloudAccountDifferentAccountDialogMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is already linked to a different cloud account. Switching to a new cloud account on a device with existing local data isn\'t supported yet. Your local data has not been changed.'**
+  String get cloudAccountDifferentAccountDialogMessage;
+
+  /// No description provided for @cloudAccountDialogDismissLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get cloudAccountDialogDismissLabel;
 }
 
 class _AppLocalizationsDelegate

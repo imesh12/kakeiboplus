@@ -815,4 +815,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String favoritePairsLimitReachedMessage(int limit) {
     return 'You can save up to $limit favorite pairs.';
   }
+
+  @override
+  String get cloudAccountSectionTitle => 'Cloud Account';
+
+  @override
+  String get cloudAccountStatusChipUnavailable => 'Unavailable';
+
+  @override
+  String get cloudAccountStatusChipLocalOnly => 'Local only';
+
+  @override
+  String get cloudAccountStatusChipSignedIn => 'Signed in';
+
+  @override
+  String get cloudAccountStatusChipSessionExpired => 'Session expired';
+
+  @override
+  String get cloudAccountUnavailableExplanation =>
+      'Cloud accounts aren\'t available in this version yet. Everything you enter stays on this device.';
+
+  @override
+  String get cloudAccountLocalOnlyExplanation =>
+      'You\'re not signed in. Your data stays on this device only.';
+
+  @override
+  String cloudAccountSignedInExplanation(String cloudUserId) {
+    return 'Signed in with cloud account $cloudUserId. Syncing your financial data isn\'t available yet -- this only remembers who you\'re signed in as.';
+  }
+
+  @override
+  String get cloudAccountSessionExpiredExplanation =>
+      'Your cloud session expired. Sign in again to continue. Nothing stored on this device has been affected.';
+
+  @override
+  String get cloudAccountSignInButtonLabel => 'Sign in';
+
+  @override
+  String get cloudAccountSignOutButtonLabel => 'Sign out';
+
+  @override
+  String get cloudAccountSignOutNeverDeletesLocalDataNote =>
+      'Signing out never deletes anything saved on this device.';
+
+  @override
+  String get cloudAccountDifferentAccountDialogTitle => 'Can\'t switch cloud accounts';
+
+  @override
+  String get cloudAccountDifferentAccountDialogMessage =>
+      'This device is already linked to a different cloud account. Switching to a new cloud account on a device with existing local data isn\'t supported yet. Your local data has not been changed.';
+
+  @override
+  String get cloudAccountDialogDismissLabel => 'OK';
 }

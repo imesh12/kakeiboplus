@@ -493,5 +493,28 @@
         "type": "int"
       }
     }
-  }
+  },
+  "cloudAccountSectionTitle": "Cloud Account",
+  "cloudAccountStatusChipUnavailable": "Unavailable",
+  "cloudAccountStatusChipLocalOnly": "Local only",
+  "cloudAccountStatusChipSignedIn": "Signed in",
+  "cloudAccountStatusChipSessionExpired": "Session expired",
+  "cloudAccountUnavailableExplanation": "Cloud accounts aren't available in this version yet. Everything you enter stays on this device.",
+  "cloudAccountLocalOnlyExplanation": "You're not signed in. Your data stays on this device only.",
+  "cloudAccountSignedInExplanation": "Signed in with cloud account {cloudUserId}. Syncing your financial data isn't available yet -- this only remembers who you're signed in as.",
+  "@cloudAccountSignedInExplanation": {
+    "description": "cloudAccountSignedInExplanation",
+    "placeholders": {
+      "cloudUserId": {
+        "type": "String"
+      }
+    }
+  },
+  "cloudAccountSessionExpiredExplanation": "Your cloud session expired. Sign in again to continue. Nothing stored on this device has been affected.",
+  "cloudAccountSignInButtonLabel": "Sign in",
+  "cloudAccountSignOutButtonLabel": "Sign out",
+  "cloudAccountSignOutNeverDeletesLocalDataNote": "Signing out never deletes anything saved on this device.",
+  "cloudAccountDifferentAccountDialogTitle": "Can't switch cloud accounts",
+  "cloudAccountDifferentAccountDialogMessage": "This device is already linked to a different cloud account. Switching to a new cloud account on a device with existing local data isn't supported yet. Your local data has not been changed.",
+  "cloudAccountDialogDismissLabel": "OK"
 }

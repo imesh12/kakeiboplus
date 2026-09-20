@@ -562,3 +562,96 @@ class ReferenceExchangeRates extends Table {
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{baseCurrency, quoteCurrency};
 }
+
+
+/// Checkpoint 12.2 (Cloud Identity / Auth Foundation): the smallest local
+/// representation of "this local profile is associated with one
+/// authenticated cloud user" -- see `docs/21_CLOUD_SYNC_ARCHITECTURE.md`
+/// §3 for the full V1 identity contract this table implements.
+///
+/// # This is device-local bookkeeping, not synced user data
+///
+/// Unlike every financial table in this file, `CloudAccountLinks` has no
+/// `deletedAt`, `syncVersion`, or `syncStatus` column, and it never will
+/// by accident: this row does not represent a user's financial fact that
+/// a future sync engine uploads/downloads -- it represents which cloud
+/// account THIS INSTALL currently considers itself linked to, which is
+/// inherently per-device metadata (CP12.1 §1.14/§9's "what must NOT
+/// sync" boundary). If a later checkpoint ever needs to sync
+/// account-linkage across a user's own devices, that is a deliberate,
+/// separately-designed feature -- not something this table drifts into
+/// by reusing the sync-metadata column shape other tables have.
+///
+/// # Primary key -- `profileId`, a natural key, same departure as
+/// [ReferenceExchangeRates]
+///
+/// V1 supports "zero or one active cloud account on a device" (see the
+/// architecture doc's §3), and Beta 0/1 already guarantee at most one
+/// local [Profiles] row per install (see [Profiles]' own doc / Beta 0
+/// scope). Composing those two constraints, at most one
+/// `CloudAccountLinks` row can ever legitimately exist per install, and
+/// it is always "the link for THIS profile" -- there is no independent
+/// identity for a link row the way [ReferenceExchangeRates]' doc
+/// explains a cache row has none either. A surrogate `id` here would
+/// only invite a second row per profile to accidentally exist with no
+/// application-level rule preventing it; the natural key prevents that
+/// by construction, the same way [ReferenceExchangeRates]'s composite
+/// key does.
+///
+/// # What is deliberately NOT stored here
+///
+/// No access token, refresh token, password, or any other secret --
+/// see `lib/core/cloud_identity/secure_token_store.dart` for where a
+/// real token would eventually live (never Drift, never this table,
+/// never any other ordinary SQL table in this schema). No email,
+/// display name, or other cloud-profile data -- V1 has no real backend
+/// to source that from yet (see `UnavailableCloudAuthProvider`'s doc),
+/// and this table only needs to answer "which cloud_user_id, if any,
+/// is this install linked to, and in what state" -- not to duplicate
+/// anything a real backend would remain the source of truth for later.
+/// No `deviceId`/install id column either -- CP12.2's instruction is
+/// explicit that a device/install id, if the approved architecture ever
+/// needs one, remains device-local and must never be treated as user
+/// identity; this table doesn't need one to satisfy "zero or one active
+/// cloud account on a device" since it's already scoped to the single
+/// local [Profiles] row via [profileId].
+class CloudAccountLinks extends Table {
+  /// The local profile this link belongs to. A natural-key reference
+  /// into [Profiles] -- see the class doc for why this (not a surrogate
+  /// `id`) is the primary key.
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// The stable, server-assigned cloud user identifier -- CP12.2's
+  /// instruction is explicit that this is "supplied by the authenticated
+  /// server/provider" and must never be manufactured locally (see
+  /// `CloudAuthSession.cloudUserId`). Deliberately kept even after
+  /// sign-out (see [status] below) -- remembering which cloud account
+  /// this install was last linked to is exactly what lets
+  /// `CloudAccountLinkRepository.recordSignIn` detect and refuse an
+  /// attempt to sign into a DIFFERENT cloud account on a device that
+  /// still has this profile's local financial data (the
+  /// `DifferentCloudAccountLinkedException` contract).
+  TextColumn get cloudUserId => text()();
+
+  /// One of [CloudAccountLinkStatus.storageValue] --
+  /// `'active'` | `'signedOut'` | `'sessionExpired'`. Deliberately a
+  /// plain `TextColumn`, not a foreign key or generated column -- same
+  /// pattern `profiles.theme_preference` already uses in this schema for
+  /// an enum-shaped value with a safe, never-throws decode on read (see
+  /// `CloudAccountLinkStatus.fromStorageValue`).
+  TextColumn get status => text()();
+
+  /// When this profile was FIRST linked to [cloudUserId]. Deliberately
+  /// never advanced by a later sign-out/sign-back-in cycle into the
+  /// SAME account -- only a genuine different-account link (which is
+  /// refused, per [cloudUserId]'s doc) or the first-ever link sets this.
+  DateTimeColumn get linkedAt => dateTime()();
+
+  /// Advances on every state transition (`recordSignIn`, `recordSignOut`,
+  /// `recordSessionExpired`) -- same convention as every other table's
+  /// `updated_at` in this schema.
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{profileId};
+}

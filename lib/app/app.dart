@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../core/database/providers.dart';
 import '../core/locale/app_locale_provider.dart';
 import '../core/routing/app_router.dart';
+import '../features/cloud_account/presentation/cloud_account_providers.dart';
 import '../features/recurring/presentation/recurring_notification_providers.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../shared/theme/app_theme.dart';
@@ -95,6 +96,12 @@ class _AiFinancialCoachAppState extends ConsumerState<AiFinancialCoachApp>
     // single `ref.watch` here is enough for it to keep reacting to
     // rule/occurrence changes for the rest of the app's lifetime.
     ref.watch(recurringNotificationReconcilerProvider);
+
+    // Checkpoint 12.2 (Cloud Identity / Auth Foundation): same
+    // single-`ref.watch`-keeps-it-alive shape as the recurring reminder
+    // reconciler immediately above -- see
+    // `cloudAccountLinkReconcilerProvider`'s own doc comment.
+    ref.watch(cloudAccountLinkReconcilerProvider);
 
     final GoRouter router = ref.watch(routerProvider);
 

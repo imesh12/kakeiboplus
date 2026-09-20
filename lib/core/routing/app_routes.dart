@@ -66,4 +66,10 @@ abstract class AppRoutes {
   /// from Profile/Settings -- no new bottom-nav destination (see
   /// `docs/14_DECISION_LOG.md` ADR-028).
   static const String currencyConverter = '/currency-converter';
+
+  /// The Cloud Account screen -- Checkpoint 12.2 (Cloud Identity / Auth
+  /// Foundation). Reached from Profile/Settings' new "Cloud Account"
+  /// row, same no-new-bottom-nav-destination pattern as
+  /// [themeCustomization]/[currencyConverter] above.
+  static const String cloudAccount = '/cloud-account';
 }

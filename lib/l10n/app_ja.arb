@@ -493,5 +493,28 @@
         "type": "int"
       }
     }
-  }
+  },
+  "cloudAccountSectionTitle": "クラウドアカウント",
+  "cloudAccountStatusChipUnavailable": "利用不可",
+  "cloudAccountStatusChipLocalOnly": "ローカルのみ",
+  "cloudAccountStatusChipSignedIn": "サインイン済み",
+  "cloudAccountStatusChipSessionExpired": "セッション期限切れ",
+  "cloudAccountUnavailableExplanation": "このバージョンではクラウドアカウントはまだ利用できません。入力したデータはすべてこの端末内に保存されます。",
+  "cloudAccountLocalOnlyExplanation": "サインインしていません。データはこの端末にのみ保存されます。",
+  "cloudAccountSignedInExplanation": "クラウドアカウント {cloudUserId} でサインイン中です。財務データの同期はまだ利用できません -- これはサインイン状態を記憶するだけです。",
+  "@cloudAccountSignedInExplanation": {
+    "description": "cloudAccountSignedInExplanation",
+    "placeholders": {
+      "cloudUserId": {
+        "type": "String"
+      }
+    }
+  },
+  "cloudAccountSessionExpiredExplanation": "クラウドのセッションが期限切れになりました。続けるには再度サインインしてください。この端末に保存されているデータには影響ありません。",
+  "cloudAccountSignInButtonLabel": "サインイン",
+  "cloudAccountSignOutButtonLabel": "サインアウト",
+  "cloudAccountSignOutNeverDeletesLocalDataNote": "サインアウトしても、この端末に保存されたデータが削除されることはありません。",
+  "cloudAccountDifferentAccountDialogTitle": "クラウドアカウントを切り替えられません",
+  "cloudAccountDifferentAccountDialogMessage": "この端末は既に別のクラウドアカウントに関連付けられています。既存のローカルデータがある端末で別のクラウドアカウントに切り替えることは、現在のバージョンではサポートされていません。ローカルデータは変更されていません。",
+  "cloudAccountDialogDismissLabel": "OK"
 }

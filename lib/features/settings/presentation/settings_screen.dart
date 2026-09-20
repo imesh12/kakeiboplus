@@ -41,6 +41,15 @@ class _ProfileRowColors {
   /// Matches `AppTheme`'s own Pink theme seed -- fitting, since this row
   /// is literally the entry point to choosing that theme.
   static const Color appearance = Color(0xFFDB2777);
+
+  /// Checkpoint 12.2 (Cloud Identity / Auth Foundation): a calm, neutral
+  /// slate/blue -- deliberately NOT [budgets]' green or any other color
+  /// that could read as a status/success signal on its own. This row's
+  /// destination truthfully shows "unavailable" for almost every real
+  /// user today (see `CloudAccountScreen`'s own doc); its icon tint
+  /// should never look like a green checkmark promising something that
+  /// isn't there yet.
+  static const Color cloudAccount = Color(0xFF64748B);
 }
 
 /// The "Profile" destination — Beta 0 keeps this to a read-only profile
@@ -232,6 +241,18 @@ class SettingsScreen extends ConsumerWidget {
                   color: _ProfileRowColors.appearance,
                   title: l10n.appearanceSectionTitle,
                   onTap: () => context.push(AppRoutes.themeCustomization),
+                ),
+                // Checkpoint 12.2 (Cloud Identity / Auth Foundation):
+                // the entry point into the Cloud Account screen -- same
+                // shared row idiom every other Settings nav row above
+                // already uses. See `CloudAccountScreen`'s own doc for
+                // why this truthfully shows "unavailable" in every
+                // production build today.
+                navRow(
+                  icon: Icons.cloud_outlined,
+                  color: _ProfileRowColors.cloudAccount,
+                  title: l10n.cloudAccountSectionTitle,
+                  onTap: () => context.push(AppRoutes.cloudAccount),
                 ),
               ]),
               Padding(
