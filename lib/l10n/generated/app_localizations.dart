@@ -740,6 +740,60 @@ abstract class AppLocalizations {
   /// **'Add'**
   String get addAccountButton;
 
+  /// No description provided for @accountFallbackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get accountFallbackTitle;
+
+  /// No description provided for @accountNoLongerAvailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This account is no longer available.'**
+  String get accountNoLongerAvailableMessage;
+
+  /// No description provided for @couldNotLoadAccountDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this account: {error}'**
+  String couldNotLoadAccountDetail(String error);
+
+  /// No description provided for @accountOpeningBalanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening balance'**
+  String get accountOpeningBalanceLabel;
+
+  /// No description provided for @accountCreatedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Created'**
+  String get accountCreatedLabel;
+
+  /// No description provided for @accountRecentActivityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent activity'**
+  String get accountRecentActivityTitle;
+
+  /// No description provided for @accountNoRecentActivityMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No recent activity for this account.'**
+  String get accountNoRecentActivityMessage;
+
+  /// No description provided for @editAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit account'**
+  String get editAccountTitle;
+
+  /// No description provided for @accountCurrencyLockedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Currency can\'t be changed after an account is created.'**
+  String get accountCurrencyLockedMessage;
+
   /// No description provided for @budgetsScreenTitle.
   ///
   /// In en, this message translates to:

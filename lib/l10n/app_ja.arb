@@ -215,6 +215,22 @@
   "accountTypeLabel": "種類",
   "cancel": "キャンセル",
   "addAccountButton": "追加",
+  "accountFallbackTitle": "口座",
+  "accountNoLongerAvailableMessage": "この口座は利用できません。",
+  "couldNotLoadAccountDetail": "この口座を読み込めませんでした: {error}",
+  "@couldNotLoadAccountDetail": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "accountOpeningBalanceLabel": "開始時の残高",
+  "accountCreatedLabel": "作成日",
+  "accountRecentActivityTitle": "最近の履歴",
+  "accountNoRecentActivityMessage": "この口座の履歴はまだありません。",
+  "editAccountTitle": "口座を編集",
+  "accountCurrencyLockedMessage": "口座を作成した後は通貨を変更できません。",
   "budgetsScreenTitle": "予算 · {month}",
   "@budgetsScreenTitle": {
     "placeholders": {

@@ -41,3 +41,15 @@ final AutoDisposeStreamProviderFamily<Transaction?, String> transactionByIdProvi
     StreamProvider.autoDispose.family<Transaction?, String>((ref, id) {
   return ref.watch(transactionRepositoryProvider).watchById(id);
 });
+
+/// Recent activity for one account -- V1 Accounts Detail + Edit
+/// Checkpoint. Active (non-deleted) transactions where the account is
+/// either the source (every type) or, for a transfer, the destination --
+/// `TransactionRepository.watchActiveForAccount` already implements this
+/// filter (pre-existing, unused before this checkpoint), so this is a
+/// thin provider wrapper, not new repository logic. Newest first, same
+/// as [activeTransactionsProvider].
+final AutoDisposeStreamProviderFamily<List<Transaction>, String> accountRecentActivityProvider =
+    StreamProvider.autoDispose.family<List<Transaction>, String>((ref, accountId) {
+  return ref.watch(transactionRepositoryProvider).watchActiveForAccount(accountId);
+});

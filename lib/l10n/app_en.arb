@@ -215,6 +215,22 @@
   "accountTypeLabel": "Type",
   "cancel": "Cancel",
   "addAccountButton": "Add",
+  "accountFallbackTitle": "Account",
+  "accountNoLongerAvailableMessage": "This account is no longer available.",
+  "couldNotLoadAccountDetail": "Could not load this account: {error}",
+  "@couldNotLoadAccountDetail": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "accountOpeningBalanceLabel": "Opening balance",
+  "accountCreatedLabel": "Created",
+  "accountRecentActivityTitle": "Recent activity",
+  "accountNoRecentActivityMessage": "No recent activity for this account.",
+  "editAccountTitle": "Edit account",
+  "accountCurrencyLockedMessage": "Currency can't be changed after an account is created.",
   "budgetsScreenTitle": "Budgets · {month}",
   "@budgetsScreenTitle": {
     "placeholders": {

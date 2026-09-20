@@ -1,38 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/currency/currency_registry.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
+import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
+import 'account_form_fields.dart';
 import 'account_providers.dart';
+import 'account_type_presentation.dart';
 
 const MoneyFormatter _formatter = MoneyFormatter();
-
-/// Localized display label for a persisted account `type` value --
-/// CP6.5. `type` is always one of `_AddAccountDialogState._accountTypes`
-/// today (a closed, dialog-created set), so mapping it to a translated
-/// label is safe and does not touch the stored value. Falls back to the
-/// raw string for any value outside that set (defensive only; not
-/// reachable through the current Add Account dialog).
-String _accountTypeLabel(AppLocalizations l10n, String type) {
-  switch (type) {
-    case 'cash':
-      return l10n.accountTypeCash;
-    case 'bank':
-      return l10n.accountTypeBank;
-    case 'card':
-      return l10n.accountTypeCard;
-    case 'wallet':
-      return l10n.accountTypeWallet;
-    default:
-      return type;
-  }
-}
 
 class AccountsScreen extends ConsumerWidget {
   const AccountsScreen({super.key});
@@ -77,7 +60,7 @@ class AccountsScreen extends ConsumerWidget {
                     final AsyncValue<Money> balanceAsync =
                         ref.watch(accountBalanceProvider(account.id));
                     final String metadata =
-                        '${_accountTypeLabel(rowL10n, account.type)} · ${account.currencyCode}';
+                        '${accountTypeDisplayLabel(rowL10n, account.type)} · ${account.currencyCode}';
                     // CP5.2b: was a bare `ListTile(title:, subtitle:,
                     // trailing:)`. Same risk as the Home account tile
                     // `ListTile` fixed in CP5.2a: `trailing` is sized
@@ -122,6 +105,14 @@ class AccountsScreen extends ConsumerWidget {
                       bordered: true,
                       margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      // V1 Accounts Detail + Edit Checkpoint: every real
+                      // account row now opens that exact account's
+                      // detail screen by its stable id, reusing
+                      // `AppCard`'s own `onTap` (it already wraps its
+                      // child in a tappable `InkWell` when `onTap` is
+                      // given) rather than adding a second gesture layer
+                      // around it.
+                      onTap: () => context.push(AppRoutes.accountDetail(account.id)),
                       child: balanceAsync.when(
                         loading: () => _AccountsRow(
                           accountId: account.id,
@@ -350,8 +341,6 @@ class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
   String _currencyCode = CurrencyRegistry.seed.first.code;
   bool _isSaving = false;
 
-  static const List<String> _accountTypes = <String>['cash', 'bank', 'card', 'wallet'];
-
   @override
   void dispose() {
     _nameController.dispose();
@@ -386,20 +375,14 @@ class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            TextFormField(
-              controller: _nameController,
-              decoration: InputDecoration(labelText: l10n.accountNameLabel),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? l10n.enterAccountNameMessage : null,
-            ),
-            DropdownButtonFormField<String>(
-              initialValue: _type,
-              decoration: InputDecoration(labelText: l10n.accountTypeLabel),
-              items: <DropdownMenuItem<String>>[
-                for (final String type in _accountTypes)
-                  DropdownMenuItem<String>(value: type, child: Text(_accountTypeLabel(l10n, type))),
-              ],
-              onChanged: (v) => setState(() => _type = v ?? _type),
+            // V1 Accounts Detail + Edit Checkpoint: name + type are now
+            // the shared `AccountIdentityFormFields` widget, so this
+            // dialog and `EditAccountScreen` render/validate them
+            // identically instead of each keeping its own copy.
+            AccountIdentityFormFields(
+              nameController: _nameController,
+              type: _type,
+              onTypeChanged: (v) => setState(() => _type = v ?? _type),
             ),
             DropdownButtonFormField<String>(
               initialValue: _currencyCode,

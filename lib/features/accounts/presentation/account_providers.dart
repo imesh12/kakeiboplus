@@ -21,6 +21,19 @@ final StreamProvider<List<AccountRow>> accountsProvider = StreamProvider<List<Ac
   yield* ref.watch(accountRepositoryProvider).watchActiveForProfile(profile.id);
 });
 
+/// Reactively resolves one account by id, or `null` once it's
+/// soft-deleted or if it never existed -- V1 Account Detail/Edit
+/// Checkpoint, the same "unavailable below the UI layer" convention
+/// `transactionByIdProvider`/`goalSummaryProvider` already use. What
+/// `AccountDetailScreen`/`EditAccountScreen` watch, so a stale or
+/// missing account id (a deep link, or an account that was archived out
+/// from under an open screen) resolves to an explicit unavailable state
+/// rather than a thrown error or stale data.
+final AutoDisposeStreamProviderFamily<AccountRow?, String> accountByIdProvider =
+    StreamProvider.autoDispose.family<AccountRow?, String>((ref, accountId) {
+  return ref.watch(accountRepositoryProvider).watchById(accountId);
+});
+
 /// The derived balance of one account, keyed by `accountId` — see
 /// `FinanceEngine.accountBalance` for why this is always computed, never
 /// read from a stored column. `.family` is used with a plain [String]

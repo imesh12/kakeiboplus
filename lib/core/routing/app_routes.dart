@@ -14,6 +14,27 @@ abstract class AppRoutes {
   static const String activity = '/activity';
   static const String profile = '/profile';
   static const String accounts = '/accounts';
+
+  /// Path template for [GoRoute] registration -- see [accountDetail] for
+  /// building an actual navigable path for a specific account id. V1
+  /// Accounts Detail + Edit Checkpoint. A pushed screen with no bottom
+  /// nav of its own (same "list is a shell destination, detail is not"
+  /// pattern [transactionDetailPath]/[goalDetailPath] already use), even
+  /// though [accounts] itself is a shell destination.
+  static const String accountDetailPath = '/accounts/:id';
+
+  /// The path for one account's read-only detail screen.
+  static String accountDetail(String id) => '/accounts/$id';
+
+  /// Path template for [GoRoute] registration -- see [editAccount] for
+  /// building an actual navigable path. Editing may not change an
+  /// account's currency or opening balance -- see
+  /// `AccountRepository.updateAccount`'s doc comment.
+  static const String editAccountPath = '/accounts/:id/edit';
+
+  /// The path for one account's edit screen.
+  static String editAccount(String id) => '/accounts/$id/edit';
+
   static const String categories = '/categories';
 
   /// The "More" destination -- V1 Navigation Shell Implementation

@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/accounts/presentation/account_detail_screen.dart';
 import '../../features/accounts/presentation/accounts_screen.dart';
+import '../../features/accounts/presentation/edit_account_screen.dart';
 import '../../features/budgets/presentation/budgets_screen.dart';
 import '../../features/cloud_account/presentation/cloud_account_screen.dart';
 import '../../features/categories/presentation/categories_screen.dart';
@@ -99,6 +101,27 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.editTransactionPath,
         builder: (context, state) =>
             EditTransactionScreen(transactionId: state.pathParameters['id']!),
+      ),
+      // V1 Accounts Detail + Edit Checkpoint: top-level siblings of
+      // the `ShellRoute` above, exactly like the transaction/goal
+      // detail+edit pairs immediately above -- `AppRoutes.accounts`
+      // itself stays a shell destination; these two do not, so
+      // `AppShell._currentIndex()`'s `startsWith(AppRoutes.accounts)`
+      // check (only ever evaluated while `AppShell` is the active
+      // ancestor) can't be triggered by either and the five-destination
+      // shell is unaffected. Registered as `/accounts/:id` and
+      // `/accounts/:id/edit` -- neither collides with the literal
+      // `/accounts` path above, so, unlike `addTransaction` vs.
+      // `transactionDetailPath`, order relative to it doesn't matter.
+      GoRoute(
+        path: AppRoutes.accountDetailPath,
+        builder: (context, state) =>
+            AccountDetailScreen(accountId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: AppRoutes.editAccountPath,
+        builder: (context, state) =>
+            EditAccountScreen(accountId: state.pathParameters['id']!),
       ),
       // V1 Navigation Shell Implementation Checkpoint: Profile moved
       // in from the ShellRoute above -- same path, same

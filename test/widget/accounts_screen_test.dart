@@ -3,6 +3,7 @@ import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
+import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/accounts_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
@@ -11,6 +12,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import '../support/rtl_harness.dart';
 
@@ -813,4 +815,73 @@ void main() {
       expect(shape.side.color, tokens.colors.subtleBorder);
     },
   );
+
+  // ---------------------------------------------------------------------
+  // V1 Accounts Detail + Edit Checkpoint: every real account row must be
+  // tappable through to that exact account's detail screen by its stable
+  // id. `appWithAccounts` above has no `GoRouter` ancestor (nothing
+  // before this checkpoint ever called `context.push` from this screen),
+  // so this group builds its own router-backed harness -- mirroring
+  // `home_screen_test.dart`'s own `appWithRouter` -- with a stub
+  // destination standing in for the real `AccountDetailScreen` (which has
+  // its own dedicated test file, `account_detail_screen_test.dart`); this
+  // group is only about *AccountsScreen* triggering navigation to the
+  // right id, not about what the detail screen itself renders.
+  // ---------------------------------------------------------------------
+  group('V1 Accounts Detail + Edit Checkpoint: navigation', () {
+    Widget appWithRouter(ProviderContainer container, {Locale locale = const Locale('en')}) {
+      final GoRouter router = GoRouter(
+        initialLocation: AppRoutes.accounts,
+        routes: <RouteBase>[
+          GoRoute(path: AppRoutes.accounts, builder: (context, state) => const AccountsScreen()),
+          GoRoute(
+            path: AppRoutes.accountDetailPath,
+            builder: (context, state) =>
+                Scaffold(body: Text('ACCOUNT_DETAIL_STUB:${state.pathParameters['id']}')),
+          ),
+        ],
+      );
+      return UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          routerConfig: router,
+        ),
+      );
+    }
+
+    testWidgets(
+      'tapping an account row navigates to that exact account\'s detail route by stable id',
+      (tester) async {
+        final AppDatabase db = await seededDb(
+          accounts: <_SeedAccount>[
+            const _SeedAccount(name: 'Main Wallet', currencyCode: 'JPY'),
+            const _SeedAccount(name: 'Savings', currencyCode: 'USD', type: 'bank'),
+          ],
+        );
+        final List<AccountRow> accounts = await db.select(db.accounts).get();
+        final AccountRow mainWallet = accounts.firstWhere((a) => a.name == 'Main Wallet');
+        final AccountRow savings = accounts.firstWhere((a) => a.name == 'Savings');
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        // Tap the second account's row specifically -- not just "a" row --
+        // to prove the id that's pushed is the tapped row's own id, not
+        // e.g. always the first account in the list.
+        await tester.tap(find.text('Savings'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('ACCOUNT_DETAIL_STUB:${savings.id}'), findsOneWidget);
+        expect(find.text('ACCOUNT_DETAIL_STUB:${mainWallet.id}'), findsNothing);
+      },
+    );
+  });
 }

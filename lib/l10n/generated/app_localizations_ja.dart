@@ -360,6 +360,35 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addAccountButton => '追加';
 
   @override
+  String get accountFallbackTitle => '口座';
+
+  @override
+  String get accountNoLongerAvailableMessage => 'この口座は利用できません。';
+
+  @override
+  String couldNotLoadAccountDetail(String error) {
+    return 'この口座を読み込めませんでした: $error';
+  }
+
+  @override
+  String get accountOpeningBalanceLabel => '開始時の残高';
+
+  @override
+  String get accountCreatedLabel => '作成日';
+
+  @override
+  String get accountRecentActivityTitle => '最近の履歴';
+
+  @override
+  String get accountNoRecentActivityMessage => 'この口座の履歴はまだありません。';
+
+  @override
+  String get editAccountTitle => '口座を編集';
+
+  @override
+  String get accountCurrencyLockedMessage => '口座を作成した後は通貨を変更できません。';
+
+  @override
   String budgetsScreenTitle(String month) {
     return '予算 · $month';
   }

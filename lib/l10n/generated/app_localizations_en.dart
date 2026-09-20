@@ -370,6 +370,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addAccountButton => 'Add';
 
   @override
+  String get accountFallbackTitle => 'Account';
+
+  @override
+  String get accountNoLongerAvailableMessage =>
+      'This account is no longer available.';
+
+  @override
+  String couldNotLoadAccountDetail(String error) {
+    return 'Could not load this account: $error';
+  }
+
+  @override
+  String get accountOpeningBalanceLabel => 'Opening balance';
+
+  @override
+  String get accountCreatedLabel => 'Created';
+
+  @override
+  String get accountRecentActivityTitle => 'Recent activity';
+
+  @override
+  String get accountNoRecentActivityMessage =>
+      'No recent activity for this account.';
+
+  @override
+  String get editAccountTitle => 'Edit account';
+
+  @override
+  String get accountCurrencyLockedMessage =>
+      'Currency can\'t be changed after an account is created.';
+
+  @override
   String budgetsScreenTitle(String month) {
     return 'Budgets · $month';
   }
