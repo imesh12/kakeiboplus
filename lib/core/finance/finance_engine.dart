@@ -1,5 +1,8 @@
 import '../money/money.dart';
+import 'balance_class.dart';
+import 'invalid_liability_operation_exception.dart';
 import 'ledger_models.dart';
+import 'liability_overpayment_exception.dart';
 import 'transaction_type.dart';
 
 /// The deterministic financial engine: pure functions over
@@ -22,11 +25,41 @@ class FinanceEngine {
   FinanceEngine._();
 
   /// Computes [account]'s derived balance from its opening balance plus
-  /// every non-deleted transaction that touches it, in either direction.
+  /// every non-deleted transaction that touches it, in either direction,
+  /// using the effect table appropriate to [account.balanceClass] —
+  /// see `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §12.3 and
+  /// ADR-035.
   ///
   /// [transactions] may contain transactions for other accounts too —
   /// only ones referencing [account.id] (as source or, for a transfer,
   /// destination) affect the result.
+  ///
+  /// **Checkpoint C effect table (frozen):**
+  ///
+  /// | Role                          | [BalanceClass.asset]   | [BalanceClass.liability]      |
+  /// |--------------------------------|-------------------------|--------------------------------|
+  /// | opening position               | +opening                | +opening (amount owed)         |
+  /// | income, this account source    | +amount                 | invalid — throws            |
+  /// | expense, this account source   | -amount                 | +amount (owed increases)       |
+  /// | transfer, this account source  | -amount                 | invalid — throws            |
+  /// | transfer, this account dest.   | +amount                 | -amount (payment reduces owed) |
+  ///
+  /// [TransactionType.refund]/[TransactionType.adjustment] are unchanged
+  /// from before Checkpoint C — Beta 0 does not construct either, on
+  /// any account class, so both still throw [UnsupportedError]
+  /// regardless of [account.balanceClass].
+  ///
+  /// Throws [InvalidLiabilityOperationException] the moment a
+  /// transaction attempts one of the two roles V1 never defines for a
+  /// liability (income targeting it, or it being a transfer source) —
+  /// see that exception's own doc. Throws [LiabilityOverpaymentException]
+  /// if, after folding every transaction, a liability account's derived
+  /// balance would be negative — V1 does not clamp an overpaid
+  /// liability to zero or represent a "credit balance" (see that
+  /// exception's own doc). Neither exception can be thrown for an asset
+  /// account: every asset row of the table above is unchanged from
+  /// before Checkpoint C, so every result this function ever returned
+  /// for an asset account is byte-identical to before.
   static Money accountBalance(
     LedgerAccount account,
     List<LedgerTransaction> transactions,
@@ -36,11 +69,15 @@ class FinanceEngine {
       if (tx.isDeleted) continue;
 
       if (tx.accountId == account.id) {
-        balance = balance + _signedEffectOnSourceAccount(tx);
+        balance = balance + _signedEffectOnSourceAccount(account, tx);
       }
       if (tx.type == TransactionType.transfer && tx.destinationAccountId == account.id) {
-        balance = balance + tx.amount; // destination side of a transfer
+        balance = balance + _signedEffectOnDestinationAccount(account, tx);
       }
+    }
+
+    if (account.isLiability && balance.isNegative) {
+      throw LiabilityOverpaymentException(accountId: account.id, resultingBalance: balance);
     }
     return balance;
   }
@@ -48,28 +85,79 @@ class FinanceEngine {
   /// The signed effect of [tx] on the account named by [tx.accountId]
   /// (the *source* account for a transfer; the only account for anything
   /// else). Positive = increases the balance, negative = decreases it.
-  static Money _signedEffectOnSourceAccount(LedgerTransaction tx) {
-    switch (tx.type) {
-      case TransactionType.expense:
-        return -tx.amount;
-      case TransactionType.income:
-        return tx.amount;
-      case TransactionType.transfer:
-        return -tx.amount; // leaving the source account
-      case TransactionType.refund:
-      case TransactionType.adjustment:
-        // Beta 0 does not construct these — no repository or UI path
-        // creates a refund/adjustment transaction (see
-        // docs/14_DECISION_LOG.md and CLAUDE_FIRST_CODING_PROMPT.md).
-        // Their signed effect on a balance is not yet defined by any
-        // approved product decision. Throwing here — rather than
-        // guessing a sign — means a stray row of this type surfaces as a
-        // loud bug instead of a silently wrong balance.
-        throw UnsupportedError(
-          'TransactionType.${tx.type.name} has no defined balance effect yet '
-          '(Beta 0 does not create these; see docs/14_DECISION_LOG.md).',
-        );
+  /// Branches on [account.balanceClass] to apply the correct row of the
+  /// effect table documented on [accountBalance].
+  static Money _signedEffectOnSourceAccount(LedgerAccount account, LedgerTransaction tx) {
+    switch (account.balanceClass) {
+      case BalanceClass.asset:
+        switch (tx.type) {
+          case TransactionType.expense:
+            return -tx.amount;
+          case TransactionType.income:
+            return tx.amount;
+          case TransactionType.transfer:
+            return -tx.amount; // leaving the source account
+          case TransactionType.refund:
+          case TransactionType.adjustment:
+            throw _unsupportedTransactionType(tx.type);
+        }
+      case BalanceClass.liability:
+        switch (tx.type) {
+          case TransactionType.expense:
+            return tx.amount; // a purchase on credit increases what's owed
+          case TransactionType.income:
+            throw InvalidLiabilityOperationException(
+              accountId: account.id,
+              transactionId: tx.id,
+              transactionType: tx.type,
+              reason:
+                  'income cannot target a liability account — V1 has no '
+                  'concept of income paid onto a debt',
+            );
+          case TransactionType.transfer:
+            throw InvalidLiabilityOperationException(
+              accountId: account.id,
+              transactionId: tx.id,
+              transactionType: tx.type,
+              reason:
+                  'a liability account cannot be the source of a transfer — '
+                  'it can only be a transfer destination (a payment)',
+            );
+          case TransactionType.refund:
+          case TransactionType.adjustment:
+            throw _unsupportedTransactionType(tx.type);
+        }
     }
+  }
+
+  /// The signed effect of a [TransactionType.transfer] on the account
+  /// named by [tx.destinationAccountId]. Only ever invoked for transfers
+  /// (see [accountBalance]), so [tx.type] is not re-checked here.
+  /// Branches on [account.balanceClass] to apply the correct row of the
+  /// effect table documented on [accountBalance].
+  static Money _signedEffectOnDestinationAccount(LedgerAccount account, LedgerTransaction tx) {
+    switch (account.balanceClass) {
+      case BalanceClass.asset:
+        return tx.amount; // money arriving in the destination account
+      case BalanceClass.liability:
+        return -tx.amount; // a payment reduces what's owed
+    }
+  }
+
+  /// Beta 0 does not construct [TransactionType.refund] or
+  /// [TransactionType.adjustment] on any account class — no repository
+  /// or UI path creates either (see `docs/14_DECISION_LOG.md` and
+  /// `CLAUDE_FIRST_CODING_PROMPT.md`). Their signed effect on a balance
+  /// is not yet defined by any approved product decision. Throwing here
+  /// — rather than guessing a sign — means a stray row of this type
+  /// surfaces as a loud bug instead of a silently wrong balance. Shared
+  /// by both [BalanceClass] branches of [_signedEffectOnSourceAccount]
+  /// since this is unchanged by Checkpoint C.
+  static UnsupportedError _unsupportedTransactionType(TransactionType type) {
+    return UnsupportedError(
+      'TransactionType.${type.name} has no defined balance effect yet '
+      '(Beta 0 does not create these; see docs/14_DECISION_LOG.md).',
+    );
   }
 
   /// Income and expense totals over [transactions], scoped to a single

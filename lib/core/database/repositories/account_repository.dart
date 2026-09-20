@@ -14,12 +14,13 @@ import 'account_not_found_exception.dart';
 /// [FinanceEngine] operates on, and exposes its opening balance as a
 /// proper [Money] rather than a bare integer.
 ///
-/// Checkpoint B (schema v9) adds the [balanceClassValue]/[isAsset]/
+/// Checkpoint B (schema v9) added the [balanceClassValue]/[isAsset]/
 /// [isLiability]/[subtypeValue] domain helpers below so callers never
 /// need to compare [AccountRow.balanceClass]/[AccountRow.subtype]
-/// against a raw string. [FinanceEngine]/[LedgerAccount] do NOT read
-/// any of these yet -- [toLedgerAccount] is deliberately unchanged --
-/// that adaptation is Checkpoint C's (docs/20 §13.4).
+/// against a raw string. Checkpoint C (docs/20 §13.4) is what wires
+/// [balanceClassValue] into [toLedgerAccount] below, so
+/// [FinanceEngine.accountBalance] can apply the correct asset/liability
+/// effect table for every account this repository hands it.
 extension AccountRowX on AccountRow {
   Money get openingBalance => Money.fromMinorUnits(openingBalanceMinorUnits, currencyCode);
 
@@ -27,6 +28,7 @@ extension AccountRowX on AccountRow {
         id: id,
         currencyCode: currencyCode,
         openingBalance: openingBalance,
+        balanceClass: balanceClassValue,
       );
 
   /// The account's frozen asset/liability classification -- see

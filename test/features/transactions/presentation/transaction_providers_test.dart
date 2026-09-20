@@ -5,6 +5,7 @@ import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
+import 'package:ai_financial_coach/core/finance/balance_class.dart';
 import 'package:ai_financial_coach/core/finance/finance_engine.dart';
 import 'package:ai_financial_coach/core/finance/ledger_models.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
@@ -133,7 +134,7 @@ void main() {
     );
 
     final LedgerAccount account =
-        LedgerAccount(id: accountId, currencyCode: 'JPY', openingBalance: Money.zero('JPY'));
+        LedgerAccount(id: accountId, currencyCode: 'JPY', openingBalance: Money.zero('JPY'), balanceClass: BalanceClass.asset);
     final List<LedgerTransaction> ledgerBefore = await container.read(ledgerProvider.future);
     expect(FinanceEngine.accountBalance(account, ledgerBefore), Money.fromMinorUnits(-500, 'JPY'));
 
@@ -184,7 +185,7 @@ void main() {
     expect(activeAfterDelete, isEmpty);
 
     final LedgerAccount account =
-        LedgerAccount(id: accountId, currencyCode: 'JPY', openingBalance: Money.zero('JPY'));
+        LedgerAccount(id: accountId, currencyCode: 'JPY', openingBalance: Money.zero('JPY'), balanceClass: BalanceClass.asset);
     final List<LedgerTransaction> ledgerAfterDelete = await _waitFor(
       container,
       ledgerProvider,

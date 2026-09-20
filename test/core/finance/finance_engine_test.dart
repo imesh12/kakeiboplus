@@ -1,6 +1,10 @@
+import 'package:ai_financial_coach/core/finance/balance_class.dart';
 import 'package:ai_financial_coach/core/finance/finance_engine.dart';
+import 'package:ai_financial_coach/core/finance/invalid_liability_operation_exception.dart';
 import 'package:ai_financial_coach/core/finance/ledger_models.dart';
+import 'package:ai_financial_coach/core/finance/liability_overpayment_exception.dart';
 import 'package:ai_financial_coach/core/finance/transaction_type.dart';
+import 'package:ai_financial_coach/core/money/currency_mismatch_exception.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,6 +38,7 @@ void main() {
         id: 'a1',
         currencyCode: 'USD',
         openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
       );
       expect(FinanceEngine.accountBalance(account, []), Money.fromMinorUnits(10000, 'USD'));
     });
@@ -43,6 +48,7 @@ void main() {
         id: 'a1',
         currencyCode: 'USD',
         openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
       );
       final List<LedgerTransaction> txs = <LedgerTransaction>[
         _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 2500),
@@ -59,11 +65,13 @@ void main() {
         id: 'src',
         currencyCode: 'USD',
         openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
       );
       final LedgerAccount destination = LedgerAccount(
         id: 'dst',
         currencyCode: 'USD',
         openingBalance: Money.fromMinorUnits(0, 'USD'),
+        balanceClass: BalanceClass.asset,
       );
       final List<LedgerTransaction> txs = <LedgerTransaction>[
         _tx(
@@ -83,6 +91,7 @@ void main() {
         id: 'a1',
         currencyCode: 'USD',
         openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
       );
       final List<LedgerTransaction> txs = <LedgerTransaction>[
         _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 2500, isDeleted: true),
@@ -95,11 +104,295 @@ void main() {
         id: 'a1',
         currencyCode: 'USD',
         openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
       );
       final List<LedgerTransaction> txs = <LedgerTransaction>[
         _tx(id: 't1', accountId: 'other', type: TransactionType.expense, minorUnits: 999999),
       ];
       expect(FinanceEngine.accountBalance(account, txs), Money.fromMinorUnits(10000, 'USD'));
+    });
+
+    // --- Checkpoint C additions below: close two gaps the pre-C test
+    // suite left implicit (currency-mismatch and zero-value handling
+    // were only ever proven at the Money level -- see
+    // test/core/money/money_test.dart -- never directly against
+    // accountBalance itself). Neither is new behavior: Money's own
+    // arithmetic operators already threw/behaved this way before
+    // Checkpoint C; these tests just pin that inherited behavior at the
+    // FinanceEngine boundary per the Checkpoint C asset-regression
+    // checklist ("same-currency validation", "mismatched-currency
+    // rejection", "zero values if allowed").
+
+    test(
+        'Checkpoint C regression: a transaction whose currency does not match '
+        "the account's currency throws CurrencyMismatchException rather than "
+        'silently coercing', () {
+      final LedgerAccount account = LedgerAccount(
+        id: 'a1',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 500, currency: 'JPY'),
+      ];
+      expect(
+        () => FinanceEngine.accountBalance(account, txs),
+        throwsA(isA<CurrencyMismatchException>()),
+      );
+    });
+
+    test(
+        'Checkpoint C regression: a zero-amount transaction is a real, '
+        'well-defined value that leaves the balance unchanged', () {
+      final LedgerAccount account = LedgerAccount(
+        id: 'a1',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 0),
+      ];
+      expect(FinanceEngine.accountBalance(account, txs), Money.fromMinorUnits(10000, 'USD'));
+    });
+  });
+
+  group('FinanceEngine.accountBalance -- liability (Checkpoint C)', () {
+    test('opening position is the positive amount owed, with no transactions', () {
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(0, 'USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      expect(FinanceEngine.accountBalance(card, []), Money.zero('USD'));
+
+      final LedgerAccount preExistingDebt = LedgerAccount(
+        id: 'card2',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(5000, 'USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      expect(FinanceEngine.accountBalance(preExistingDebt, []), Money.fromMinorUnits(5000, 'USD'));
+    });
+
+    test('an expense targeting a liability account increases the amount owed', () {
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.zero('USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'card1', type: TransactionType.expense, minorUnits: 3000),
+      ];
+      expect(FinanceEngine.accountBalance(card, txs), Money.fromMinorUnits(3000, 'USD'));
+    });
+
+    test('multiple liability expenses accumulate the amount owed', () {
+      // Checkpoint C brief's own worked example: opening owed 0, expense
+      // 3000 -> owed 3000, expense 2000 -> owed 5000.
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.zero('USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'card1', type: TransactionType.expense, minorUnits: 3000),
+        _tx(id: 't2', accountId: 'card1', type: TransactionType.expense, minorUnits: 2000),
+      ];
+      expect(FinanceEngine.accountBalance(card, txs), Money.fromMinorUnits(5000, 'USD'));
+    });
+
+    test(
+        'a checking-to-credit-card payment decreases the asset SOURCE balance '
+        'and decreases the liability DESTINATION amount owed', () {
+      // Checkpoint C brief's own worked example: checking 30000 -> 27000,
+      // liability owed 5000 -> 2000.
+      final LedgerAccount checking = LedgerAccount(
+        id: 'checking',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(30000, 'USD'),
+        balanceClass: BalanceClass.asset,
+      );
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(5000, 'USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(
+          id: 't1',
+          accountId: 'checking',
+          destinationAccountId: 'card1',
+          type: TransactionType.transfer,
+          minorUnits: 3000,
+        ),
+      ];
+      expect(FinanceEngine.accountBalance(checking, txs), Money.fromMinorUnits(27000, 'USD'));
+      expect(FinanceEngine.accountBalance(card, txs), Money.fromMinorUnits(2000, 'USD'));
+    });
+
+    test(
+        'a credit-card payment is neither an expense nor an income by '
+        "FinanceEngine's own type-based totals -- it is a transfer, "
+        'excluded from both by construction', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(
+          id: 't1',
+          accountId: 'checking',
+          destinationAccountId: 'card1',
+          type: TransactionType.transfer,
+          minorUnits: 3000,
+        ),
+      ];
+      final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals.income, Money.zero('USD'));
+      expect(totals.expense, Money.zero('USD'));
+    });
+
+    test(
+        'income cannot target a liability account -- rejected with '
+        'InvalidLiabilityOperationException rather than silently producing a '
+        'balance', () {
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.zero('USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'card1', type: TransactionType.income, minorUnits: 1000),
+      ];
+      expect(
+        () => FinanceEngine.accountBalance(card, txs),
+        throwsA(isA<InvalidLiabilityOperationException>()),
+      );
+    });
+
+    test(
+        'a liability account cannot be the SOURCE of a transfer -- rejected '
+        'with InvalidLiabilityOperationException', () {
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(5000, 'USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(
+          id: 't1',
+          accountId: 'card1',
+          destinationAccountId: 'checking',
+          type: TransactionType.transfer,
+          minorUnits: 1000,
+        ),
+      ];
+      expect(
+        () => FinanceEngine.accountBalance(card, txs),
+        throwsA(isA<InvalidLiabilityOperationException>()),
+      );
+    });
+
+    test(
+        'liability overpayment: a payment larger than the amount owed is '
+        'rejected with LiabilityOverpaymentException rather than going '
+        'negative', () {
+      // Checkpoint C brief's own worked example: owed 2000, payment 3000
+      // would naively give -1000 -- must reject instead of silently
+      // clamping to zero or allowing a negative "owed" balance.
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(2000, 'USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(
+          id: 't1',
+          accountId: 'checking',
+          destinationAccountId: 'card1',
+          type: TransactionType.transfer,
+          minorUnits: 3000,
+        ),
+      ];
+      expect(
+        () => FinanceEngine.accountBalance(card, txs),
+        throwsA(isA<LiabilityOverpaymentException>()),
+      );
+    });
+
+    test(
+        'liability overpayment is not rejected when the payment exactly zeroes '
+        'out the amount owed', () {
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(2000, 'USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(
+          id: 't1',
+          accountId: 'checking',
+          destinationAccountId: 'card1',
+          type: TransactionType.transfer,
+          minorUnits: 2000,
+        ),
+      ];
+      expect(FinanceEngine.accountBalance(card, txs), Money.zero('USD'));
+    });
+
+    test('a deleted expense does not increase the amount owed', () {
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.zero('USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'card1', type: TransactionType.expense, minorUnits: 5000, isDeleted: true),
+      ];
+      expect(FinanceEngine.accountBalance(card, txs), Money.zero('USD'));
+    });
+
+    test(
+        'a liability transaction in a mismatched currency still throws '
+        'CurrencyMismatchException -- the liability effect table does not '
+        'bypass currency invariants', () {
+      final LedgerAccount card = LedgerAccount(
+        id: 'card1',
+        currencyCode: 'USD',
+        openingBalance: Money.zero('USD'),
+        balanceClass: BalanceClass.liability,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'card1', type: TransactionType.expense, minorUnits: 500, currency: 'JPY'),
+      ];
+      expect(
+        () => FinanceEngine.accountBalance(card, txs),
+        throwsA(isA<CurrencyMismatchException>()),
+      );
+    });
+
+    test(
+        'existing asset behavior is unchanged by the liability effect table -- '
+        'an asset account alongside a liability account in the same ledger '
+        'still gets exactly its pre-Checkpoint-C balance', () {
+      final LedgerAccount checking = LedgerAccount(
+        id: 'checking',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        balanceClass: BalanceClass.asset,
+      );
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'checking', type: TransactionType.expense, minorUnits: 2500),
+        _tx(id: 't2', accountId: 'checking', type: TransactionType.income, minorUnits: 5000),
+      ];
+      expect(FinanceEngine.accountBalance(checking, txs), Money.fromMinorUnits(12500, 'USD'));
     });
   });
 

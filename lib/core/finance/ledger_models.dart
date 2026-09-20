@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../money/money.dart';
+import 'balance_class.dart';
 import 'transaction_type.dart';
 
 /// A pure-Dart, database-agnostic view of one transaction row, for use by
@@ -48,17 +49,41 @@ class LedgerTransaction {
 }
 
 /// A pure-Dart view of one account, for [FinanceEngine].
+///
+/// Checkpoint C (docs/20 §13.4, ADR-035) widened this with a required,
+/// strongly-typed [balanceClass] so [FinanceEngine] can apply the
+/// correct asset/liability effect table without ever comparing a raw
+/// string -- see [BalanceClass]'s own doc for the frozen sign-convention
+/// this encodes. This is deliberately still ONE unified account shape --
+/// there is no separate `LiabilityAccount` class; every [FinanceEngine]
+/// function that takes a [LedgerAccount] works for both classes by
+/// branching on [balanceClass] internally.
 @immutable
 class LedgerAccount {
   const LedgerAccount({
     required this.id,
     required this.currencyCode,
     required this.openingBalance,
+    required this.balanceClass,
   });
 
   final String id;
   final String currencyCode;
+
+  /// A non-negative, class-native magnitude: for [BalanceClass.asset],
+  /// the amount owned as of account creation; for
+  /// [BalanceClass.liability], the amount owed as of account creation.
+  /// Never a negative "debt as negative money" representation -- see
+  /// [BalanceClass]'s own doc and docs/20 §12.3.
   final Money openingBalance;
+
+  /// Whether this account represents money owned or money owed -- see
+  /// [BalanceClass]'s own doc. [FinanceEngine.accountBalance] branches on
+  /// this to apply the correct effect table.
+  final BalanceClass balanceClass;
+
+  bool get isAsset => balanceClass == BalanceClass.asset;
+  bool get isLiability => balanceClass == BalanceClass.liability;
 }
 
 /// The result of [FinanceEngine.incomeExpenseTotals].
