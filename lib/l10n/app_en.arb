@@ -294,6 +294,10 @@
     }
   },
   "noRecurringRulesYetTapMessage": "No recurring rules yet. Tap + to add one.",
+  "subscriptionsTitle": "Subscriptions",
+  "subscriptionsEstimatedMonthlyTotalLabel": "Est. monthly",
+  "subscriptionsEstimatedYearlyTotalLabel": "Est. yearly",
+  "noActiveSubscriptionsMessage": "No active subscriptions yet.",
   "deleteRecurringRuleConfirmTitle": "Delete this recurring rule?",
   "deleteRecurringRuleConfirmMessage": "Its posted transactions and handled occurrence history are kept, but the rule itself will no longer be active.",
   "deleteRuleTooltip": "Delete",

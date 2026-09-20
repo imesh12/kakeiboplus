@@ -294,6 +294,10 @@
     }
   },
   "noRecurringRulesYetTapMessage": "定期ルールがまだありません。+ をタップして追加してください。",
+  "subscriptionsTitle": "サブスクリプション",
+  "subscriptionsEstimatedMonthlyTotalLabel": "推定月額",
+  "subscriptionsEstimatedYearlyTotalLabel": "推定年額",
+  "noActiveSubscriptionsMessage": "有効なサブスクリプションはまだありません。",
   "deleteRecurringRuleConfirmTitle": "この定期ルールを削除しますか？",
   "deleteRecurringRuleConfirmMessage": "記録済みの取引と処理済みの発生履歴は保持されますが、ルール自体は非アクティブになります。",
   "deleteRuleTooltip": "削除",

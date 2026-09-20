@@ -956,6 +956,30 @@ abstract class AppLocalizations {
   /// **'No recurring rules yet. Tap + to add one.'**
   String get noRecurringRulesYetTapMessage;
 
+  /// No description provided for @subscriptionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions'**
+  String get subscriptionsTitle;
+
+  /// No description provided for @subscriptionsEstimatedMonthlyTotalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Est. monthly'**
+  String get subscriptionsEstimatedMonthlyTotalLabel;
+
+  /// No description provided for @subscriptionsEstimatedYearlyTotalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Est. yearly'**
+  String get subscriptionsEstimatedYearlyTotalLabel;
+
+  /// No description provided for @noActiveSubscriptionsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No active subscriptions yet.'**
+  String get noActiveSubscriptionsMessage;
+
   /// No description provided for @deleteRecurringRuleConfirmTitle.
   ///
   /// In en, this message translates to:

@@ -15,7 +15,7 @@ import '../domain/recurring_schedule.dart';
 import 'recurring_providers.dart';
 
 /// Maps a persisted [RecurringRuleRow] to the pure planner's input shape
-/// -- mirrors `recurring_providers.dart`'s own `_scheduleOf` helper (same
+/// -- mirrors `recurring_providers.dart`'s own `recurringScheduleOf` helper (same
 /// idea, extended with the extra fields
 /// [planDesiredReminders]/[DesiredReminder] need that a bare
 /// [RecurringSchedule] doesn't carry).

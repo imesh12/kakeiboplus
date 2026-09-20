@@ -1367,3 +1367,204 @@ test/widget/goal_detail_screen_test.dart`; `flutter test
 test/widget/app_shell_test.dart`; full `flutter test`) — this sandbox has
 no Dart/Flutter toolchain and cannot itself execute or confirm test
 results.
+
+## ADR-031 — Checkpoint 11: Subscriptions V1 is a view over the existing recurring engine, with deterministic, currency-separated estimated totals
+
+Context: Checkpoint 11 asked for a V1 "Recurring + Subscriptions"
+experience that reuses the existing recurring money engine and the CP10
+icon-led visual system, explicitly forbidding a second accounting engine
+for subscriptions, a schema migration unless the existing recurring
+model genuinely cannot represent the minimum V1 distinction, a fifth
+bottom-nav destination, and any fabricated or live-FX-derived combined
+total across currencies.
+
+**Subscription modeling: no new field, no migration.** A "subscription"
+is defined purely as an active (non-deleted), `RecurringRuleKind.expense`
+recurring rule — see `subscription_providers.dart`'s `isSubscriptionRule`.
+This required zero changes to `RecurringRules`/`RecurringOccurrences`
+(`lib/core/database/tables.dart`) and zero changes to
+`RecurringRuleRepository`/`RecurringOccurrenceRepository`. The
+alternative considered — a new boolean/tag column distinguishing
+"subscription" from other recurring expenses (e.g. so a user could
+exclude rent from a Subscriptions view) — was rejected for V1: every
+piece of data the brief asks V1 to present (name, amount, currency,
+frequency, next occurrence, source account, active/upcoming status,
+estimated totals) is already fully derivable from the existing
+`RecurringRuleRow` shape, so a schema change would add a persisted
+column with no V1 behavior that actually needs it. This is exactly the
+checkpoint's own "prefer the existing recurring model" default rather
+than the "STOP and explain" migration path — recorded here as that
+explanation. Deferred to V2: an explicit opt-out/tag so a user can
+exclude a specific expense-kind rule (e.g. rent) from the Subscriptions
+view without it ceasing to be a normal recurring expense on the
+Recurring tab.
+
+**Presentation, not a second engine.** `subscription_providers.dart`
+adds exactly two providers, both pure derivations of data
+`recurring_providers.dart` already computes reactively:
+`subscriptionPendingItemsProvider` filters/dedupes
+`recurringPendingItemsProvider`'s own already-sorted list down to one
+row per subscription rule (`selectSubscriptionPendingItems`, a pure,
+directly unit-tested selector — same precedent `selectHomeRecurringItem`
+established), and `subscriptionEstimatedTotalsProvider` folds
+`activeRecurringRulesProvider`'s rules into per-currency totals
+(`computeSubscriptionEstimatedTotals`). Neither provider writes
+anything, introduces a new notion of "handled", or duplicates
+`RecurringSchedule`'s occurrence math — both call the now-public
+`recurringScheduleOf` (renamed from a private `_scheduleOf` this
+checkpoint, purely so this second call site can reuse it rather than
+re-deriving the same four-field mapping). The Recurring tab's existing
+`_PendingItemTile` widget is reused verbatim for Subscriptions rows —
+only a generic leading icon and an optional resolved account name
+differ — so there is exactly one row implementation to keep correct.
+
+**Deterministic estimated totals, never a fabricated exact figure.**
+`RecurringEstimate` (`lib/features/recurring/domain/recurring_estimate.dart`)
+computes a rule's average monthly and yearly cost under an explicit,
+documented convention — a 365-day year, a 12-month year — using exact
+integer/rational arithmetic (never `double`) and a single ROUND HALF UP
+rounding step per figure (`roundHalfUpNonNegative`, a small `int`-only
+reimplementation of the same ADR-018 policy `MoneyRounding` already
+uses for `Decimal`, justified here because every numerator/denominator
+involved is already an exact small integer). Leap years are deliberately
+not special-cased — the resulting ≈0.07% drift is smaller than the
+rounding step itself, and treating it exactly would make the estimate
+depend on which specific years a daily/weekly schedule happens to run
+through. `monthlyMinorUnits` and `yearlyMinorUnits` are computed
+independently from the same rational inputs, each rounded once — never
+one derived from the other — so a single rounding step's error is never
+compounded twelvefold. Every UI surface that shows these figures labels
+them "Est." (`subscriptionsEstimatedMonthlyTotalLabel`/
+`subscriptionsEstimatedYearlyTotalLabel`), never presenting them as an
+exact accounting total.
+
+**Multi-currency totals are kept separate, always.**
+`computeSubscriptionEstimatedTotals` groups by `currencyCode` and returns
+one `SubscriptionCurrencyTotal` per currency, sorted by currency code for
+a deterministic display order. There is no code path anywhere in this
+checkpoint that sums two different currencies' minor-units figures
+together, and no reference/live FX rate is consulted to manufacture a
+single combined total — if a profile's subscriptions span multiple
+currencies, the Subscriptions tab's totals header simply stacks one
+block per currency (`_SubscriptionTotalsCard`/
+`_SubscriptionCurrencyTotalBlock` in `recurring_screen.dart`).
+
+**Navigation: one screen, two tabs, no new route.** `RecurringScreen`
+gained a local `_RecurringTab` enum (`recurring`/`subscriptions`,
+defaulting to `recurring`) and an `AppSegmentedControl<_RecurringTab>`
+below its `AppBar`, switched via local `setState` — no GoRouter route,
+no bottom-nav change (Home/Activity/Add/Profile stays exactly as locked).
+The add-rule FAB only renders on the Recurring tab, since a subscription
+is created through the exact same "new recurring rule" dialog as any
+other expense-kind rule — there is no separate "add subscription" flow
+to expose.
+
+**Visual convergence.** The Recurring tab's list body was extracted
+unchanged into `_RecurringListView` (byte-identical logic/Keys to the
+pre-Checkpoint-11 `RecurringScreen.build`), and `_PendingItemTile`'s
+inline `Row`/bare `Text` header was rebuilt on CP10's
+`AppFinanceListRow` (icon-led leading tile, title, and a new
+frequency-plus-date subtitle) with an `AppMoneyText`/`AppStatusChip`
+trailing column replacing the previous single combined
+amount-and-date `Text`. The outer `AppCard(bordered: true)` shell, and
+every edit/delete/skip/post `Key`/widget type in the `Wrap` beneath it,
+are unchanged — preserving every existing `recurring_screen_test.dart`
+assertion (including the CP7.5 `Card.color`/`elevation`/`shape.side`
+contract and the `findsNWidgets(2)` "Due today" chip-plus-header count).
+
+No Drift schema migration, no new or removed dependency, and no FX/
+network/OCR/AI/cloud change. `docs/design/` reference assets were
+inspected only for visual direction (the reference's Subscriptions
+screen) and were not modified. Deferred to V2 or later, as out of this
+checkpoint's explicit scope: OCR, cloud sync, AI, household/family
+wallet, bank integrations, automatic subscription cancellation,
+subscription-provider APIs, cross-currency accounting, a per-rule
+subscription opt-out/tag, and per-category icons on Subscriptions rows
+(considered and deferred this checkpoint as unnecessary added
+async-state complexity for a V1 pass).
+
+Reason: every V1 requirement — truthful subscription data, deterministic
+estimated totals, currency-safe presentation, CP10-consistent visuals —
+is achievable as a read-only view over the recurring engine that already
+exists and is already tested; building a second accounting concept or a
+new schema column would duplicate logic this checkpoint has no evidence
+the existing model cannot already express.
+
+Status: Approved 2026-09-20 (Checkpoint 11). Pending Windows verification
+(`flutter analyze`; `flutter test test/features/recurring/`; `flutter
+test test/widget/recurring_screen_test.dart`; full `flutter test`) — this
+sandbox has no Dart/Flutter toolchain and cannot itself execute or
+confirm test results.
+
+### Addendum (2026-09-20) — corrected "upcoming" selection: first UNHANDLED future occurrence, not a single lookup
+
+Context: Android manual QA on this checkpoint found the Subscriptions
+tab simultaneously showing a non-zero estimated total for a currency
+AND the "No active subscriptions yet" empty state — an apparent
+contradiction for the same profile at the same moment. Investigation
+traced this to `_pendingItemsForRule` (`recurring_providers.dart`, the
+function this ADR's "presentation, not a second engine" section above
+describes both `subscriptionPendingItemsProvider` and the Recurring
+tab's own list as ultimately deriving from): its "upcoming" branch did
+exactly one `nextOccurrenceAfter(todayUtc)` lookup and silently
+contributed nothing if that single candidate date already had a
+posted/skipped `RecurringOccurrences` row — which the Post/Skip
+buttons already allow unconditionally, for any urgency including
+`upcoming` (there is no repository-side guard rejecting a future
+`scheduledDateUtc`, by design — see `RecurringOccurrenceRepository`).
+A still-active subscription that had one future occurrence handled
+early would therefore vanish from `recurringPendingItemsProvider`'s
+(and so `subscriptionPendingItemsProvider`'s) output entirely, while
+`computeSubscriptionEstimatedTotals` — which only checks
+`recurringScheduleOf(rule).occurrenceOnOrAfter(todayUtc) != null`, never
+consulting handled-occurrence state at all — correctly kept counting
+that rule. Two independently-correct-in-isolation computations produced
+one incoherent screen.
+
+**Fix: a bounded forward walk, not a new selection concept.** The
+single lookup was replaced with a loop that calls
+[`RecurringSchedule.nextOccurrenceAfter`] repeatedly — no new
+calendar/recurrence arithmetic anywhere — starting from `todayUtc`,
+advancing past each already-handled date, until it finds the first date
+NOT in `handledDates`, or `nextOccurrenceAfter` returns `null` (which it
+already does at or before a schedule's own `endDateUtc` — see that
+method's existing doc comment). That `null` is this walk's *primary*
+termination guarantee for any finite schedule, independent of how many
+future occurrences were handled early; a `_kMaxUpcomingScanIterations =
+10000` cap is only a *secondary*, defensive backstop for a never-ending
+schedule (`endDateUtc == null`) paired with pathological amounts of
+handled data — sized against the shortest supported period (daily,
+`interval == 1`) so that 10,000 iterations is over 27 years of daily
+occurrences, far beyond any realistic amount of legitimate early
+posting/skipping, meaning this cap can only ever discard truly
+pathological data, never a still-active rule under normal use.
+
+**Deliberately out of scope for this fix**, per explicit product
+direction: no guard was added to `RecurringOccurrenceRepository`
+rejecting an early Post/Skip — the ability to handle a future
+occurrence ahead of time remains a supported, unconditional capability
+of the existing engine, exactly as this ADR's "presentation, not a
+second engine" section already describes it; accounting/write
+semantics, `RecurringEstimate`, subscription classification
+(`isSubscriptionRule`), and FX are all unchanged. This addendum
+therefore does not revise this ADR's decision — the modeling,
+totals-computation, and multi-currency-separation decisions above all
+still stand exactly as approved — it only documents the correction to
+the shared upcoming-occurrence-selection logic both this ADR's
+providers and the pre-existing Recurring tab already depended on.
+
+Regression coverage: `test/features/recurring/presentation/recurring_providers_test.dart`
+(three selector-level cases: an already-handled nearest occurrence,
+multiple consecutive handled occurrences, and a finite schedule whose
+every remaining occurrence is handled) and
+`test/widget/recurring_screen_test.dart` (one end-to-end case:
+skip a subscription's only Upcoming row via the existing UI, then
+assert the later occurrence renders and the Subscriptions tab's totals
+card and empty-state message never contradict each other).
+
+Status: Approved 2026-09-20 (Checkpoint 11 final fix). Pending Windows
+verification (`flutter analyze`; `flutter test
+test/features/recurring/`; `flutter test
+test/widget/recurring_screen_test.dart`; full `flutter test`) — this
+sandbox has no Dart/Flutter toolchain and cannot itself execute or
+confirm test results.

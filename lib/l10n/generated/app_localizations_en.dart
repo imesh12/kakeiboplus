@@ -496,6 +496,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'No recurring rules yet. Tap + to add one.';
 
   @override
+  String get subscriptionsTitle => 'Subscriptions';
+
+  @override
+  String get subscriptionsEstimatedMonthlyTotalLabel => 'Est. monthly';
+
+  @override
+  String get subscriptionsEstimatedYearlyTotalLabel => 'Est. yearly';
+
+  @override
+  String get noActiveSubscriptionsMessage => 'No active subscriptions yet.';
+
+  @override
   String get deleteRecurringRuleConfirmTitle => 'Delete this recurring rule?';
 
   @override

@@ -84,12 +84,34 @@ final StreamProvider<List<RecurringOccurrenceRow>> handledOccurrencesProvider =
   return ref.watch(recurringOccurrenceRepositoryProvider).watchHandledForRules(ruleIds);
 });
 
-RecurringSchedule _scheduleOf(RecurringRuleRow rule) => RecurringSchedule(
+/// Builds the pure [RecurringSchedule] for [rule] from its persisted
+/// frequency/interval/start/end fields. Public (this helper was
+/// previously private to this file) because
+/// `subscription_providers.dart`'s totals computation (Checkpoint 11
+/// -- Recurring + Subscriptions V1) needs the exact same schedule
+/// derivation this file's own pending-items computation already
+/// uses, and duplicating this four-field mapping a second time would
+/// risk the two ever silently diverging.
+RecurringSchedule recurringScheduleOf(RecurringRuleRow rule) => RecurringSchedule(
       frequency: RecurrenceFrequency.values.byName(rule.frequency),
       interval: rule.interval,
       startDateUtc: rule.startDate,
       endDateUtc: rule.endDate,
     );
+
+/// Defensive iteration cap for the "upcoming" forward-walk in
+/// [_pendingItemsForRule] -- a second line of defense against a
+/// never-ending schedule (`endDateUtc == null`) paired with a
+/// pathological amount of already-handled future data, never the
+/// walk's primary termination mechanism (a finite schedule's own
+/// `endDateUtc` already guarantees that -- see [_pendingItemsForRule]'s
+/// doc comment). Sized generously against the shortest supported
+/// period (daily, `interval == 1`): 10,000 daily occurrences is over 27
+/// years, far beyond any realistic amount of legitimate early
+/// posting/skipping a real user would ever do, so this cap can only
+/// ever discard truly pathological data, never a still-active rule
+/// under normal use.
+const int _kMaxUpcomingScanIterations = 10000;
 
 /// Derives every [RecurringPendingItem] for [rule] as of [todayUtc],
 /// given the set of [handledDates] (scheduled dates that already have a
@@ -111,15 +133,23 @@ RecurringSchedule _scheduleOf(RecurringRuleRow rule) => RecurringSchedule(
 ///
 /// Deliberately bounded, never an unbounded scan: the overdue/due-today
 /// backlog only ever looks between the rule's own `startDate` and
-/// `todayUtc` (`RecurringSchedule.occurrencesInRange`'s own bound), and
-/// "upcoming" is a single `nextOccurrenceAfter` lookup, not a scan of
-/// the future.
+/// `todayUtc` (`RecurringSchedule.occurrencesInRange`'s own bound). The
+/// "upcoming" preview below is a forward WALK over
+/// [RecurringSchedule.nextOccurrenceAfter] -- never new calendar/
+/// recurrence arithmetic of its own -- because a rule's nearest
+/// occurrence after today can itself already be handled (Post/Skip are
+/// never blocked from acting on a future date early -- see
+/// `RecurringOccurrenceRepository`), in which case the single-lookup
+/// version of this method would silently drop a still-active rule from
+/// the pending-items list entirely (see `docs/14_DECISION_LOG.md`
+/// ADR-031 addendum / the CP11 Android QA investigation this fixes).
+/// See [_kMaxUpcomingScanIterations] for why that walk is still bounded.
 List<RecurringPendingItem> _pendingItemsForRule({
   required RecurringRuleRow rule,
   required Set<DateTime> handledDates,
   required DateTime todayUtc,
 }) {
-  final RecurringSchedule schedule = _scheduleOf(rule);
+  final RecurringSchedule schedule = recurringScheduleOf(rule);
   final List<RecurringPendingItem> items = <RecurringPendingItem>[];
 
   final List<DateTime> dueOrOverdue = schedule.occurrencesInRange(
@@ -137,18 +167,37 @@ List<RecurringPendingItem> _pendingItemsForRule({
     );
   }
 
-  // Only preview the next upcoming date when this rule has nothing
-  // unhandled on or before today -- see the class-level note above.
+  // Only preview an upcoming date when this rule has nothing unhandled
+  // on or before today -- see the class-level note above. Walk forward
+  // through the schedule's own future occurrences (via
+  // [RecurringSchedule.nextOccurrenceAfter] only -- never duplicating
+  // its calendar/recurrence math) until the first one NOT already in
+  // [handledDates] is found, or the schedule itself genuinely ends
+  // (`nextOccurrenceAfter` returns `null`, which it does at or before
+  // `endDateUtc` -- see that method's own doc comment): that `null` is
+  // this loop's primary, domain-correct termination guarantee for any
+  // finite schedule, independent of how many future occurrences were
+  // handled early. [_kMaxUpcomingScanIterations] is only a secondary,
+  // defensive cap for a never-ending schedule (`endDateUtc == null`,
+  // where nothing else bounds the walk) against pathological data --
+  // see its doc comment for why it is sized generously enough to never
+  // discard a still-active rule under any realistic use.
   if (items.isEmpty) {
-    final DateTime? nextUpcoming = schedule.nextOccurrenceAfter(todayUtc);
-    if (nextUpcoming != null && !handledDates.contains(nextUpcoming)) {
-      items.add(
-        RecurringPendingItem(
-          rule: rule,
-          scheduledDateUtc: nextUpcoming,
-          urgency: RecurringItemUrgency.upcoming,
-        ),
-      );
+    DateTime cursor = todayUtc;
+    for (int i = 0; i < _kMaxUpcomingScanIterations; i++) {
+      final DateTime? candidate = schedule.nextOccurrenceAfter(cursor);
+      if (candidate == null) break; // Schedule has genuinely ended.
+      if (!handledDates.contains(candidate)) {
+        items.add(
+          RecurringPendingItem(
+            rule: rule,
+            scheduledDateUtc: candidate,
+            urgency: RecurringItemUrgency.upcoming,
+          ),
+        );
+        break;
+      }
+      cursor = candidate;
     }
   }
 

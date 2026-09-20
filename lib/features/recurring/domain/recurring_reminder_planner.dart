@@ -18,7 +18,8 @@ const int recurringReminderHorizonDays = 14;
 /// needs them -- deliberately NOT a `RecurringRuleRow` (this file must
 /// stay free of any Drift import, same as `RecurringSchedule` itself).
 /// The presentation layer builds this from a `RecurringRuleRow`,
-/// mirroring `recurring_providers.dart`'s existing `_scheduleOf` helper.
+/// mirroring `recurring_providers.dart`'s existing `recurringScheduleOf`
+/// helper.
 @immutable
 class RecurringReminderRuleInput {
   const RecurringReminderRuleInput({

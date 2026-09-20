@@ -481,6 +481,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noRecurringRulesYetTapMessage => '定期ルールがまだありません。+ をタップして追加してください。';
 
   @override
+  String get subscriptionsTitle => 'サブスクリプション';
+
+  @override
+  String get subscriptionsEstimatedMonthlyTotalLabel => '推定月額';
+
+  @override
+  String get subscriptionsEstimatedYearlyTotalLabel => '推定年額';
+
+  @override
+  String get noActiveSubscriptionsMessage => '有効なサブスクリプションはまだありません。';
+
+  @override
   String get deleteRecurringRuleConfirmTitle => 'この定期ルールを削除しますか？';
 
   @override

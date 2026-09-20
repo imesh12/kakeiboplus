@@ -842,7 +842,16 @@ void main() {
         await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
         await tester.pumpAndSettle();
 
-        expect(find.text('定期'), findsOneWidget); // AppBar title
+        // Scoped to the AppBar specifically -- the CP11 segmented
+        // control's own "Recurring" segment renders the same
+        // localized '定期' string, so an unscoped `find.text` now
+        // matches both. This keeps the original intent (assert the
+        // AppBar title is localized) exactly, without weakening to
+        // `findsWidgets`.
+        expect(
+          find.descendant(of: find.byType(AppBar), matching: find.text('定期')),
+          findsOneWidget,
+        ); // AppBar title
         expect(find.textContaining('定期ルールがまだありません'), findsOneWidget); // empty state
 
         await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
@@ -1272,6 +1281,353 @@ void main() {
       // (Matches twice: once as the section header, once as the item's
       // own status chip -- both share the same localized string.)
       expect(find.text('Due today'), findsNWidgets(2));
+    },
+  );
+
+
+  // ---------------------------------------------------------------------
+  // Checkpoint 11 -- Recurring + Subscriptions V1: the Subscriptions tab
+  // is a VIEW over the same recurring engine (see
+  // `subscription_providers.dart`'s own doc comment), reached from this
+  // same screen via a segmented control rather than a new bottom-nav
+  // destination or a duplicate route. None of the tests above this
+  // point ever select a tab, so they all continue to exercise the
+  // Recurring tab exactly as before this checkpoint.
+  // ---------------------------------------------------------------------
+  testWidgets(
+    'Checkpoint 11: tapping the Subscriptions segment switches tabs and hides the add-rule FAB',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, _, _) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      // Default tab is Recurring -- identical to every test above.
+      expect(find.byKey(const Key('addRecurringRuleFab')), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionsListView')), findsNothing);
+
+      await tester.tap(find.text('Subscriptions'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('addRecurringRuleFab')), findsNothing);
+      expect(find.byKey(const Key('subscriptionsListView')), findsOneWidget);
+
+      // Switching back restores the Recurring tab's own FAB. Scoped to
+      // the segmented control itself (`recurringTabSegmentedControl`,
+      // already keyed in production) rather than a bare `find.text`,
+      // since the AppBar's own title is also literally "Recurring" in
+      // English -- an unscoped finder now matches both.
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('recurringTabSegmentedControl')),
+          matching: find.text('Recurring'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('addRecurringRuleFab')), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionsListView')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Checkpoint 11: the Subscriptions tab shows only expense-kind rules and their deterministic '
+    'estimated totals',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+      final RecurringRuleRepository ruleRepo = RecurringRuleRepository(db, AccountRepository(db));
+      final DateTime todayUtc = DateTime.now().toUtc();
+      final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+      await ruleRepo.createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Netflix',
+        amount: Money.fromMinorUnits(150000, 'JPY'),
+        accountId: accounts.first.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: today,
+      );
+      await ruleRepo.createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.income,
+        name: 'Salary',
+        amount: Money.fromMinorUnits(3000000, 'JPY'),
+        accountId: accounts.first.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: today,
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Subscriptions'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Netflix'), findsOneWidget);
+      expect(find.text('Salary'), findsNothing); // income rule never shown as a subscription
+
+      expect(find.byKey(const Key('subscriptionTotalsCard')), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionTotal_JPY')), findsOneWidget);
+      // Interval-1 monthly expense: the estimated monthly total equals
+      // the rule's own amount exactly -- shown once on the row itself
+      // and once in the totals header.
+      expect(find.textContaining('\u00a5150,000'), findsNWidgets(2));
+      // Estimated yearly total = amount * 12, shown only in the header.
+      expect(find.textContaining('\u00a51,800,000'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Checkpoint 11: the Subscriptions tab shows an empty-state message when there are no active '
+    'subscriptions',
+    (tester) async {
+      final (AppDatabase db, _, _) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Subscriptions'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('No active subscriptions yet'), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionTotalsCard')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Checkpoint 11: subscriptions in different currencies show separate totals blocks, never a '
+    'combined figure',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb(
+        accounts: const <_SeedAccount>[
+          _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY'),
+          _SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD'),
+        ],
+      );
+      final RecurringRuleRepository ruleRepo = RecurringRuleRepository(db, AccountRepository(db));
+      final DateTime todayUtc = DateTime.now().toUtc();
+      final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+      await ruleRepo.createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Netflix',
+        amount: Money.fromMinorUnits(150000, 'JPY'),
+        accountId: accounts[0].id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: today,
+      );
+      await ruleRepo.createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Gym',
+        amount: Money.fromMinorUnits(12345, 'KWD'), // د.ك12.345
+        accountId: accounts[1].id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: today,
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Subscriptions'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('subscriptionTotal_JPY')), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionTotal_KWD')), findsOneWidget);
+      expect(find.textContaining('\u00a5150,000'), findsWidgets);
+      expect(find.textContaining('\u062F.\u064312.345'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'Checkpoint 11: the Subscriptions tab and its totals labels render in Japanese',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+      final DateTime todayUtc = DateTime.now().toUtc();
+      final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+      await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Netflix',
+        amount: Money.fromMinorUnits(150000, 'JPY'),
+        accountId: accounts.first.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: today,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container, locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('\u30b5\u30d6\u30b9\u30af\u30ea\u30d7\u30b7\u30e7\u30f3'), findsOneWidget);
+
+      await tester.tap(find.text('\u30b5\u30d6\u30b9\u30af\u30ea\u30d7\u30b7\u30e7\u30f3'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('\u63a8\u5b9a\u6708\u984d'), findsOneWidget);
+      expect(find.text('\u63a8\u5b9a\u5e74\u984d'), findsOneWidget);
+      expect(find.text('Netflix'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Checkpoint 11: the Subscriptions tab renders without overflow at a narrow width and a 1.6x '
+    'text scale',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb(
+        accounts: const <_SeedAccount>[_SeedAccount(name: 'KWD Wallet', currencyCode: 'KWD')],
+      );
+      final DateTime todayUtc = DateTime.now().toUtc();
+      final DateTime anchor = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+      await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'A rather long subscription name to stress narrow-width layout',
+        amount: Money.fromMinorUnits(12345678, 'KWD'),
+        accountId: accounts.first.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: anchor,
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Subscriptions'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('\u062F.\u064312,345.678'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'Checkpoint 11 FINAL FIX: handling a subscription\'s only Upcoming occurrence early still '
+    'leaves the later occurrence visible, and the Subscriptions tab never shows the '
+    'contradictory empty state while that subscription still contributes to its totals '
+    '-- regression for the Android QA subscription-state-inconsistency investigation',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+      final DateTime todayUtc = DateTime.now().toUtc();
+      final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+      final DateTime nearestUpcoming = today.add(const Duration(days: 1));
+      final String ruleId = await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Netflix',
+        amount: Money.fromMinorUnits(150000, 'JPY'),
+        accountId: accounts.first.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: nearestUpcoming, // starts tomorrow -- nothing due/overdue yet
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Subscriptions'));
+      await tester.pumpAndSettle();
+
+      // Before handling anything: the subscription's one Upcoming
+      // occurrence is visible, its totals are shown, and there is no
+      // empty state.
+      expect(find.text('Netflix'), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionTotalsCard')), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionTotal_JPY')), findsOneWidget);
+      expect(find.textContaining('No active subscriptions yet'), findsNothing);
+      final Finder skipButton = find.byWidgetPredicate(
+        (Widget w) => w is OutlinedButton && (w.key as ValueKey<String>?)?.value.startsWith(
+              'skipOccurrence_$ruleId',
+            ) == true,
+      );
+      expect(skipButton, findsOneWidget);
+
+      // Handle that single Upcoming occurrence EARLY, via the same
+      // Skip button that already exists and is never disabled for an
+      // `upcoming`-urgency item -- exactly how the Android QA report
+      // reproduced this by ordinary tapping, not a special code path.
+      await tester.tap(skipButton);
+      await tester.pumpAndSettle();
+
+      // The rule is still active and still has a real future
+      // occurrence, so it must NOT disappear from the Subscriptions
+      // tab, and the totals card (driven independently by
+      // `computeSubscriptionEstimatedTotals`, which has no such
+      // blind spot) must still show its figure -- this is the exact
+      // "totals shown + No active subscriptions yet" contradiction the
+      // investigation reported, and it must not reproduce here anymore.
+      expect(find.textContaining('No active subscriptions yet'), findsNothing);
+      expect(find.byKey(const Key('subscriptionTotalsCard')), findsOneWidget);
+      expect(find.byKey(const Key('subscriptionTotal_JPY')), findsOneWidget);
+
+      // The later, still-unhandled occurrence is what now surfaces --
+      // computed by the same production `RecurringSchedule`, never a
+      // hand-derived date.
+      final DateTime laterOccurrence = RecurringSchedule(
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDateUtc: nearestUpcoming,
+      ).nextOccurrenceAfter(nearestUpcoming)!;
+      expect(laterOccurrence.isAfter(nearestUpcoming), isTrue); // a genuinely later date
+      expect(find.text('Netflix'), findsOneWidget); // the later occurrence's own row
+      expect(
+        find.byKey(Key('skipOccurrence_${ruleId}_${laterOccurrence.toIso8601String()}')),
+        findsOneWidget,
+      );
+      // The handled date's own row/button is gone.
+      expect(
+        find.byKey(Key('skipOccurrence_${ruleId}_${nearestUpcoming.toIso8601String()}')),
+        findsNothing,
+      );
+
+      // The occurrence really was skipped (no transaction created) --
+      // a raw table read, independent of the provider/UI under test.
+      final List<RecurringOccurrenceRow> occurrences =
+          await db.select(db.recurringOccurrences).get();
+      expect(occurrences, hasLength(1));
+      expect(occurrences.single.status, 'skipped');
+      expect(occurrences.single.scheduledDate.toUtc(), nearestUpcoming);
+      final List<Transaction> transactions = await db.select(db.transactions).get();
+      expect(transactions, isEmpty);
     },
   );
 }

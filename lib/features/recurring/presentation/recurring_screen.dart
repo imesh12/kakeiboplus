@@ -20,7 +20,10 @@ import '../../../core/notifications/notification_scheduler.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_finance_list_row.dart';
+import '../../../shared/widgets/app_money_text.dart';
 import '../../../shared/widgets/app_section_header.dart';
+import '../../../shared/widgets/app_segmented_control.dart';
 import '../../../shared/widgets/app_status_chip.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
@@ -28,6 +31,7 @@ import '../../categories/presentation/category_providers.dart';
 import '../domain/recurrence_frequency.dart';
 import '../domain/recurring_rule_kind.dart';
 import 'recurring_providers.dart';
+import 'subscription_providers.dart';
 
 const MoneyFormatter _formatter = MoneyFormatter();
 
@@ -51,14 +55,90 @@ String _frequencyLabel(AppLocalizations l10n, RecurrenceFrequency frequency) => 
       RecurrenceFrequency.yearly => l10n.recurrenceFrequencyYearly,
     };
 
-/// The Beta 1 Task 4A recurring screen: every pending item (overdue, due
-/// today, or upcoming) derived from the profile's active
-/// [RecurringRuleRow]s, plus creating, editing, and deleting rules. See
-/// `docs/14_DECISION_LOG.md` ADR-023. Reached from the Profile screen's
-/// "Recurring" entry and the Home dashboard's recurring summary card --
-/// no new bottom-nav item, same precedent Budgets/Savings Goals set.
-class RecurringScreen extends ConsumerWidget {
+/// Checkpoint 11 (Recurring + Subscriptions V1): which of this screen's
+/// two tabs is currently showing. Purely local presentation state --
+/// neither tab changes what data exists, only which already-reactive
+/// view of it is rendered (see `subscription_providers.dart`'s doc
+/// comment on why Subscriptions is a VIEW over the same recurring
+/// engine, never a second one). Defaults to [recurring] so every
+/// pre-existing test that mounts [RecurringScreen] with no knowledge of
+/// tabs keeps seeing exactly the same first-shown content as before
+/// this checkpoint -- see `recurring_screen_test.dart`'s `appWithRecurring`
+/// harness, which never selects a tab.
+enum _RecurringTab { recurring, subscriptions }
+
+/// The Beta 1 Task 4A recurring screen, converged to the Checkpoint 10
+/// icon-led visual system and extended (Checkpoint 11) with a
+/// Subscriptions tab: every pending item (overdue, due today, or
+/// upcoming) derived from the profile's active [RecurringRuleRow]s, plus
+/// creating, editing, and deleting rules. See
+/// `docs/14_DECISION_LOG.md` ADR-023/ADR-031. Reached from the Profile
+/// screen's "Recurring" entry and the Home dashboard's recurring summary
+/// card -- no new bottom-nav item, same precedent Budgets/Savings Goals
+/// set, and Subscriptions fits inside this same destination as a second
+/// tab rather than a new one (ADR-031).
+class RecurringScreen extends ConsumerStatefulWidget {
   const RecurringScreen({super.key});
+
+  @override
+  ConsumerState<RecurringScreen> createState() => _RecurringScreenState();
+}
+
+class _RecurringScreenState extends ConsumerState<RecurringScreen> {
+  _RecurringTab _selectedTab = _RecurringTab.recurring;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.recurringTitle)),
+      body: Column(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: AppSegmentedControl<_RecurringTab>(
+              key: const Key('recurringTabSegmentedControl'),
+              options: <AppSegmentedControlOption<_RecurringTab>>[
+                AppSegmentedControlOption<_RecurringTab>(
+                  value: _RecurringTab.recurring,
+                  label: l10n.recurringTitle,
+                ),
+                AppSegmentedControlOption<_RecurringTab>(
+                  value: _RecurringTab.subscriptions,
+                  label: l10n.subscriptionsTitle,
+                ),
+              ],
+              selected: _selectedTab,
+              onChanged: (_RecurringTab tab) => setState(() => _selectedTab = tab),
+            ),
+          ),
+          Expanded(
+            child: switch (_selectedTab) {
+              _RecurringTab.recurring => const _RecurringListView(),
+              _RecurringTab.subscriptions => const _SubscriptionsView(),
+            },
+          ),
+        ],
+      ),
+      floatingActionButton: _selectedTab == _RecurringTab.recurring
+          ? FloatingActionButton(
+              key: const Key('addRecurringRuleFab'),
+              onPressed: () => showDialog<void>(context: context, builder: (_) => const _RuleDialog()),
+              child: const Icon(Icons.add),
+            )
+          : null,
+    );
+  }
+}
+
+/// The Recurring tab's own list body -- extracted unchanged (byte-for-byte
+/// the same widget tree/Keys/logic Beta 1 Task 4A originally built
+/// directly inside [RecurringScreen]) so [RecurringScreen] itself could
+/// gain a second tab without altering this tab's already-tested
+/// behavior at all.
+class _RecurringListView extends ConsumerWidget {
+  const _RecurringListView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -66,76 +146,228 @@ class RecurringScreen extends ConsumerWidget {
     final AsyncValue<List<RecurringPendingItem>> itemsAsync =
         ref.watch(recurringPendingItemsProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.recurringTitle)),
-      body: itemsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (Object e, StackTrace st) =>
-            Center(child: Text(l10n.couldNotLoadRecurringRules(e.toString()))),
-        data: (List<RecurringPendingItem> items) {
-          if (items.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  l10n.noRecurringRulesYetTapMessage,
-                  textAlign: TextAlign.center,
-                  style: context.appTypography.secondaryBody,
+    return itemsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (Object e, StackTrace st) =>
+          Center(child: Text(l10n.couldNotLoadRecurringRules(e.toString()))),
+      data: (List<RecurringPendingItem> items) {
+        if (items.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                l10n.noRecurringRulesYetTapMessage,
+                textAlign: TextAlign.center,
+                style: context.appTypography.secondaryBody,
+              ),
+            ),
+          );
+        }
+        final List<RecurringPendingItem> overdue =
+            items.where((i) => i.urgency == RecurringItemUrgency.overdue).toList();
+        final List<RecurringPendingItem> dueToday =
+            items.where((i) => i.urgency == RecurringItemUrgency.dueToday).toList();
+        final List<RecurringPendingItem> upcoming =
+            items.where((i) => i.urgency == RecurringItemUrgency.upcoming).toList();
+
+        return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: <Widget>[
+            if (overdue.isNotEmpty) ...<Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: AppSectionHeader(
+                  key: const Key('sectionOverdue'),
+                  title: l10n.overdueLabel,
+                  eyebrow: true,
                 ),
               ),
-            );
-          }
-          final List<RecurringPendingItem> overdue =
-              items.where((i) => i.urgency == RecurringItemUrgency.overdue).toList();
-          final List<RecurringPendingItem> dueToday =
-              items.where((i) => i.urgency == RecurringItemUrgency.dueToday).toList();
-          final List<RecurringPendingItem> upcoming =
-              items.where((i) => i.urgency == RecurringItemUrgency.upcoming).toList();
-
-          return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: <Widget>[
-              if (overdue.isNotEmpty) ...<Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: AppSectionHeader(
-                    key: const Key('sectionOverdue'),
-                    title: l10n.overdueLabel,
-                    eyebrow: true,
-                  ),
-                ),
-                for (final RecurringPendingItem item in overdue) _PendingItemTile(item: item),
-              ],
-              if (dueToday.isNotEmpty) ...<Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: AppSectionHeader(
-                    key: const Key('sectionDueToday'),
-                    title: l10n.recurringStatusDueToday,
-                    eyebrow: true,
-                  ),
-                ),
-                for (final RecurringPendingItem item in dueToday) _PendingItemTile(item: item),
-              ],
-              if (upcoming.isNotEmpty) ...<Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: AppSectionHeader(
-                    key: const Key('sectionUpcoming'),
-                    title: l10n.recurringStatusUpcoming,
-                    eyebrow: true,
-                  ),
-                ),
-                for (final RecurringPendingItem item in upcoming) _PendingItemTile(item: item),
-              ],
+              for (final RecurringPendingItem item in overdue) _PendingItemTile(item: item),
             ],
-          );
-        },
+            if (dueToday.isNotEmpty) ...<Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: AppSectionHeader(
+                  key: const Key('sectionDueToday'),
+                  title: l10n.recurringStatusDueToday,
+                  eyebrow: true,
+                ),
+              ),
+              for (final RecurringPendingItem item in dueToday) _PendingItemTile(item: item),
+            ],
+            if (upcoming.isNotEmpty) ...<Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: AppSectionHeader(
+                  key: const Key('sectionUpcoming'),
+                  title: l10n.recurringStatusUpcoming,
+                  eyebrow: true,
+                ),
+              ),
+              for (final RecurringPendingItem item in upcoming) _PendingItemTile(item: item),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Checkpoint 11 -- Subscriptions V1: a first-class VIEW over the same
+/// recurring engine (`subscription_providers.dart`), never a second
+/// accounting system (ADR-031). Shows the deterministic, per-currency
+/// estimated monthly/yearly cost header (never summed across
+/// currencies -- see [_SubscriptionTotalsCard]), then every active
+/// subscription (an active, non-deleted, expense-kind recurring rule)
+/// using the exact same [_PendingItemTile] the Recurring tab already
+/// uses, so this view introduces no new row presentation of its own --
+/// only a different, generic leading icon and (when resolvable) the
+/// payment account's name, since a subscription's account is a useful
+/// truthful data point the brief explicitly calls out.
+class _SubscriptionsView extends ConsumerWidget {
+  const _SubscriptionsView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final AsyncValue<List<RecurringPendingItem>> itemsAsync =
+        ref.watch(subscriptionPendingItemsProvider);
+    final AsyncValue<List<SubscriptionCurrencyTotal>> totalsAsync =
+        ref.watch(subscriptionEstimatedTotalsProvider);
+    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+
+    if (itemsAsync.isLoading || totalsAsync.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (itemsAsync.hasError) {
+      return Center(child: Text(l10n.couldNotLoadRecurringRules(itemsAsync.error.toString())));
+    }
+    if (totalsAsync.hasError) {
+      return Center(child: Text(l10n.couldNotLoadRecurringRules(totalsAsync.error.toString())));
+    }
+
+    final List<RecurringPendingItem> items = itemsAsync.requireValue;
+    final List<SubscriptionCurrencyTotal> totals = totalsAsync.requireValue;
+    // Best-effort account-name lookup only -- never blocks or delays
+    // rendering the rest of the tab on the accounts stream, and never
+    // fabricates a name: a `null` here (still loading, or an account
+    // since made inactive) simply omits the account segment of the
+    // subtitle, exactly like `accountName == null` already does for the
+    // Recurring tab's rows.
+    final Map<String, String> accountNamesById = <String, String>{
+      for (final AccountRow account in accountsAsync.valueOrNull ?? const <AccountRow>[])
+        account.id: account.name,
+    };
+
+    return ListView(
+      key: const Key('subscriptionsListView'),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: <Widget>[
+        if (totals.isNotEmpty) _SubscriptionTotalsCard(totals: totals, l10n: l10n),
+        if (items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              l10n.noActiveSubscriptionsMessage,
+              textAlign: TextAlign.center,
+              style: context.appTypography.secondaryBody,
+            ),
+          )
+        else
+          for (final RecurringPendingItem item in items)
+            _PendingItemTile(
+              item: item,
+              leadingIconOverride: Icons.subscriptions_outlined,
+              accountName: accountNamesById[item.rule.accountId],
+            ),
+      ],
+    );
+  }
+}
+
+/// The Subscriptions tab's deterministic totals header -- one block per
+/// currency in [totals], each showing its own ROUND HALF UP estimated
+/// monthly and yearly cost side by side. Never renders a single combined
+/// figure across currencies (ADR-031's "do not silently use live FX to
+/// manufacture a single accounting total" rule) -- if [totals] has more
+/// than one entry, this card simply stacks one block per currency.
+class _SubscriptionTotalsCard extends StatelessWidget {
+  const _SubscriptionTotalsCard({required this.totals, required this.l10n});
+
+  final List<SubscriptionCurrencyTotal> totals;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      key: const Key('subscriptionTotalsCard'),
+      bordered: true,
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (int i = 0; i < totals.length; i++) ...<Widget>[
+            if (i > 0) const SizedBox(height: 16),
+            _SubscriptionCurrencyTotalBlock(total: totals[i], l10n: l10n),
+          ],
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        key: const Key('addRecurringRuleFab'),
-        onPressed: () => showDialog<void>(context: context, builder: (_) => const _RuleDialog()),
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+class _SubscriptionCurrencyTotalBlock extends StatelessWidget {
+  const _SubscriptionCurrencyTotalBlock({required this.total, required this.l10n});
+
+  final SubscriptionCurrencyTotal total;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final String monthlyFormatted = _formatter.format(
+      Money.fromMinorUnits(total.monthlyEstimateMinorUnits, total.currencyCode),
+    );
+    final String yearlyFormatted = _formatter.format(
+      Money.fromMinorUnits(total.yearlyEstimateMinorUnits, total.currencyCode),
+    );
+
+    return Container(
+      key: Key('subscriptionTotal_${total.currencyCode}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(total.currencyCode, style: context.appTypography.secondaryBody),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.subscriptionsEstimatedMonthlyTotalLabel,
+                      style: context.appTypography.caption,
+                    ),
+                    AppMoneyText(monthlyFormatted, emphasis: AppMoneyEmphasis.secondary),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.subscriptionsEstimatedYearlyTotalLabel,
+                      style: context.appTypography.caption,
+                    ),
+                    AppMoneyText(yearlyFormatted, emphasis: AppMoneyEmphasis.secondary),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -143,10 +375,33 @@ class RecurringScreen extends ConsumerWidget {
 
 /// One pending item: the underlying rule's summary plus urgency-specific
 /// styling, edit/delete for the rule, and post/skip for this specific
-/// scheduled date.
+/// scheduled date. Reused verbatim (Checkpoint 11) for both the
+/// Recurring tab's rows and the Subscriptions tab's rows -- only
+/// [leadingIconOverride] (a generic subscription glyph instead of the
+/// kind-based one) and [accountName] (shown when the caller already
+/// resolved it) differ between the two call sites; every other behavior
+/// -- edit/delete/skip/post, urgency styling, layout -- is identical, so
+/// there is exactly one row implementation to keep correct rather than
+/// two that could drift apart.
 class _PendingItemTile extends ConsumerStatefulWidget {
-  const _PendingItemTile({required this.item});
+  const _PendingItemTile({required this.item, this.leadingIconOverride, this.accountName});
   final RecurringPendingItem item;
+
+  /// Overrides the kind-based icon (trending down/up, swap) with a
+  /// caller-supplied one -- used by the Subscriptions tab (a generic
+  /// "subscription" glyph) since every subscription row is already
+  /// known to be `RecurringRuleKind.expense` and repeating the same
+  /// trending-down icon on every row there would carry no information.
+  /// `null` (the Recurring tab's default) keeps the original kind-based
+  /// icon.
+  final IconData? leadingIconOverride;
+
+  /// The rule's payment/source account name, already resolved by the
+  /// caller (this widget never queries accounts itself) -- appended to
+  /// the subtitle when non-null. `null` (the Recurring tab's default)
+  /// omits it, exactly matching this row's appearance before Checkpoint
+  /// 11.
+  final String? accountName;
 
   @override
   ConsumerState<_PendingItemTile> createState() => _PendingItemTileState();
@@ -208,11 +463,20 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
       RecurringItemUrgency.dueToday => (colors.primary, l10n.recurringStatusDueToday),
       RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, l10n.recurringStatusUpcoming),
     };
-    final IconData kindIcon = switch (RecurringRuleKind.values.byName(rule.kind)) {
-      RecurringRuleKind.expense => Icons.trending_down_rounded,
-      RecurringRuleKind.income => Icons.trending_up_rounded,
-      RecurringRuleKind.transfer => Icons.swap_horiz_rounded,
-    };
+    final IconData kindIcon = widget.leadingIconOverride ??
+        switch (RecurringRuleKind.values.byName(rule.kind)) {
+          RecurringRuleKind.expense => Icons.trending_down_rounded,
+          RecurringRuleKind.income => Icons.trending_up_rounded,
+          RecurringRuleKind.transfer => Icons.swap_horiz_rounded,
+        };
+
+    final String frequencyLabel =
+        _frequencyLabel(l10n, RecurrenceFrequency.values.byName(rule.frequency));
+    final String dateLabel = DateFormat.yMMMd().format(widget.item.scheduledDateUtc);
+    final String? accountName = widget.accountName;
+    final String subtitle = accountName == null
+        ? '$frequencyLabel · $dateLabel'
+        : '$frequencyLabel · $dateLabel · $accountName';
 
     return AppCard(
       key: Key('pendingItem_${rule.id}_$_dateKey'),
@@ -222,24 +486,20 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Icon(kindIcon, color: colors.onSurfaceVariant, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  rule.name,
-                  style: context.appTypography.cardTitle,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              AppStatusChip(label: urgencyLabel, color: urgencyColor),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${_formatter.format(amount)} · ${DateFormat.yMMMd().format(widget.item.scheduledDateUtc)}',
-            style: context.appTypography.secondaryBody,
+          AppFinanceListRow(
+            leadingIcon: kindIcon,
+            leadingColor: colors.onSurfaceVariant,
+            title: rule.name,
+            subtitle: subtitle,
+            trailing: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                AppMoneyText(_formatter.format(amount), emphasis: AppMoneyEmphasis.secondary),
+                const SizedBox(height: 4),
+                AppStatusChip(label: urgencyLabel, color: urgencyColor),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -295,6 +555,7 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
     );
   }
 }
+
 
 /// Create (no [existingRule]) or edit (an active [existingRule]) a
 /// recurring rule. [RecurringRuleKind] is chosen only when creating --

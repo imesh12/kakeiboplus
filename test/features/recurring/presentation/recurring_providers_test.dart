@@ -348,4 +348,133 @@ void main() {
     expect(selection.kind, RecurringHomeSelectionKind.empty);
     expect(selection.item, isNull);
   });
+
+  // CP11 FINAL FIX -- NEXT UNHANDLED UPCOMING OCCURRENCE. Regression
+  // coverage for the CP11 Android QA "subscription state inconsistency"
+  // investigation: `_pendingItemsForRule`'s old "upcoming" branch did a
+  // SINGLE `nextOccurrenceAfter(todayUtc)` lookup and silently dropped
+  // the item entirely if that one candidate date was already handled
+  // (posted/skipped early -- which the UI's Post/Skip buttons and
+  // `RecurringOccurrenceRepository` both already allow, unconditionally,
+  // for any urgency including `upcoming`). A still-active rule would
+  // then vanish from `recurringPendingItemsProvider`'s output even
+  // though it kept contributing to `computeSubscriptionEstimatedTotals`,
+  // which has no such single-lookup blind spot -- exactly the
+  // inconsistent "totals shown + No active subscriptions yet" Android
+  // symptom this fix resolves.
+  group('upcoming selection walks forward past already-handled occurrences', () {
+    test(
+      'the nearest upcoming occurrence is already handled -- selector returns the next '
+      'unhandled one instead of dropping the rule entirely',
+      () async {
+        final DateTime nearestUpcoming = today.add(const Duration(days: 1));
+        final String ruleId = await createDailyRule(startDate: nearestUpcoming);
+
+        await _waitFor(
+          container,
+          recurringPendingItemsProvider,
+          (list) => list.any((i) => i.rule.id == ruleId && i.scheduledDateUtc == nearestUpcoming),
+        );
+
+        // Handle the nearest occurrence early -- Post/Skip are never
+        // blocked from acting on a future date; see
+        // `RecurringOccurrenceRepository`.
+        await occurrenceRepo.skipOccurrence(ruleId: ruleId, scheduledDateUtc: nearestUpcoming);
+
+        final List<RecurringPendingItem> afterSkip = await _waitFor(
+          container,
+          recurringPendingItemsProvider,
+          (list) => list.any(
+            (i) => i.rule.id == ruleId && i.scheduledDateUtc == nearestUpcoming.add(const Duration(days: 1)),
+          ),
+        );
+
+        final List<RecurringPendingItem> forRule =
+            afterSkip.where((i) => i.rule.id == ruleId).toList();
+        // Before the fix, this would be empty -- the rule would have
+        // vanished from the pending-items list entirely.
+        expect(forRule, hasLength(1));
+        expect(forRule.single.urgency, RecurringItemUrgency.upcoming);
+        expect(forRule.single.scheduledDateUtc, nearestUpcoming.add(const Duration(days: 1)));
+      },
+    );
+
+    test(
+      'multiple consecutive future occurrences are already handled -- selector skips all of '
+      'them and returns the first genuinely unhandled one',
+      () async {
+        final DateTime first = today.add(const Duration(days: 1));
+        final DateTime second = first.add(const Duration(days: 1));
+        final DateTime third = second.add(const Duration(days: 1));
+        final String ruleId = await createDailyRule(startDate: first);
+
+        await _waitFor(
+          container,
+          recurringPendingItemsProvider,
+          (list) => list.any((i) => i.rule.id == ruleId),
+        );
+
+        await occurrenceRepo.skipOccurrence(ruleId: ruleId, scheduledDateUtc: first);
+        await occurrenceRepo.skipOccurrence(ruleId: ruleId, scheduledDateUtc: second);
+
+        final List<RecurringPendingItem> after = await _waitFor(
+          container,
+          recurringPendingItemsProvider,
+          (list) => list.any((i) => i.rule.id == ruleId && i.scheduledDateUtc == third),
+        );
+
+        final List<RecurringPendingItem> forRule = after.where((i) => i.rule.id == ruleId).toList();
+        expect(forRule, hasLength(1));
+        expect(forRule.single.scheduledDateUtc, third);
+        expect(forRule.single.urgency, RecurringItemUrgency.upcoming);
+      },
+    );
+
+    test(
+      'a finite schedule whose every remaining occurrence is already handled produces no '
+      'upcoming item -- no exception, no incorrect item, the rule cleanly has nothing pending',
+      () async {
+        final DateTime first = today.add(const Duration(days: 1));
+        final DateTime last = first.add(const Duration(days: 1)); // exactly 2 occurrences total
+        final String ruleId = await ruleRepo.createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: 'Ends Soon',
+          amount: Money.fromMinorUnits(500, 'JPY'),
+          accountId: jpyAccountId,
+          frequency: RecurrenceFrequency.daily,
+          interval: 1,
+          startDate: first,
+          endDate: last,
+        );
+
+        await _waitFor(
+          container,
+          recurringPendingItemsProvider,
+          (list) => list.any((i) => i.rule.id == ruleId),
+        );
+
+        await occurrenceRepo.skipOccurrence(ruleId: ruleId, scheduledDateUtc: first);
+        final List<RecurringPendingItem> afterFirstSkip = await _waitFor(
+          container,
+          recurringPendingItemsProvider,
+          (list) => list.any((i) => i.rule.id == ruleId && i.scheduledDateUtc == last),
+        );
+        expect(afterFirstSkip.where((i) => i.rule.id == ruleId), hasLength(1));
+
+        await occurrenceRepo.skipOccurrence(ruleId: ruleId, scheduledDateUtc: last);
+        final List<RecurringPendingItem> afterBothSkipped = await _waitFor(
+          container,
+          recurringPendingItemsProvider,
+          (list) => list.every((i) => i.rule.id != ruleId),
+        );
+        // The schedule's own `endDate` -- not the defensive iteration
+        // cap -- is what stops the walk here: `nextOccurrenceAfter`
+        // returns `null` once every occurrence up to `endDate` is
+        // exhausted, so the rule cleanly contributes nothing rather than
+        // throwing or fabricating an out-of-range item.
+        expect(afterBothSkipped.where((i) => i.rule.id == ruleId), isEmpty);
+      },
+    );
+  });
 }
