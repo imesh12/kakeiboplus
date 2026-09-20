@@ -1872,3 +1872,83 @@ without also reconsidering which destination it displaced. Profile's tool-direct
 survives under a new name (More) rather than being removed, and the resulting
 architecture is designed to absorb the product's near-term V2 roadmap (wealth, OCR,
 household sharing) without forcing a second navigation redesign later.
+
+## ADR-035 — Unified `FinancialAccount` ledger model: design freeze for asset/liability accounts, payment instruments, and deposits
+
+Status: Approved 2026-09-20 (documentation/architecture decision only; no
+implementation in this checkpoint).
+
+**Decision: adopt a single, unified `FinancialAccount` ledger-target table**
+(rather than parallel per-type tables that `Transactions` would need separate,
+mutually-exclusive foreign keys to reference) as the authoritative balance
+target for every asset and liability account. A `FinancialAccount` carries a
+`balanceClass` (`asset` | `liability`) and a `subtype`; specialized products
+attach one-to-one metadata via `CreditFacilityDetails`/`DepositDetails` rather
+than widening `FinancialAccount` itself with mostly-unused nullable columns.
+`PaymentInstrument`s (debit/credit cards, linked wallets) are never
+balance-holding and link to exactly one `FinancialAccount`. This decision is
+recorded in full — domain model, immutability invariants, canonical balance
+sign semantics, transaction/payment-instrument invariants, the shared-credit-
+facility shape, the deposit model and its deterministic calculation contract,
+the recurring-deposit and wallet-funding scope decisions, the conservative
+migration policy from today's `accounts.type` free-text data, compatibility
+with the existing generic Account Detail/Edit screens (HEAD `deb51bf`), the
+V1/later scope table, and the ordered implementation checkpoint plan — in
+`docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §12–13. That document is
+authoritative for this model's detail; this entry records the decision itself
+for the decision log's own cross-referenced history, matching the existing
+ADR-023/§10.6 and ADR-032/§21 precedent of a decision-log entry pointing to a
+fuller specification document rather than duplicating it.
+
+**Rationale — why unified over parallel per-type foreign keys:** An earlier
+audit pass proposed making `Transactions.accountId` nullable and adding a
+parallel `creditFacilityId` column, with an application-enforced
+"exactly one of the two" rule. A subsequent adversarial comparison against the
+unified alternative found the parallel design loses on nearly every axis
+evaluated: it requires widening an existing, populated, required column
+(`accountId`) to nullable on the schema's highest-write-frequency table — a
+strictly riskier migration primitive than the unified model's own migration,
+which touches `Transactions` not at all; it introduces a genuinely new
+mutually-exclusive-FK-pair invariant with no precedent in this schema, and that
+invariant would have needed to repeat for every future liability type (loans,
+etc.) and again for `PaymentInstrument`s, whereas the unified model needs it
+zero times; it fragments balance arithmetic into two independently-written
+`FinanceEngine` functions that must separately agree on transfer-destination
+behavior, reintroducing exactly the "one missed branch flips a sign" risk the
+split was originally meant to avoid; and it makes net worth and future
+liability types each require a growing list of tables to remember to sum over,
+where the unified model always sums over one table. The one point in the
+parallel design's favor — that which table a row lives in can never be edited
+by an ordinary `UPDATE`, giving `balanceClass` immutability "for free" — is
+preserved in the unified model by a deliberate, explicit design requirement
+(§12.2): the repository's own update-method signature must have no way to
+express a `balanceClass`/`subtype` change at all, the same discipline this
+codebase already trusts for currency immutability, backed by a required
+regression test rather than left to convention.
+
+**Explicitly deferred, not decided against:** a loan amortization engine, full
+recurring-deposit auto-posting/projection, bank-specific tax/day-count rules,
+early-withdrawal calculations, variable-rate deposits, net worth as a
+screen/provider, and refund-to-credit-card all remain future work under this
+same model — this decision does not foreclose any of them, it only declines to
+build them now. See `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.3
+for the full V1/later classification.
+
+**Scope of this decision: information architecture only.** This ADR and
+`docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §12–13 freeze the approved
+domain model, invariants, and implementation sequencing for future work. They
+do not modify the Drift schema, `FinanceEngine`, any repository, provider,
+screen, test, or localization resource. `accounts`/`Transactions` at HEAD
+`deb51bf` continue to implement exactly what they implemented before this
+entry; implementing checkpoint B of the ordered plan (§13.4) is future work for
+a separate, explicitly scoped checkpoint. No Dart, test, schema, or migration
+file was touched to record this decision, and nothing was staged or committed
+by it.
+
+Reason: the product's real-world account acceptance cases (multi-product
+institutions, shared-limit credit cards, debit cards that must never duplicate
+a bank balance, term/fixed/recurring deposits) could not be represented
+correctly by the flat `accounts.type` free-text model, and two candidate
+schema shapes were evaluated in detail — including an explicit attempt to
+falsify each — before this one was adopted, rather than committing to the
+first design that appeared adequate.

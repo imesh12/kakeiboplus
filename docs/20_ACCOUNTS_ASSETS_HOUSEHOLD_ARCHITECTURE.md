@@ -760,3 +760,574 @@ engine, not the stale schema-doc table.
 - `03_DATABASE_SCHEMA.md`, `recurring_transactions` table — an older
   single-table shape that predates ADR-023's split; per "V2 precedence,"
   `14_DECISION_LOG.md` governs where the two disagree.
+
+---
+
+## 12. Unified `FinancialAccount` ledger model — approved design freeze
+
+Status: Approved 2026-09-20 (documentation/architecture decision only; no
+implementation in this checkpoint — no Drift schema, migration, `FinanceEngine`,
+repository, provider, or screen file was changed to record this section).
+
+This section is the outcome of a dedicated architecture audit and an adversarial
+design challenge conducted against it (both records kept outside this repository).
+It **refines the shape** of sections 1.2 ("Bank Account"), 1.3 ("Debit Card"), and
+1.4 ("Credit Card") above with a concrete, approved schema — it does not overturn
+any of those sections' worked examples or invariants, all of which remain valid and
+are not restated here except where this section adds something genuinely new
+(institution grouping, deposits, migration policy, sign-convention arithmetic).
+Where this section and 1.2–1.4 could be read as disagreeing on a point neither
+explicitly settled before, this section governs, per this document's own "adds
+detail, does not override" framing in its introduction.
+
+### 12.1 Domain model
+
+Five conceptual entities, one balance-holding table:
+
+- **`FinancialInstitution`** — an optional grouping/provider label (MUFG, Commercial
+  Bank, Rakuten, Docomo, ...). Never carries a balance. Every product type below
+  references it via a **nullable** foreign key — cash and other institution-less
+  products simply leave it unset; the UI renders that as "Cash" or "Other," a
+  presentation label, never a sentinel database row.
+- **`FinancialAccount`** — the single authoritative ledger-balance target for
+  every asset and every liability. Fields: `id`, `profileId`, `institutionId`
+  (nullable), `name`/nickname, `currencyCode`, `balanceClass` (`asset` |
+  `liability`), `subtype` (`cash` / `checking` / `savings` / `bank` / `wallet` /
+  `creditCard` / `deposit` / `other`), `openingAmountMinorUnits` (always a
+  **non-negative magnitude**, in the account's own class-native terms — see 12.3),
+  plus the project's standard lifecycle/sync fields (`isActive`, `createdAt`,
+  `updatedAt`, `deletedAt`, `syncVersion`, `syncStatus` — the same five-column
+  convention every table from schema v2 onward already uses; see 13.1 for why
+  today's `accounts` table itself is the one known exception, and why this
+  design's migration folds the fix for that into the same step). Conceptually,
+  this is today's `accounts` table (see 13.1/13.2 for exactly how it gets there),
+  widened in *meaning*, not rebuilt from scratch.
+- **`PaymentInstrument`** — a way to spend a `FinancialAccount`'s balance or
+  available credit. Never itself balance-holding — no balance-shaped column
+  exists on this table at all, so it cannot double-count by accident. Links to
+  **exactly one** `FinancialAccount` via a single required foreign key (never a
+  choice between two nullable columns — seespecialized invariant 12.5).
+- **`CreditFacilityDetails`** — a one-to-one metadata table, present if and only
+  if a `FinancialAccount` has `balanceClass: liability` and `subtype: creditCard`.
+  Carries `creditLimitMinorUnits`, optional statement-closing-day metadata,
+  optional due-day metadata, an optional minimum-payment figure (only if a
+  specific product's minimum-payment rule is later modeled with defined
+  semantics — no generic placeholder minimum-payment field is frozen now), and
+  an optional `linkedPaymentAccountId` (the account normally used to pay the
+  statement — informational only, never enforced).
+- **`DepositDetails`** — a one-to-one metadata table, present if and only if a
+  `FinancialAccount` has `balanceClass: asset`, `subtype: deposit`. Carries
+  `depositType` (`fixed` / `shortTerm` / `recurring` / `other`), `termNumber`/
+  `termUnit`, `startDate`, `maturityDate` (computed once, at creation — see
+  12.7), `interestRateBasisPoints`, `interestMethod` (`simple` / `compound`),
+  `compoundingFrequency` (meaningful only for `compound`), `autoRenew`/
+  `renewalMode`, an optional `interestDestinationAccountId`, and — only for
+  `depositType: recurring` — `installmentAmountMinorUnits`/`installmentFrequency`
+  (see 12.9).
+
+Specialized fields never live directly on `FinancialAccount` itself — a plain
+cash or bank account has zero rows in either detail table, and nothing about its
+own row shape hints that credit or deposit fields ever existed. This is a
+deliberate rejection of one generic table with many nullable, mostly-unused
+columns, matching this document's own core principle (section 0).
+
+### 12.2 Immutability invariants
+
+Once a `FinancialAccount` has any financial history (at least one `Transaction`
+referencing it, directly or as a transfer destination):
+
+- `balanceClass` can never change (`asset` <-> `liability` is never a valid
+  transition, with or without history — an account's fundamental class is fixed
+  at creation, unconditionally).
+- `currencyCode` can never change (unchanged from today's existing
+  `AccountRepository.updateAccount` rule and its documented rationale: reusing
+  minor units under a different currency would reinterpret every historical
+  amount).
+- `subtype` transitions are forbidden by default; a future, explicitly-designed
+  checkpoint may permit a narrow, named set of compatible transitions (e.g.
+  `cash` -> `other`) if a real product need for one is identified — no such
+  transition is approved now.
+
+These guarantees must be enforced by the eventual repository/domain API design
+itself, not merely validated-and-rejected at the call site: the update method's
+own parameter list must simply have no way to express a `balanceClass`/`subtype`
+change, the same pattern `AccountRepository.updateAccount(id, name, type)`
+already uses today for currency (that method has no currency parameter at all).
+A regression test asserting the update method's signature has no such parameter
+is required before this is considered frozen in code, not just in this document.
+`FinancialInstitution` name/nickname and every account's own display
+nickname/institution-link remain freely editable at any time, before or after
+history exists — only `balanceClass`/`subtype`/`currencyCode` carry this
+lifetime lock.
+
+### 12.3 Balance sign semantics
+
+**Canonical internal representation: every stored and displayed magnitude is
+non-negative, in the account's own class-native terms.** An asset account's
+figure is "amount owned"; a liability account's figure is "amount owed." There
+is never a negative internal balance for a liability — 3,000 owed is stored and
+computed as `3000`, never `-3000`.
+
+Direction is decided by exactly one signed-effect rule, applied uniformly by
+`FinanceEngine`, never inferred ad hoc at an individual call site:
+
+| `balanceClass` | Role | `TransactionType` | Effect |
+|---|---|---|---|
+| asset | source (`accountId`) | expense | `−` |
+| asset | source | income | `+` |
+| asset | source (transfer source) | transfer | `−` |
+| asset | destination (transfer only) | transfer | `+` |
+| liability | source (`accountId`) | expense (purchase / fee / interest charge) | `+` (owed increases) |
+| liability | destination (transfer only) | transfer | `−` (owed decreases — a payment) |
+| liability | any other role | any other type | unreachable in V1 — throws, same posture as today's unused `refund`/`adjustment` types |
+
+Worked examples, restated in this canonical form:
+
+- **Expense from asset**: `asset -= expense`. Unchanged from today.
+- **Income to asset**: `asset += income`. Unchanged from today.
+- **Expense on credit liability**: `liability += expense`. New.
+- **Credit-card payment** (a transfer): `asset(source) -= payment`;
+  `liability(destination) -= payment`. No expense is created — this is
+  `TransactionType.transfer`, already excluded from income/expense totals today.
+- **Refund to a credit card**: `liability -= refund`. **Deferred, not V1** — no
+  repository path creates a refund transaction today (mirroring `refund`'s
+  existing unused/`UnsupportedError` status for asset accounts); this row is
+  recorded here only so a future implementation has a settled sign rule to build
+  against, not as an approved V1 feature.
+- **Credit-card cash advance**: treated identically to an ordinary purchase
+  (`liability += amount`) for balance purposes. Real-world cash-advance fee/rate
+  differences are **deferred** — V1 does not model a different accrual rate for
+  a cash advance versus a purchase.
+- **Interest/fees on a credit facility**: `liability += amount`, recorded as an
+  ordinary expense against that liability, exactly like a purchase — never a
+  separate transaction kind. (Restates 1.4's existing rule in this section's
+  arithmetic terms; no change.)
+- **Net worth** (still not implemented as a screen/provider — unchanged from
+  section 4): `netWorth = Σ(asset magnitudes) − Σ(liability magnitudes)`.
+- **Available credit**: `creditLimit − amountOwed`, always computed, never
+  stored — `creditLimitMinorUnits` never participates in ledger-balance
+  arithmetic.
+
+**Required `FinanceEngine` adaptation.** Today's `FinanceEngine.accountBalance`
+implements exactly the asset rows of the table above and nothing else —
+`LedgerAccount` has no class concept at all yet. The approved adaptation is to
+generalize that one function (not add a second, parallel one) so that an
+existing asset account computes byte-for-byte the same result it does today,
+while a liability account's magnitude is computed by the same function reading
+its `balanceClass` and applying the liability rows above. This keeps the
+asset-vs-liability branch in exactly one place in the codebase, rather than
+splitting it across two independently-written functions that would each need to
+agree on the transfer-destination behavior separately.
+
+### 12.4 Transaction invariants
+
+**`Transaction.accountId` and `Transaction.destinationAccountId` keep their
+existing names and existing shape** — both remain plain foreign keys into the
+one ledger-target table (which is `FinancialAccount` in domain terms; see 13.1
+for why the underlying SQL/Drift identifier may stay `accounts`/`AccountRow` for
+now). `accountId` remains required; `destinationAccountId` remains nullable,
+set if and only if `type == transfer` — identical to today's rule, unchanged.
+No new mutually-exclusive column pair is introduced on `Transactions`.
+`paymentInstrumentId` is the one new column: optional, analytics/history only,
+and carries zero accounting weight — no balance/owed computation ever reads it,
+so removing it or leaving it unset changes no financial figure, by construction.
+
+Worked examples:
+
+- **Debit purchase**: `financialAccount = checking`, `paymentInstrument = Visa
+  Debit`, `type = expense`.
+- **Credit purchase**: `financialAccount = <the credit liability account>`,
+  `paymentInstrument = Visa Credit`, `type = expense`.
+- **Cash purchase**: `financialAccount = cash`, `paymentInstrument = null`,
+  `type = expense`.
+- **Credit-card payment**: `financialAccount (source) = checking`,
+  `destinationAccountId = <the credit liability account>`, `type = transfer` —
+  never `expense`.
+- **Deposit funding**: `financialAccount (source) = checking`,
+  `destinationAccountId = <the deposit account>`, `type = transfer` — never
+  `expense`.
+- **Deposit maturity**: the principal's movement (e.g. back into a checking
+  account, or rolled into a renewed deposit) remains transfer-like; interest
+  actually paid out is recorded as `type = income` against the receiving asset
+  account. Neither is modeled as an automatic V1 feature yet (12.7/12.9) — this
+  is the settled classification for whenever it is built.
+
+### 12.5 Payment-instrument invariants
+
+`PaymentInstrument.financialAccountId` links to **exactly one**
+`FinancialAccount` in V1 — a single required foreign key, never a choice between
+two nullable targets. A debit/cash-card instrument must link to an *asset*
+account; a credit-card instrument must link to a *liability* account — enforced
+at the repository layer when the instrument is created (mismatched class is
+rejected, mirroring the currency-mismatch-rejection pattern this codebase
+already uses throughout). A `PaymentInstrument` contributes **zero**
+independently to total assets, total liabilities, or net worth — it has no
+balance-shaped column, so this cannot regress by accident.
+
+`Transaction.paymentInstrumentId` is optional (12.4). A historical transaction
+must remain fully understandable if its instrument is later archived — archiving
+never rewrites or hides the transaction's `financialAccountId`/amount/type,
+only the instrument-metadata display (e.g. "Visa Debit (archived)"). An
+instrument referenced by any historical transaction is **never hard-deleted** —
+only ever soft-deleted, following this schema's existing tombstone convention.
+
+Never store: full PAN, CVV/CVC, PIN, or online-banking credentials — no column
+for any of these exists on `PaymentInstrument`. `last4` is optional and never
+required, and is never validated against a real card network (unchanged from
+section 5's existing security constraint).
+
+### 12.6 Shared credit facility
+
+Frozen shape: one liability `FinancialAccount` ("Rakuten Credit Facility") with
+one `CreditFacilityDetails` row (the shared credit limit), and two independent
+`PaymentInstrument` rows ("Rakuten Visa," "Rakuten Amex"), both pointing at the
+same `financialAccountId`. A purchase on either card increases the same
+facility's owed amount and reduces the same available credit — no special-case
+code is needed, because the balance/available-credit computation (12.3) never
+looks at which instrument was used, only which `FinancialAccount` the
+transaction targets. An independent-limit card is simply its own separate
+`FinancialAccount` + `CreditFacilityDetails`, with its own single
+`PaymentInstrument` — the same mechanism, not a different one.
+
+**Simple "Add Credit Card" UX, despite the internal split.** One form,
+one user-visible step, internally creating — inside one repository-level
+transaction/batch, never as separable calls a caller could invoke
+independently — one liability `FinancialAccount`, one `CreditFacilityDetails`
+row, and one `PaymentInstrument` row. The user is never shown this as three
+records; "add another card to this existing facility" is offered only after a
+facility already exists, as a secondary affordance, not on first creation.
+
+### 12.7 Deposit foundation
+
+A deposit is an **asset** `FinancialAccount` (`subtype: deposit`) plus one
+`DepositDetails` row — never spendable, per section 1.6's existing invariant,
+which this section does not change. Funding a deposit is an asset-to-asset
+`transfer` (checking -> deposit), never an expense. Interest actually credited
+is `income`; the principal returned at maturity is not — restated in 12.4's
+worked examples.
+
+**Deterministic maturity-date rules.** `maturityDate = startDate + term`,
+computed once at creation and stored (not recomputed live on every read, so the
+figure never drifts if calculation rules change later). For `termUnit: days`,
+plain calendar-day addition. For `termUnit: months`/`years`, this document
+requires **reusing** the project's existing calendar-safe, leap-year-aware,
+anchor-based month/year arithmetic already implemented for recurring rules
+(`lib/features/recurring/domain/recurring_schedule.dart`'s
+`normalizeRecurringDate`/`_lastDayOfMonth`/anchor-based day-of-month clamping) —
+not a second, independently-written calendar routine. End-of-month behavior is
+therefore explicit and already-proven: a deposit starting Jan 31 with a 1-month
+term matures Feb 28 (or 29 in a leap year), clamped against the target month's
+actual length, exactly as that existing routine already does for a monthly
+recurring rule anchored on the 31st.
+
+### 12.8 Deposit calculation contract
+
+No binary floating point anywhere in this calculation — every intermediate
+value is an exact `Decimal` (`package:decimal`, already a direct project
+dependency, already used for exchange-rate arithmetic), and the existing
+project-wide ROUND HALF UP policy (`MoneyRounding.roundHalfUpToMinorUnits`,
+ADR-018) is applied exactly once, at the end, to convert the final exact
+interest amount into integer minor units — never at any intermediate step.
+
+- **Annual rate representation**: `interestRateBasisPoints` (an integer, e.g.
+  `550` = 5.50%), converted to an exact `Decimal` fraction (`/10000`) at
+  calculation time — never a stored `double` rate.
+- **Time-period representation**: the exact day count from `startDate` to
+  `maturityDate` (a plain integer), or, for compound interest, a whole number of
+  compounding periods derived directly from `termNumber`/`termUnit` and
+  `compoundingFrequency` — always a whole number, never a fractional exponent.
+- **Simple interest**: `interest = principal × rate × (termDays / basisDays)`.
+  **V1 reference day-count convention: Actual/365**, chosen as a single,
+  explicitly-documented default — stated in the UI itself as "estimated using a
+  365-day year," never claimed to match any specific institution's own
+  convention.
+- **Compound interest**: `maturityValue = principal × (1 + rate/n)^(n×t)`,
+  where `n` = periods/year from `compoundingFrequency` (`monthly`=12,
+  `quarterly`=4, `semiannual`=2, `annual`=1, `atMaturity`=1 treated as one
+  compounding period over the whole term — equivalent to simple interest for
+  that case) and `n×t` is always a whole number of periods, so `Decimal`'s
+  integer-exponent power is sufficient; `interest = maturityValue − principal`.
+- **Rounding boundary**: the final `interest`/`maturityValue` `Decimal`,
+  rounded once via `MoneyRounding.roundHalfUpToMinorUnits` into the deposit's
+  own currency's minor units (never assuming 2 decimal places — the existing
+  `CurrencyRegistry` minor-units metadata governs, exactly as it does for every
+  other `Money` value in this codebase).
+
+**Labeling requirement, non-negotiable:** every displayed figure from this
+calculation is labeled **"Estimated interest"** / **"Estimated maturity
+value"** — never presented as a guaranteed or bank-confirmed figure. This is
+required because real institutions vary in day-count convention, compounding
+rounding, withholding tax, and early-withdrawal penalties, none of which this
+V1 calculation claims to replicate. Taxes/withholding, early-withdrawal
+penalties, product-specific bank conventions, and variable rates are all
+**deferred** — not modeled in V1 at all, not even as an optional field.
+
+### 12.9 Recurring deposit
+
+`subtype: deposit`, `depositType: recurring` is **recognized and storable in
+V1** (10,000 LKR/month for 24 months, etc., via `installmentAmountMinorUnits`/
+`installmentFrequency` on `DepositDetails`) — but V1 does **not** implement
+scheduled, self-posting contributions or a precise maturity-value projection
+that depends on exactly when each contribution starts earning interest.
+Concretely, for V1:
+
+- **Storing/tracking a recurring deposit's own declared terms**: supported.
+- **Scheduled, auto-posted monthly contributions** (extending the recurring-
+  rules engine to post into a `Deposits`-shaped target the way it posts into an
+  asset account today): **not V1** — this would require the recurring engine's
+  own `accountId`/`destinationAccountId` targets to accept a deposit account the
+  same way `Transactions` does (12.4), which is a real, separate piece of work
+  this section does not approve now.
+- **Estimated maturity-value projection for a recurring deposit**: a coarser,
+  explicitly-labeled "Estimated" approximation may be shown in V1 (e.g. treating
+  contributions as landing evenly across the term for interest-averaging
+  purposes), but this is **not** the same deterministic single-principal
+  formula in 12.8, and must never be presented as though it were.
+
+### 12.10 Wallet / payment-service funding taxonomy
+
+No fifth top-level table. Every funding shape reuses the four entities above:
+
+- **Stored value** (the wallet itself holds a balance): a `FinancialAccount`,
+  `balanceClass: asset`, `subtype: wallet` — already exactly what today's
+  `type: wallet` accounts are.
+- **Linked-bank/debit funding** (e.g. a mobile payment service funded from a
+  bank account): a `PaymentInstrument`, `instrumentType: wallet`, linked to an
+  *asset* `FinancialAccount` — the identical mechanism a debit card already
+  uses, only the `instrumentType` label differs.
+- **Linked-credit funding**: a `PaymentInstrument`, `instrumentType: wallet`,
+  linked to a *liability* `FinancialAccount` — identical mechanism to a credit
+  card.
+- **Postpaid** (the wallet itself is the liability): a liability
+  `FinancialAccount` (with `CreditFacilityDetails` if it has a genuine limit),
+  optionally paired with a `PaymentInstrument` for a consistent "how did I pay"
+  record. **Whether V1 actually exposes a postpaid-wallet product in the Add
+  Account flow is a UX scope decision, not an architecture one** — the schema
+  supports it the moment any liability `FinancialAccount` can be created; see
+  13.3 for the V1-scope classification of whether that UX ships now.
+
+Do not implement every one of these four shapes merely because the architecture
+now supports all of them without further schema change — see 13.3.
+
+---
+
+## 13. Migration, compatibility, and implementation sequencing for the unified model
+
+Status: Approved 2026-09-20 (documentation/architecture decision only; no
+migration, repository, provider, or screen file was changed to record this
+section).
+
+### 13.1 Conservative migration policy from today's `accounts` table
+
+Today's `accounts.type` is free-text: `cash` / `bank` / `card` / `wallet`.
+Historical transactions must never be reinterpreted destructively by this
+migration, in either direction.
+
+- **`cash` rows** -> `FinancialAccount`, `balanceClass: asset`, `subtype: cash`.
+  No ambiguity, no data change beyond the new columns defaulting
+  (`institutionId: null`, matching today's implicit state).
+- **`bank` rows** -> `balanceClass: asset`, `subtype: bank` (or a more specific
+  `checking`/`savings` legacy subtype only if a later, explicit product
+  decision distinguishes them — not required by this migration itself). No
+  ambiguity.
+- **`wallet` rows** -> `balanceClass: asset`, `subtype: wallet`, preserved as a
+  legacy stored-value wallet unless a later, explicit signal says otherwise. No
+  ambiguity.
+- **`card` rows — the one genuinely ambiguous case.** A `type: card` row today
+  could be a debit card someone modeled as its own account (most likely, since
+  the UI has never distinguished debit from credit), or, far less likely, an
+  attempt to track a credit card by repurposing the opening balance as a
+  running "owed" figure. **This migration must never auto-convert a `card` row
+  into a liability `FinancialAccount`.** Every `card` row instead migrates into
+  a conservative **legacy `card` subtype**, `balanceClass: asset` (preserving
+  its existing numeric balance exactly as-is, since that is the only
+  interpretation consistent with not reinterpreting history), flagged for a
+  one-time, user-facing migration-review prompt: "This looks like a card
+  account — is it (a) a debit card linked to one of your other accounts, (b)
+  its own account you'll keep using as-is, or (c) a credit card (money you
+  owe)?" Choice (a) creates a `PaymentInstrument` linked to the bank account
+  the user picks and soft-deletes the old row (history preserved, never
+  destroyed); choice (b) simply relabels the legacy subtype, no data change;
+  choice (c) is **never automatic** — it routes to the ordinary "Add Credit
+  Card" flow (12.6), because a correct liability record needs a real credit
+  limit and a real current-owed figure the old flat schema never captured, and
+  the old row is left as a soft-deleted historical asset record for the user to
+  review, never silently reinterpreted as debt.
+- **No existing `Transactions` row is ever rewritten.** Every historical
+  transaction keeps its existing `accountId`, `amountMinorUnits`,
+  `currencyCode`, and `occurredAt` exactly as recorded — this migration only
+  ever adds new nullable columns/tables and reclassifies the *target* row's own
+  metadata, never a transaction's own recorded amount or target reference.
+- **Historical balances remain numerically stable.** Since `FinanceEngine`'s
+  arithmetic for an asset account is unchanged (12.3), and every migrated `card`
+  row starts life as an asset (never a liability) regardless of which
+  disambiguation choice a user eventually makes, no existing balance
+  calculation changes value as a result of this migration alone — only a
+  user's later, explicit choice (option (c) above) can ever change how a
+  specific account's history is interpreted going forward, and that choice
+  creates new records rather than rewriting old ones.
+- **Fold in the already-planned `accounts.syncVersion`/`syncStatus` gap.**
+  `docs/21_CLOUD_SYNC_ARCHITECTURE.md` §11 and ADR-032 already commit to adding
+  exactly those two columns to `accounts` (CP12.3), independently of this
+  design. This migration adds `institutionId`/`balanceClass`/`subtype` in the
+  same version bump as that already-committed pair, rather than migrating the
+  same table twice.
+
+### 13.2 Compatibility with the existing generic Account Detail/Edit (`deb51bf`)
+
+`AccountDetailScreen`/`EditAccountScreen` (introduced at HEAD `deb51bf`) are
+already type-agnostic — neither branches on `type` today, and neither reads any
+field this design doesn't already provide for a plain asset account. **Both
+screens continue working, unchanged, for every legacy/simple `FinancialAccount`
+(cash/bank/wallet/undecided-card)** the moment this migration lands — nothing
+about them needs to change to keep serving that case correctly. They are not
+thrown away and not replaced by product-specific screens in this step; a
+Credit Facility Detail screen and a Deposit Detail screen are new, additional
+screens for the new liability/deposit subtypes (13.4, checkpoint F/H), reached
+instead of the generic screen only once an account actually has that subtype —
+the generic screen remains the correct destination for every account that
+doesn't.
+
+### 13.3 V1 vs. later scope freeze
+
+| Classification | Items |
+|---|---|
+| **MUST — V1 foundation** | Unified asset/liability `FinancialAccount` model; `FinancialInstitution`; `PaymentInstrument`; basic credit-facility/card correctness (12.3/12.6); credit purchases; credit-card payments without double expense; asset/liability totals; net-worth-*ready* semantics (not the screen itself); basic term/fixed deposits; deterministic basic deposit estimates (12.8); the conservative migration (13.1); exact tests for every invariant in 12.2–12.5. |
+| **CAN — V1, if low risk** | Statement/due-date convenience fields; deposit renewal metadata; optional `last4`/expiry; richer institution grouping/autocomplete; shared-limit facilities (12.6 — falls out of the model for free); recurring-deposit storage/estimate (12.9, storage half only). |
+| **DEFER — after V1** | A loan amortization engine (sections 1.5/1.5.1 remain future work, unchanged); advanced recurring-deposit projection/auto-posting (12.9, projection half); bank-specific tax/day-count rules; early-withdrawal calculations; variable-rate deposits; investment brokerage; crypto valuation (section 1.8 unchanged); bank connectivity; postpaid-wallet UX exposure in Add Account (12.10, unless a later checkpoint explicitly scopes it in); net worth screen/provider (section 4, unchanged); refund-to-credit-card (12.3). |
+| **DEFER — V2** | Shared household ownership (section 6, unchanged). Receipt OCR remains the first major V2 feature (per ADR-029, unchanged). Family Wallet remains V2 (unchanged). |
+
+### 13.4 Implementation checkpoint order
+
+Each checkpoint below is scoped so its own migration/behavior risk is isolated
+and reviewable independently — no single checkpoint combines a schema change
+with a `FinanceEngine` change with a UI change.
+
+**A. Architecture/docs freeze** — this section. Purpose: settle the model
+before any code changes. Migration risk: none. Invariants/tests: none (docs
+only). Rollback boundary: revert this doc section; nothing else exists yet to
+roll back.
+
+**B. Institution + `FinancialAccount` classification foundation, safe
+migration** — add `FinancialInstitutions` table; add `balanceClass`/`subtype`/
+`institutionId`/`syncVersion`/`syncStatus` to `accounts` (13.1); ship the
+migration-review UX for ambiguous `card` rows. No `FinanceEngine`, repository
+read-path, or screen behavior change beyond what's needed to render the
+migration-review prompt. Migration risk: additive-only schema change on an
+existing, populated table (real, but the least risky category — no existing
+column's shape or nullability changes, per 13.1's "no `Transactions` row ever
+rewritten" invariant). Invariants/tests: 12.2's immutability guarantees, 13.1's
+"card row never auto-converts to liability," "no historical transaction
+rewritten." Rollback boundary: a single schema version; no dependent
+checkpoint has started.
+
+**C. Adapt `FinanceEngine` to asset/liability semantics** — generalize the one
+balance function per 12.3's required adaptation; add the liability-side rows
+of the sign table; unit-test every cell of 12.3's table (including the
+unreachable-throws rows) with plain in-memory lists, matching this codebase's
+existing `FinanceEngine`-testing convention. No liability accounts exist to
+exercise this in production yet (checkpoint B only produces asset-classified
+rows) — this checkpoint is verified entirely by unit tests against synthetic
+liability data. Migration risk: none (no schema change). Invariants/tests: full
+coverage of 12.3's table; a regression test proving an existing asset
+account's computed balance is byte-for-byte unchanged from before this
+checkpoint. Rollback boundary: this checkpoint alone; B is unaffected either way.
+
+**D. Payment instruments** — `PaymentInstruments` table + repository (12.5).
+No liability accounts exist yet to link a credit instrument to, so this
+checkpoint only exercises the debit/asset-linked path in production; the
+credit-linked path is unit-tested against synthetic data. Migration risk:
+low (new table only). Invariants/tests: 12.5's exactly-one-target,
+class-must-match-instrument-type, never-hard-delete-if-referenced.
+
+**E. Credit facility metadata + purchase/payment behavior** —
+`CreditFacilityDetails` table + repository; extend `TransactionRepository`'s
+expense/transfer recording to accept a liability `FinancialAccount` target
+(12.4); wire the credit-linked path of D into production. Migration risk:
+moderate (new table, plus real behavior change to
+`recordExpense`/`recordTransfer`'s validation, on a live, high-frequency
+repository). Invariants/tests: every worked example in 12.3/12.4 (credit
+purchase, credit-card payment, shared facility from 12.6); a regression test
+proving an ordinary asset-to-asset expense/transfer is unaffected.
+
+**F. Deposit metadata + deterministic calculation engine** — `DepositDetails`
+table + repository; the pure, `Decimal`-based calculator from 12.8, unit-tested
+independently of Drift/Flutter (matching `FinanceEngine`'s own
+testing philosophy). Migration risk: low (new table only, no change to any
+existing repository method). Invariants/tests: 12.8's rounding-boundary rule
+(exactly one rounding, at the end); the "Estimated" labeling requirement
+enforced at the UI layer built in H, not skippable.
+
+**G. Add Account UX** — the "what would you like to add?" flow, wired to B–F's
+repositories; Bank Account and Credit Card first (the acceptance cases' most
+common shapes), Deposit second. Migration risk: none (UI only, on top of
+already-shipped repositories). Invariants/tests: 12.6's "one step, three rows,
+one transaction" creation guarantee.
+
+**H. Accounts/Detail presentation** — Credit Facility Detail and Deposit
+Detail screens (13.2 confirms the existing generic screen needs no change for
+everything else); institution-grouped Accounts screen (section 19 of the prior
+audit, unchanged by this freeze). Migration risk: none. Invariants/tests: the
+existing generic screens' tests remain green, unmodified, throughout.
+
+**I. Dashboard/net-worth integration** — the dashboard's existing per-currency
+sum must explicitly exclude liability accounts from its asset total once
+liabilities are queryable at all (today it can't accidentally include them
+only because none exist yet); net worth itself remains out of scope (13.3).
+Migration risk: low, but this is the checkpoint most likely to regress an
+existing display if skipped or rushed — flagged explicitly as a required step,
+not an optional polish pass.
+
+**J. Full migration/regression/Android QA** — the end-to-end pass across every
+prior checkpoint's tests plus a real-device run of the `card`-row migration
+UX from B against representative legacy data. Migration risk: this checkpoint
+exists specifically to catch what unit tests alone cannot.
+
+Ordering may adjust if a later checkpoint discovers a real dependency this
+freeze didn't anticipate (e.g. if D turns out to need a small piece of E's
+validation earlier than expected) — but no checkpoint should ever combine a
+schema change with a `FinanceEngine` change with a screen change in one step,
+regardless of reordering.
+
+### 13.5 Unresolved decisions that must be answered before schema migration
+
+These are flagged, not decided, exactly as section 9's existing "open
+questions" convention already establishes for this document:
+
+1. Should `bank` legacy rows be split into `checking`/`savings` legacy
+   subtypes at migration time, or left as a single `bank` subtype until a user
+   explicitly edits one? This freeze does not require the split; checkpoint B
+   may ship either way, but must pick one and document it in that checkpoint's
+   own migration notes.
+2. Exactly which statement/due-date fields `CreditFacilityDetails` ships with
+   in V1 (12.1 lists them as optional, but the precise set — e.g. whether a
+   minimum-payment field ships at all in checkpoint E, given 12.1's explicit
+   condition that it only ships "if semantics are well-defined") is not fixed
+   by this freeze.
+3. Whether postpaid-wallet products (12.10) are exposed in the V1 Add Account
+   UX at all, or remain schema-supported-but-not-offered until a later,
+   explicitly-scoped checkpoint (13.3 currently defers the UX exposure, not
+   the underlying schema capability) — a product decision, not resolved here.
+4. Whether `bank` legacy rows and undecided-`card` legacy rows need a visibly
+   different presentation in the interim Accounts screen (before checkpoint H's
+   institution grouping ships) so a user isn't confused about why some
+   accounts show a migration-review prompt and others don't.
+
+None of these need to be resolved to keep this section accurate — they are
+implementation-stage decisions for whichever checkpoint (B, E, or G) first
+encounters them, exactly matching this document's own precedent in section 9.
+
+### 13.6 Cross-references (this section)
+
+- `docs/21_CLOUD_SYNC_ARCHITECTURE.md` §11 / `docs/14_DECISION_LOG.md` ADR-032
+  — the already-committed `accounts.syncVersion`/`syncStatus` migration this
+  section's checkpoint B folds its own new columns into (13.1).
+- `docs/14_DECISION_LOG.md` ADR-017/ADR-018 — signed 64-bit integer minor
+  units and ROUND HALF UP, both unchanged and directly reused by 12.8.
+- `lib/features/recurring/domain/recurring_schedule.dart` — the existing
+  calendar-safe date arithmetic 12.7 requires reusing for deposit maturity
+  dates, rather than reimplementing.
+- `docs/14_DECISION_LOG.md` ADR-035 — records this design-freeze decision in
+  the decision log's own format; this document remains the detailed
+  specification ADR-035 points to, per this document's own established
+  relationship with the decision log elsewhere (e.g. ADR-023/section 10.6).
