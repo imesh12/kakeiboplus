@@ -228,6 +228,100 @@ class Accounts extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// Checkpoint D: HOW a `FinancialAccount` (physically the `accounts`
+/// table) was used to pay or receive money -- e.g. "the Visa debit card
+/// on my checking account", "my Amex credit card". A `PaymentInstrument`
+/// is explicitly NOT a `FinancialAccount` -- see this file's `Accounts`
+/// doc and `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md`. It:
+///
+/// - links to exactly ONE `accounts` row (never zero, never many -- no
+///   join table backs this for V1; the future shared-credit-facility
+///   case is one liability `FinancialAccount` referenced by *multiple*
+///   `PaymentInstruments` rows, never the reverse);
+/// - optionally belongs to a `FinancialInstitutions` row;
+/// - carries ZERO independent accounting balance and contributes ZERO
+///   independently to any asset/liability/net-worth calculation --
+///   `FinanceEngine` never reads this table at all (see
+///   `lib/core/finance/finance_engine.dart`).
+///
+/// Physical column naming note: this column is named `accountId`
+/// (matching `Transactions.accountId`'s own naming), even though
+/// conceptually it points at the unified `FinancialAccount` model
+/// (docs/20 §12) rather than a literal legacy "account" -- `accountId`
+/// is more consistent with this schema's existing naming than a
+/// `financialAccountId` column would be, and `Accounts` itself is not
+/// renamed by this or any checkpoint.
+@DataClassName('PaymentInstrumentRow')
+class PaymentInstruments extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// The single `FinancialAccount` (physically `accounts`) this
+  /// instrument is used to pay from / receive into. Immutable after
+  /// creation -- see `PaymentInstrumentRepository.updateMetadata`'s own
+  /// doc for why relinking is deliberately not exposed as a generic
+  /// update in this checkpoint.
+  TextColumn get accountId => text().references(Accounts, #id)();
+
+  /// Optional -- e.g. "MUFG Bank" for a debit card, null for a payment
+  /// service the user hasn't associated with an institution. Never
+  /// required -- see `FinancialInstitutions`' own doc above.
+  TextColumn get institutionId =>
+      text().nullable().references(FinancialInstitutions, #id)();
+
+  /// One of `PaymentInstrumentType.storageValue` --
+  /// `lib/core/finance/payment_instrument_type.dart`. Metadata only --
+  /// NOT itself an accounting classification (see that enum's own doc).
+  /// Immutable after creation by default, matching [accountId]/
+  /// [profileId] -- see `PaymentInstrumentRepository`'s update-method
+  /// doc.
+  TextColumn get instrumentType => text()();
+
+  /// One of `CardNetwork.storageValue`, or null --
+  /// `lib/core/finance/card_network.dart`. Optional for every
+  /// instrument type; never required.
+  TextColumn get network => text().nullable()();
+
+  /// User-chosen label, e.g. "Everyday debit card". Freely editable.
+  TextColumn get nickname => text()();
+
+  /// Exactly 4 decimal digits when present, or null -- validated by
+  /// `PaymentInstrumentRepository`, never a full card number/PAN. See
+  /// the Checkpoint D brief's "sensitive data boundary" section: this
+  /// table never stores a full card number, CVV/CVC, PIN, magnetic
+  /// stripe data, or any authentication credential.
+  TextColumn get last4 => text().nullable()();
+
+  /// 1-12 when present. [expiryMonth] and [expiryYear] are validated as
+  /// both-null-or-both-present by `PaymentInstrumentRepository` -- see
+  /// that repository's doc for why this "both or neither" rule was
+  /// chosen over allowing either half alone.
+  IntColumn get expiryMonth => integer().nullable()();
+  IntColumn get expiryYear => integer().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete/archive -- same convention as `Accounts`/
+  /// `Transactions`/`FinancialInstitutions`. An instrument referenced by
+  /// historical `Transactions.paymentInstrumentId` rows must never
+  /// require hard deletion, and archiving one must never invalidate
+  /// those historical rows -- see the Checkpoint D brief's "lifecycle /
+  /// history" section. `PaymentInstrumentRepository`'s active-selection
+  /// queries exclude a soft-deleted row; its historical-resolution
+  /// lookup does not.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  /// Sync foundation, added from creation -- consistent with every
+  /// table from schema v2 onward (see `Accounts.syncVersion`'s own doc
+  /// for the one historical exception, already fixed by Checkpoint B).
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 class Transactions extends Table {
   /// Client-generated UUID (v4) — see `docs/03_DATABASE_SCHEMA.md`.
   TextColumn get id => text()();
@@ -268,6 +362,27 @@ class Transactions extends Table {
   /// of that constant.
   IntColumn get syncVersion => integer().withDefault(const Constant(0))();
   TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  /// Checkpoint D (schema v10): optional attribution to the specific
+  /// `PaymentInstrument` used -- e.g. "paid with my Amex", distinct from
+  /// [accountId] (WHICH account the money moved through). Purely
+  /// metadata: `FinanceEngine`/`LedgerTransaction` never read this
+  /// column and it has ZERO effect on any balance, income/expense
+  /// total, or transfer calculation -- see
+  /// `lib/core/finance/finance_engine.dart` and the Checkpoint D
+  /// brief's "validation boundary" section. Null for every transaction
+  /// recorded before this column existed (this migration never
+  /// fabricates attribution for historical rows) and for any
+  /// transaction the user simply doesn't attribute to a specific
+  /// instrument -- always optional, never required.
+  ///
+  /// `TransactionRepository` enforces the V1 source-attribution rule
+  /// when this is supplied: the referenced instrument's own `accountId`
+  /// must equal this row's [accountId] (for a transfer, the SOURCE
+  /// account) -- see that repository's own doc and
+  /// `InvalidPaymentInstrumentAttributionException`.
+  TextColumn get paymentInstrumentId =>
+      text().nullable().references(PaymentInstruments, #id)();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};

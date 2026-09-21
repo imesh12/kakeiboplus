@@ -7,6 +7,7 @@ import '../../money/currency_mismatch_exception.dart';
 import '../../money/money.dart';
 import '../app_database.dart';
 import 'account_repository.dart';
+import 'invalid_payment_instrument_attribution_exception.dart';
 import 'transaction_not_found_exception.dart';
 
 /// The repository behind the entire Beta 0 transaction ledger: recording
@@ -70,6 +71,12 @@ class TransactionRepository {
     return query.watch();
   }
 
+  /// [paymentInstrumentId], when supplied, must name an active payment
+  /// instrument linked to [accountId] and owned by [profileId] -- see
+  /// `PaymentInstrumentRepository`'s own doc and
+  /// [InvalidPaymentInstrumentAttributionException]. Purely metadata:
+  /// has ZERO effect on this expense's accounting (see
+  /// `lib/core/finance/finance_engine.dart`).
   Future<String> recordExpense({
     required String profileId,
     required String accountId,
@@ -77,6 +84,7 @@ class TransactionRepository {
     String? categoryId,
     String? note,
     required DateTime occurredAtUtc,
+    String? paymentInstrumentId,
   }) {
     return _insert(
       profileId: profileId,
@@ -86,9 +94,12 @@ class TransactionRepository {
       categoryId: categoryId,
       note: note,
       occurredAtUtc: occurredAtUtc,
+      paymentInstrumentId: paymentInstrumentId,
     );
   }
 
+  /// See [recordExpense]'s own doc for [paymentInstrumentId]'s
+  /// validation and zero-accounting-effect rules -- identical here.
   Future<String> recordIncome({
     required String profileId,
     required String accountId,
@@ -96,6 +107,7 @@ class TransactionRepository {
     String? categoryId,
     String? note,
     required DateTime occurredAtUtc,
+    String? paymentInstrumentId,
   }) {
     return _insert(
       profileId: profileId,
@@ -105,6 +117,7 @@ class TransactionRepository {
       categoryId: categoryId,
       note: note,
       occurredAtUtc: occurredAtUtc,
+      paymentInstrumentId: paymentInstrumentId,
     );
   }
 
@@ -116,6 +129,12 @@ class TransactionRepository {
   /// them. This check happens here — independent of whatever the UI form
   /// already validated — so the rule holds even if a future screen or a
   /// bug skips the form-level check.
+  ///
+  /// [paymentInstrumentId], when supplied, represents the SOURCE payment
+  /// instrument (V1 has no separate destination-instrument concept --
+  /// see `Transactions.paymentInstrumentId`'s own doc) and must be
+  /// linked to [sourceAccountId]. Purely metadata; see [recordExpense]'s
+  /// own doc for the shared validation/zero-accounting-effect rules.
   Future<String> recordTransfer({
     required String profileId,
     required String sourceAccountId,
@@ -123,6 +142,7 @@ class TransactionRepository {
     required Money amount,
     String? note,
     required DateTime occurredAtUtc,
+    String? paymentInstrumentId,
   }) async {
     if (sourceAccountId == destinationAccountId) {
       throw ArgumentError('Source and destination accounts must be different.');
@@ -146,6 +166,7 @@ class TransactionRepository {
       categoryId: null, // transfers are never categorized — see FinanceEngine
       note: note,
       occurredAtUtc: occurredAtUtc,
+      paymentInstrumentId: paymentInstrumentId,
     );
   }
 
@@ -363,9 +384,17 @@ class TransactionRepository {
     String? categoryId,
     String? note,
     required DateTime occurredAtUtc,
+    String? paymentInstrumentId,
   }) async {
     if (!amount.isPositive) {
       throw ArgumentError.value(amount, 'amount', 'Transaction amount must be positive.');
+    }
+    if (paymentInstrumentId != null) {
+      await _validatePaymentInstrumentAttribution(
+        paymentInstrumentId: paymentInstrumentId,
+        profileId: profileId,
+        accountId: accountId,
+      );
     }
     final String id = _uuid.v4();
     final DateTime now = DateTime.now().toUtc();
@@ -383,11 +412,52 @@ class TransactionRepository {
             occurredAt: occurredAtUtc,
             createdAt: now,
             updatedAt: now,
+            paymentInstrumentId: Value<String?>(paymentInstrumentId),
             // syncVersion / syncStatus deliberately left at their column
             // defaults (0 / "localOnly" — ADR-020); Beta 0 never sets
             // them explicitly.
           ),
         );
     return id;
+  }
+
+  /// Checkpoint D: validates [paymentInstrumentId] against the V1
+  /// source-attribution rule -- see `Transactions.paymentInstrumentId`'s
+  /// own doc and [InvalidPaymentInstrumentAttributionException]. Queries
+  /// `payment_instruments` directly (rather than depending on a
+  /// `PaymentInstrumentRepository` instance) so this repository's
+  /// constructor -- and every one of its ~50 existing call sites across
+  /// the app and test suite -- does not need to change for this
+  /// checkpoint; see the Checkpoint D report for why a constructor
+  /// change was deliberately avoided.
+  Future<void> _validatePaymentInstrumentAttribution({
+    required String paymentInstrumentId,
+    required String profileId,
+    required String accountId,
+  }) async {
+    final PaymentInstrumentRow? instrument = await (_db.select(_db.paymentInstruments)
+          ..where((tbl) => tbl.id.equals(paymentInstrumentId)))
+        .getSingleOrNull();
+    if (instrument == null || instrument.deletedAt != null) {
+      throw InvalidPaymentInstrumentAttributionException(
+        paymentInstrumentId,
+        'instrument does not exist or is archived — a new transaction cannot be '
+        'attributed to a missing or archived instrument',
+      );
+    }
+    if (instrument.profileId != profileId) {
+      throw InvalidPaymentInstrumentAttributionException(
+        paymentInstrumentId,
+        'instrument belongs to profile ${instrument.profileId}, not $profileId',
+      );
+    }
+    if (instrument.accountId != accountId) {
+      throw InvalidPaymentInstrumentAttributionException(
+        paymentInstrumentId,
+        'instrument is linked to account ${instrument.accountId}, not this '
+        "transaction's account $accountId -- V1 source-attribution rule requires "
+        'them to match',
+      );
+    }
   }
 }

@@ -21,15 +21,30 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // (nobody is retroactively opted in), and a fresh row can still be
 // written with the new field.
 //
-// Deliberately a MINIMAL fixture (just the tables this migration step
+// Deliberately a MINIMAL fixture -- just the tables this migration step
 // actually touches or that `recurring_rules`/`recurring_occurrences`
-// reference) rather than every table -- unlike
-// `recurring_migration_test.dart`'s v3 -> v4 test (which had to prove
-// every OTHER table's data survives a migration that created brand-new
-// tables), this migration only ever adds one column to one already
-// -existing table; drift does not validate the rest of the file's
-// schema shape on open, so there is nothing else this test needs to
-// assert against.
+// reference, PLUS `transactions` (see below) -- rather than every
+// table. Unlike `recurring_migration_test.dart`'s v3 -> v4 test (which
+// had to prove every OTHER table's data survives a migration that
+// created brand-new tables), the v4 -> v5 step itself only ever adds
+// one column to one already-existing table; drift does not validate
+// the rest of the file's schema shape on open, so there is nothing
+// else this test needs to ASSERT against.
+//
+// `transactions` is included even though this test never reads or
+// writes it, for a reason unrelated to the v4 -> v5 step this test
+// proves: opening this fixture through the CURRENT `AppDatabase` also
+// runs every LATER `onUpgrade` branch up to today's schema version
+// (Checkpoint D's `from < 10` branch adds
+// `transactions.payment_instrument_id` via `ALTER TABLE transactions
+// ADD COLUMN ...`), and that statement fails with "no such table:
+// transactions" if the table isn't here. `transactions`' shape below
+// is its historically accurate v1-era shape (unchanged by any
+// migration before v10, matching the same table's shape in
+// `financial_account_classification_migration_test.dart`'s v8 fixture)
+// -- deliberately excluding `payment_instrument_id`, which v10's own
+// migration is what adds it. No row is ever inserted into this table;
+// only its existence is needed for the later `ALTER TABLE` to succeed.
 void main() {
   test(
     'v4 -> v5 upgrade adds recurring_rules.notifications_enabled, defaulting existing rows to false',
@@ -81,6 +96,25 @@ void main() {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             deleted_at INTEGER,
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE transactions (
+            id TEXT NOT NULL,
+            profile_id TEXT NOT NULL REFERENCES profiles (id),
+            account_id TEXT NOT NULL REFERENCES accounts (id),
+            destination_account_id TEXT REFERENCES accounts (id),
+            type TEXT NOT NULL,
+            amount_minor_units INTEGER NOT NULL,
+            currency_code TEXT NOT NULL REFERENCES currencies (code),
+            category_id TEXT REFERENCES categories (id),
+            note TEXT,
+            occurred_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_status TEXT NOT NULL DEFAULT 'localOnly',
             PRIMARY KEY (id)
           );
 

@@ -1,9 +1,12 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/invalid_payment_instrument_attribution_exception.dart';
+import 'package:ai_financial_coach/core/database/repositories/payment_instrument_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/finance/finance_engine.dart';
 import 'package:ai_financial_coach/core/finance/ledger_models.dart';
+import 'package:ai_financial_coach/core/finance/payment_instrument_type.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_not_found_exception.dart';
 import 'package:ai_financial_coach/core/money/currency_mismatch_exception.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
@@ -717,6 +720,231 @@ void main() {
     test('never-existed id emits null', () async {
       final Transaction? row = await transactionRepo.watchById('does-not-exist').first;
       expect(row, isNull);
+    });
+  });
+
+  group('Checkpoint D -- payment instrument attribution', () {
+    late PaymentInstrumentRepository instrumentRepo;
+    late String accountId;
+    late String instrumentId;
+
+    setUp(() async {
+      instrumentRepo = PaymentInstrumentRepository(db, accountRepo);
+      accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Checking',
+        type: 'bank',
+        currencyCode: 'JPY',
+      );
+      instrumentId = await instrumentRepo.createInstrument(
+        profileId: profileId,
+        accountId: accountId,
+        instrumentType: PaymentInstrumentType.debitCard,
+        nickname: 'Everyday debit card',
+      );
+    });
+
+    test('21. a transaction with a null paymentInstrumentId behaves exactly as before', () async {
+      final String id = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      final Transaction row = (await transactionRepo.watchById(id).first)!;
+      expect(row.paymentInstrumentId, isNull);
+    });
+
+    test('22. an expense with a matching instrument succeeds', () async {
+      final String id = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: instrumentId,
+      );
+      final Transaction row = (await transactionRepo.watchById(id).first)!;
+      expect(row.paymentInstrumentId, instrumentId);
+    });
+
+    test('23. income attribution follows the same account-match rule', () async {
+      final String id = await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: instrumentId,
+      );
+      final Transaction row = (await transactionRepo.watchById(id).first)!;
+      expect(row.paymentInstrumentId, instrumentId);
+    });
+
+    test('24. transfer attribution matches the SOURCE account', () async {
+      final String destinationAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Savings',
+        type: 'bank',
+        currencyCode: 'JPY',
+      );
+      final String id = await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: accountId,
+        destinationAccountId: destinationAccountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: instrumentId,
+      );
+      final Transaction row = (await transactionRepo.watchById(id).first)!;
+      expect(row.paymentInstrumentId, instrumentId);
+      expect(row.accountId, accountId);
+    });
+
+    test('25. an instrument linked to an unrelated account is rejected', () async {
+      final String unrelatedAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Savings',
+        type: 'bank',
+        currencyCode: 'JPY',
+      );
+      expect(
+        () => transactionRepo.recordExpense(
+          profileId: profileId,
+          accountId: unrelatedAccountId,
+          amount: Money.fromMinorUnits(500, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+          paymentInstrumentId: instrumentId,
+        ),
+        throwsA(isA<InvalidPaymentInstrumentAttributionException>()),
+      );
+    });
+
+    test('26. a cross-profile instrument is rejected', () async {
+      // Seeds a second, deliberately foreign `Profiles` row directly
+      // through the DB fixture -- never via
+      // `ProfileRepository.createProfile()`, which enforces the
+      // single-local-profile invariant that a real second local profile
+      // can never exist. This test needs a foreign `profileId` to exist
+      // only so `TransactionRepository`'s cross-profile attribution
+      // check has something to reject; it is not exercising
+      // `ProfileRepository` at all, so bypassing it here does not
+      // weaken that invariant.
+      const String otherProfileId = 'other-profile-fixture-26';
+      final DateTime otherProfileNow = DateTime.now().toUtc();
+      await db.into(db.profiles).insert(
+            ProfilesCompanion.insert(
+              id: otherProfileId,
+              displayName: 'Other User',
+              homeCountry: 'US',
+              currentCountry: 'US',
+              homeCurrency: 'USD',
+              livingCurrency: 'USD',
+              preferredLanguage: 'en',
+              timezone: 'America/New_York',
+              dateFormat: 'yyyy-MM-dd',
+              numberFormat: '#,##0.##',
+              createdAt: otherProfileNow,
+              updatedAt: otherProfileNow,
+            ),
+          );
+      final String otherAccountId = await accountRepo.createAccount(
+        profileId: otherProfileId,
+        name: 'Their Checking',
+        type: 'bank',
+        currencyCode: 'JPY',
+      );
+      expect(
+        () => transactionRepo.recordExpense(
+          profileId: otherProfileId,
+          accountId: otherAccountId,
+          amount: Money.fromMinorUnits(500, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+          paymentInstrumentId: instrumentId, // belongs to profileId, not otherProfileId
+        ),
+        throwsA(isA<InvalidPaymentInstrumentAttributionException>()),
+      );
+    });
+
+    test('27. a deleted instrument is rejected for a new transaction', () async {
+      await instrumentRepo.softDelete(instrumentId);
+      expect(
+        () => transactionRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(500, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+          paymentInstrumentId: instrumentId,
+        ),
+        throwsA(isA<InvalidPaymentInstrumentAttributionException>()),
+      );
+    });
+
+    test('28. an existing transaction remains valid after its instrument is archived', () async {
+      final String id = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: instrumentId,
+      );
+      await instrumentRepo.softDelete(instrumentId);
+
+      final Transaction row = (await transactionRepo.watchById(id).first)!;
+      expect(row.paymentInstrumentId, instrumentId);
+      final PaymentInstrumentRow? archived = await instrumentRepo.findByIdIncludingDeleted(
+        instrumentId,
+      );
+      expect(archived, isNotNull);
+      expect(archived!.deletedAt, isNotNull);
+    });
+
+    test('29. paymentInstrumentId has zero effect on FinanceEngine.accountBalance', () async {
+      final String withInstrumentId = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: instrumentId,
+      );
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        // no paymentInstrumentId here
+      );
+      final AccountRow account = await accountRepo.requireById(accountId);
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      // Both expenses affect the balance identically regardless of
+      // attribution -- LedgerTransaction/FinanceEngine never see
+      // paymentInstrumentId at all (see `_toLedger`).
+      expect(
+        FinanceEngine.accountBalance(account.toLedgerAccount(), ledger),
+        Money.fromMinorUnits(-1000, 'JPY'),
+      );
+      expect(withInstrumentId, isNotEmpty);
+    });
+
+    test('30. paymentInstrumentId has zero effect on income/expense totals', () async {
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(300, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: instrumentId,
+      );
+      await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(700, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: instrumentId,
+      );
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
+      expect(totals.expense, Money.fromMinorUnits(300, 'JPY'));
+      expect(totals.income, Money.fromMinorUnits(700, 'JPY'));
     });
   });
 }

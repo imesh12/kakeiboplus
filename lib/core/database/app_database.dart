@@ -60,6 +60,7 @@ part 'app_database.g.dart';
     Categories,
     Accounts,
     FinancialInstitutions,
+    PaymentInstruments,
     Transactions,
     TransactionExchangeRates,
     Budgets,
@@ -79,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   /// v1 -> v2 (Beta 1 Task 2): adds the `budgets` table. No existing
   /// table changes shape and no historical data is touched -- see
@@ -157,6 +158,17 @@ class AppDatabase extends _$AppDatabase {
   /// this migration, no `transactions` row is touched at all, and zero
   /// `financial_institutions` rows are created (institution assignment
   /// is a later checkpoint's UI, not this one's).
+  ///
+  /// Schema version 10 (Checkpoint D, PaymentInstrument foundation) adds
+  /// the new `payment_instruments` table and one nullable
+  /// `transactions.payment_instrument_id` column -- see
+  /// `tables.dart`'s `PaymentInstruments`/`Transactions.paymentInstrumentId`
+  /// doc comments for the full rationale. Purely additive: no existing
+  /// table changes shape, `accounts`/its classification from Checkpoint
+  /// B is completely untouched, every pre-existing `transactions` row
+  /// gets `payment_instrument_id = null`, and zero `payment_instruments`
+  /// rows are fabricated. `FinanceEngine` is not touched by this
+  /// checkpoint at all.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -235,6 +247,19 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               "UPDATE accounts SET subtype = 'legacyCardNeedsReview' WHERE type = 'card'",
             );
+          }
+          if (from < 10) {
+            // Checkpoint D -- see the doc comment above `schemaVersion`
+            // for the full rationale. Additive-only: a brand-new empty
+            // table plus one nullable column on `transactions`. No
+            // existing table changes shape, no existing row in any
+            // table is read, rewritten, or deleted, and zero
+            // `payment_instruments` rows are fabricated -- every
+            // pre-existing `transactions` row simply gets
+            // `payment_instrument_id = null` via the column's own
+            // nullability (no backfill statement is needed or run).
+            await m.createTable(paymentInstruments);
+            await m.addColumn(transactions, transactions.paymentInstrumentId);
           }
         },
       );
