@@ -14,11 +14,26 @@
 /// reviewable value to fall back to rather than silently reusing one of
 /// the other four.
 ///
-/// Deliberately NOT yet defined here: `creditCard`, `deposit`, or the
-/// other subtypes from the frozen architecture's full list (docs/20
-/// §12.1) -- Checkpoint B must not overpopulate subtype values merely
-/// because a future checkpoint will need them. `subtype` is a plain
-/// `TextColumn` (matching this schema's enum-as-text convention -- see
+/// Checkpoint E adds [creditCard] -- docs/20 §12.1's frozen
+/// `CreditFacilityDetails` liability subtype: a `FinancialAccount` with
+/// `subtype: creditCard` is the only account shape a `CreditFacilityDetails`
+/// row (`lib/core/database/repositories/credit_facility_repository.dart`)
+/// may ever attach to, and the only liability shape a `creditCard`
+/// `PaymentInstrument` (already frozen by Checkpoint D) may ever link
+/// to. No migration ever backfills an existing row to this value --
+/// `classifyLegacyAccountType` (this checkpoint's own conservative
+/// migration policy, docs/20 §13.1) never returns it, matching that
+/// policy's explicit "never auto-convert a legacy `card` row to a
+/// liability" rule; a `creditCard`-subtype account can only ever be
+/// created going forward, through `CreditFacilityRepository.createFacility`
+/// (which itself never creates the underlying `FinancialAccount` row --
+/// Checkpoint E ships no Add Account UX, docs/20 §13.4 checkpoint G).
+///
+/// Deliberately still NOT defined here: `checking`/`savings` (bank is
+/// not split -- docs/20 §13.5 open question 1, unresolved by design) or
+/// `deposit` (docs/20 §12.1's other liability/asset-detail subtype --
+/// Checkpoint F's own scope, not E's). `subtype` is a plain `TextColumn`
+/// (matching this schema's enum-as-text convention -- see
 /// `Transactions.type`'s doc comment in `tables.dart`), so a later
 /// checkpoint can introduce a new value without a schema migration.
 ///
@@ -31,6 +46,7 @@ enum FinancialAccountSubtype {
   cash('cash'),
   bank('bank'),
   wallet('wallet'),
+  creditCard('creditCard'),
   legacyCardNeedsReview('legacyCardNeedsReview'),
   legacyUnknownNeedsReview('legacyUnknownNeedsReview');
 

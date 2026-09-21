@@ -6,6 +6,7 @@ import '../../finance/transaction_type.dart';
 import '../../money/currency_mismatch_exception.dart';
 import '../../money/money.dart';
 import '../app_database.dart';
+import '../../finance/payment_instrument_type.dart';
 import 'account_repository.dart';
 import 'invalid_payment_instrument_attribution_exception.dart';
 import 'transaction_not_found_exception.dart';
@@ -458,6 +459,40 @@ class TransactionRepository {
         "transaction's account $accountId -- V1 source-attribution rule requires "
         'them to match',
       );
+    }
+
+    // Checkpoint E: a liability-account purchase may only be attributed
+    // to a `creditCard` instrument -- docs/20's "Payment instrument
+    // relationship" rule. The accountId-match check above already
+    // structurally rules out a `debitCard`/`cashCard` instrument here
+    // (Checkpoint D's own creation-time validation never lets one of
+    // those link to a liability account at all -- see
+    // `PaymentInstrumentRepository`'s account-class validation table),
+    // but a `paymentService`/`other` instrument CAN legitimately link
+    // to the same liability account (that validation table permits
+    // either balance class for those two types), so this explicit check
+    // is what actually rejects that case rather than relying on
+    // coincidental structural luck. Never runs for an asset-account
+    // attribution (the overwhelming majority of existing callers) --
+    // this is additive, scoped only to the new liability-purchase case.
+    final AccountRow account = await _accountRepository.requireById(accountId);
+    if (account.isLiability) {
+      // Deliberately `PaymentInstrumentType.fromStorageValue(...)` here,
+      // not the `PaymentInstrumentRowX.instrumentTypeValue` extension --
+      // that extension lives in `payment_instrument_repository.dart`,
+      // and this repository deliberately does not import that file
+      // (see this method's own doc: no `PaymentInstrumentRepository`
+      // dependency at all, by design).
+      final PaymentInstrumentType instrumentType =
+          PaymentInstrumentType.fromStorageValue(instrument.instrumentType);
+      if (instrumentType != PaymentInstrumentType.creditCard) {
+        throw InvalidPaymentInstrumentAttributionException(
+          paymentInstrumentId,
+          'account $accountId is a liability account, but this instrument is '
+          '${instrumentType.name}, not creditCard -- only a creditCard '
+          'instrument may attribute a liability-account transaction',
+        );
+      }
     }
   }
 }

@@ -322,6 +322,92 @@ class PaymentInstruments extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// Checkpoint E (schema v11): one-to-one metadata for a credit-facility
+/// liability `FinancialAccount` -- present if and only if that account
+/// has `balanceClass: liability` and `subtype: creditCard` (docs/20
+/// §12.1, §13.4 checkpoint E). Never balance-holding itself --
+/// `creditLimitMinorUnits` never participates in any
+/// `FinanceEngine`/ledger-balance computation; "available credit" is
+/// always DERIVED (`creditLimit - amountOwed`, via `Money`'s own `-`
+/// operator) and never stored -- see
+/// `CreditFacilityRepository.availableCredit`.
+///
+/// Enforced one-to-one with its `FinancialAccount` via [accountId]'s
+/// `unique()` constraint below, backed by `CreditFacilityRepository`'s
+/// own pre-check for a clear domain exception rather than a raw SQLite
+/// constraint violation surfacing to a caller.
+@DataClassName('CreditFacilityDetailsRow')
+class CreditFacilityDetails extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// The single liability `FinancialAccount` (physically `accounts`)
+  /// this facility describes -- see this table's own doc and
+  /// `PaymentInstruments.accountId`'s identical physical-naming
+  /// rationale (this column names the same conceptual target the same
+  /// way, for the same reason: consistency with this schema's existing
+  /// naming, not a literal legacy "account"). `unique()` enforces the
+  /// one-facility-per-account invariant at the database level;
+  /// `CreditFacilityRepository.createFacility` checks for an existing
+  /// row first so a violation surfaces as
+  /// `CreditFacilityValidationException`, not a raw SQLite error.
+  TextColumn get accountId => text().unique().references(Accounts, #id)();
+
+  /// Money, stored as integer minor units in the linked account's OWN
+  /// currency -- this table deliberately has no `currencyCode` column
+  /// of its own (docs/20 §12.3's "Currency is inherited from the
+  /// FinancialAccount" rule) -- see `CreditFacilityRepository
+  /// .createFacility`'s doc for how a mismatched `Money` currency is
+  /// rejected at creation. Zero is a valid limit (e.g. a facility
+  /// pending its first credit-limit assignment); only a NEGATIVE limit
+  /// is rejected -- see that method's own doc for the full rationale.
+  /// Never decremented/incremented directly by a purchase or payment --
+  /// see this table's own doc on "available credit."
+  IntColumn get creditLimitMinorUnits => integer()();
+
+  /// Day-of-month (1-31) the statement closes, if known -- docs/20
+  /// §12.1/§13.5 open question 2. Optional and independent of [dueDay]
+  /// (unlike `PaymentInstruments.expiryMonth`/`expiryYear`, there is no
+  /// "both or neither" rule between these two -- a user may know one
+  /// without the other). No billing-cycle computation reads this in V1
+  /// -- purely informational metadata (docs/20 §13.4 checkpoint E: "do
+  /// not invent large billing-cycle functionality that belongs later").
+  IntColumn get statementClosingDay => integer().nullable()();
+
+  /// Day-of-month (1-31) payment is due, if known -- same optionality
+  /// and "no billing-cycle computation" rule as [statementClosingDay].
+  IntColumn get dueDay => integer().nullable()();
+
+  /// The asset `FinancialAccount` normally used to pay this facility's
+  /// statement, if the user has one in mind -- docs/20 §12.1.
+  /// **Informational only, never enforced**: `TransactionRepository
+  /// .recordTransfer` does not read this column, does not require a
+  /// payment's source account to match it, and no validation anywhere
+  /// rejects a payment from a different account. Nullable; validated
+  /// only for existence/profile-ownership at creation (see
+  /// `CreditFacilityRepository.createFacility`'s doc), never for
+  /// `balanceClass`/`subtype` -- the frozen model does not restrict
+  /// which account a user intends to pay from.
+  TextColumn get linkedPaymentAccountId =>
+      text().nullable().references(Accounts, #id)();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete -- same convention as every other table in this schema
+  /// from v2 onward. Checkpoint E does not build a lifecycle/UI path
+  /// that ever sets this (no facility-deletion flow exists in V1); the
+  /// column exists for schema-wide consistency and so a later
+  /// checkpoint never needs a fresh migration merely to add it.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 class Transactions extends Table {
   /// Client-generated UUID (v4) — see `docs/03_DATABASE_SCHEMA.md`.
   TextColumn get id => text()();

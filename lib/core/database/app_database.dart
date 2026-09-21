@@ -61,6 +61,7 @@ part 'app_database.g.dart';
     Accounts,
     FinancialInstitutions,
     PaymentInstruments,
+    CreditFacilityDetails,
     Transactions,
     TransactionExchangeRates,
     Budgets,
@@ -80,7 +81,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   /// v1 -> v2 (Beta 1 Task 2): adds the `budgets` table. No existing
   /// table changes shape and no historical data is touched -- see
@@ -169,6 +170,22 @@ class AppDatabase extends _$AppDatabase {
   /// gets `payment_instrument_id = null`, and zero `payment_instruments`
   /// rows are fabricated. `FinanceEngine` is not touched by this
   /// checkpoint at all.
+  ///
+  /// Schema version 11 (Checkpoint E, credit-facility metadata) adds the
+  /// new `credit_facility_details` table only -- see `tables.dart`'s
+  /// `CreditFacilityDetails` doc comment for the full rationale. Purely
+  /// additive: no existing table changes shape, no existing row in
+  /// `accounts`/`transactions`/`payment_instruments` is read, rewritten,
+  /// or deleted, and zero `credit_facility_details` rows are fabricated
+  /// for any pre-existing account -- this migration never guesses that a
+  /// legacy or Checkpoint-B-classified account is a credit facility
+  /// (docs/20 §13.1's "never auto-convert" policy extends to this table
+  /// too). `FinanceEngine`/`TransactionRepository`'s expense/transfer
+  /// insert path are not touched by this migration itself -- Checkpoint
+  /// E's one behavior change (payment-instrument attribution requiring
+  /// `instrumentType: creditCard` when the target account is a
+  /// liability) lives in `TransactionRepository` source code, not in
+  /// this schema migration.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -260,6 +277,15 @@ class AppDatabase extends _$AppDatabase {
             // nullability (no backfill statement is needed or run).
             await m.createTable(paymentInstruments);
             await m.addColumn(transactions, transactions.paymentInstrumentId);
+          }
+          if (from < 11) {
+            // Checkpoint E -- see the doc comment above `schemaVersion`
+            // for the full rationale. Additive-only: one brand-new,
+            // empty table. No existing table changes shape, no existing
+            // row anywhere is read, rewritten, or deleted, and zero
+            // `credit_facility_details` rows are fabricated for any
+            // pre-existing account.
+            await m.createTable(creditFacilityDetails);
           }
         },
       );

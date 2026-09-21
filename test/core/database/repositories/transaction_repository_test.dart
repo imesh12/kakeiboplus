@@ -6,12 +6,15 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/finance/finance_engine.dart';
 import 'package:ai_financial_coach/core/finance/ledger_models.dart';
+import 'package:ai_financial_coach/core/finance/liability_overpayment_exception.dart';
 import 'package:ai_financial_coach/core/finance/payment_instrument_type.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_not_found_exception.dart';
 import 'package:ai_financial_coach/core/money/currency_mismatch_exception.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uuid/uuid.dart';
 
 // NOTE: exercises generated Drift code — see CLAUDE_FIRST_CODING_PROMPT.md.
 
@@ -21,6 +24,7 @@ void main() {
   late AccountRepository accountRepo;
   late TransactionRepository transactionRepo;
   late String profileId;
+  const Uuid uuid = Uuid();
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -945,6 +949,264 @@ void main() {
       final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
       expect(totals.expense, Money.fromMinorUnits(300, 'JPY'));
       expect(totals.income, Money.fromMinorUnits(700, 'JPY'));
+    });
+  });
+
+  group('Checkpoint E -- credit-card purchase/payment semantics', () {
+    late PaymentInstrumentRepository instrumentRepo;
+    late String creditCardAccountId;
+    late String bankAccountId;
+    late String creditCardInstrumentId;
+    late String debitCardInstrumentId;
+
+    /// Seeds a liability account with subtype `creditCard` directly
+    /// through the DB, bypassing `AccountRepository.createAccount`
+    /// (which today only ever produces asset-classified rows) -- the
+    /// same pattern Checkpoint D's own tests already established for
+    /// this exact gap.
+    Future<String> seedCreditCardAccount({String currencyCode = 'JPY'}) async {
+      final String id = uuid.v4();
+      final DateTime now = DateTime.now().toUtc();
+      await db.into(db.accounts).insert(
+            AccountsCompanion.insert(
+              id: id,
+              profileId: profileId,
+              name: 'Credit Card',
+              type: 'card',
+              currencyCode: currencyCode,
+              balanceClass: const Value<String>('liability'),
+              subtype: const Value<String>('creditCard'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      return id;
+    }
+
+    setUp(() async {
+      instrumentRepo = PaymentInstrumentRepository(db, accountRepo);
+      creditCardAccountId = await seedCreditCardAccount();
+      bankAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Checking',
+        type: 'bank',
+        currencyCode: 'JPY',
+      );
+      creditCardInstrumentId = await instrumentRepo.createInstrument(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        instrumentType: PaymentInstrumentType.creditCard,
+        nickname: 'Rakuten Visa',
+      );
+      debitCardInstrumentId = await instrumentRepo.createInstrument(
+        profileId: profileId,
+        accountId: bankAccountId,
+        instrumentType: PaymentInstrumentType.debitCard,
+        nickname: 'Everyday debit card',
+      );
+    });
+
+    Future<Money> balanceOf(String accountId) async {
+      final AccountRow account = await accountRepo.requireById(accountId);
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      return FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+    }
+
+    test('7. a credit-card purchase increases the liability debt exactly', () async {
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      expect(await balanceOf(creditCardAccountId), Money.fromMinorUnits(5000, 'JPY'));
+    });
+
+    test('8. a credit-card purchase leaves an unrelated bank asset unchanged', () async {
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      expect(await balanceOf(bankAccountId), Money.zero('JPY'));
+    });
+
+    test('9. a purchase attributed to the matching credit-card instrument succeeds', () async {
+      final String id = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+        paymentInstrumentId: creditCardInstrumentId,
+      );
+      final Transaction row = (await transactionRepo.watchById(id).first)!;
+      expect(row.paymentInstrumentId, creditCardInstrumentId);
+    });
+
+    test('10. a credit-card instrument linked to a DIFFERENT liability account is rejected', () async {
+      final String otherCreditCardAccountId = await seedCreditCardAccount();
+      final String otherInstrumentId = await instrumentRepo.createInstrument(
+        profileId: profileId,
+        accountId: otherCreditCardAccountId,
+        instrumentType: PaymentInstrumentType.creditCard,
+        nickname: 'Amex',
+      );
+      expect(
+        () => transactionRepo.recordExpense(
+          profileId: profileId,
+          accountId: creditCardAccountId,
+          amount: Money.fromMinorUnits(5000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+          paymentInstrumentId: otherInstrumentId,
+        ),
+        throwsA(isA<InvalidPaymentInstrumentAttributionException>()),
+      );
+    });
+
+    test('11. a debit-card instrument attributed to a liability purchase is rejected', () async {
+      expect(
+        () => transactionRepo.recordExpense(
+          profileId: profileId,
+          accountId: creditCardAccountId,
+          amount: Money.fromMinorUnits(5000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+          paymentInstrumentId: debitCardInstrumentId,
+        ),
+        throwsA(isA<InvalidPaymentInstrumentAttributionException>()),
+      );
+    });
+
+    test(
+        'bonus: a paymentService instrument linked to the SAME liability account is still '
+        'rejected -- proves the instrumentType check, not just the accountId check, is what '
+        'rejects a non-creditCard instrument here', () async {
+      final String paymentServiceInstrumentId = await instrumentRepo.createInstrument(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        instrumentType: PaymentInstrumentType.paymentService,
+        nickname: 'Some Wallet',
+      );
+      expect(
+        () => transactionRepo.recordExpense(
+          profileId: profileId,
+          accountId: creditCardAccountId,
+          amount: Money.fromMinorUnits(5000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+          paymentInstrumentId: paymentServiceInstrumentId,
+        ),
+        throwsA(isA<InvalidPaymentInstrumentAttributionException>()),
+      );
+    });
+
+    test('12. an inactive (soft-deleted) instrument attribution fails', () async {
+      await instrumentRepo.softDelete(creditCardInstrumentId);
+      expect(
+        () => transactionRepo.recordExpense(
+          profileId: profileId,
+          accountId: creditCardAccountId,
+          amount: Money.fromMinorUnits(5000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+          paymentInstrumentId: creditCardInstrumentId,
+        ),
+        throwsA(isA<InvalidPaymentInstrumentAttributionException>()),
+      );
+    });
+
+    test('13. a credit-card payment reduces both the asset source and the liability debt', () async {
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId,
+        destinationAccountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(3000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 2),
+      );
+      expect(await balanceOf(bankAccountId), Money.fromMinorUnits(-3000, 'JPY'));
+      expect(await balanceOf(creditCardAccountId), Money.fromMinorUnits(2000, 'JPY'));
+    });
+
+    test('14. a credit-card payment is a transfer -- never counted as income or expense', () async {
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId,
+        destinationAccountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(3000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 2),
+      );
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
+      // Only the purchase (5000) is an expense; the 3000 payment never
+      // appears in either total -- it is TransactionType.transfer.
+      expect(totals.expense, Money.fromMinorUnits(5000, 'JPY'));
+      expect(totals.income, Money.zero('JPY'));
+    });
+
+    test('15. an exact payoff to zero succeeds', () async {
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId,
+        destinationAccountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 2),
+      );
+      expect(await balanceOf(creditCardAccountId), Money.zero('JPY'));
+    });
+
+    test(
+        '16. an overpayment below zero fails under existing FinanceEngine semantics '
+        '(LiabilityOverpaymentException, not silently clamped)', () async {
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(5000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId,
+        destinationAccountId: creditCardAccountId,
+        amount: Money.fromMinorUnits(6000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 2),
+      );
+      expect(
+        () => balanceOf(creditCardAccountId),
+        throwsA(isA<LiabilityOverpaymentException>()),
+      );
+    });
+
+    test('17. a cross-currency credit-card payment is still rejected (same-currency-only V1 rule)',
+        () async {
+      final String usdCreditCardAccountId = await seedCreditCardAccount(currencyCode: 'USD');
+      expect(
+        () => transactionRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: bankAccountId, // JPY
+          destinationAccountId: usdCreditCardAccountId, // USD
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 2),
+        ),
+        throwsA(isA<CurrencyMismatchException>()),
+      );
     });
   });
 }
