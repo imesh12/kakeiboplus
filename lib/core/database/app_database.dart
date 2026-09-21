@@ -62,6 +62,7 @@ part 'app_database.g.dart';
     FinancialInstitutions,
     PaymentInstruments,
     CreditFacilityDetails,
+    DepositDetails,
     Transactions,
     TransactionExchangeRates,
     Budgets,
@@ -81,7 +82,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   /// v1 -> v2 (Beta 1 Task 2): adds the `budgets` table. No existing
   /// table changes shape and no historical data is touched -- see
@@ -186,6 +187,28 @@ class AppDatabase extends _$AppDatabase {
   /// `instrumentType: creditCard` when the target account is a
   /// liability) lives in `TransactionRepository` source code, not in
   /// this schema migration.
+  ///
+  /// Schema version 12 (Checkpoint F, deposit metadata) adds the new
+  /// `deposit_details` table only -- see `tables.dart`'s `DepositDetails`
+  /// doc comment for the full rationale. Purely additive, in exactly the
+  /// same shape as Checkpoint E's own v10 -> v11 step: no existing table
+  /// changes shape, no existing row in any table is read, rewritten, or
+  /// deleted, and zero `deposit_details` rows are fabricated for any
+  /// pre-existing account -- this migration never guesses that a legacy
+  /// or Checkpoint-B-classified account is a deposit (docs/20 §13.1's
+  /// "never auto-convert" policy extends to this table too, and this
+  /// checkpoint's own brief repeats it explicitly: "no automatic
+  /// conversion of legacy savings/bank accounts into deposits").
+  /// `FinanceEngine` and `TransactionRepository.recordExpense`/
+  /// `recordIncome`/`recordTransfer` are not touched by this migration OR
+  /// by any source-code change in this checkpoint at all -- funding a
+  /// deposit (an asset-to-asset transfer), a maturity principal
+  /// movement (transfer-like), and posting interest (income) are every
+  /// one of them already expressible with the existing, unmodified
+  /// `recordTransfer`/`recordIncome` methods against a `subtype: deposit`
+  /// account, exactly as Checkpoint E discovered for a liability
+  /// `creditCard` account -- neither method has ever branched on
+  /// `subtype` at all.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -286,6 +309,18 @@ class AppDatabase extends _$AppDatabase {
             // `credit_facility_details` rows are fabricated for any
             // pre-existing account.
             await m.createTable(creditFacilityDetails);
+          }
+          if (from < 12) {
+            // Checkpoint F -- see the doc comment above `schemaVersion`
+            // for the full rationale. Additive-only: one brand-new,
+            // empty table -- the identical shape as the v10 -> v11 step
+            // immediately above, and for the identical reason it cannot
+            // fail against any historical fixture: a pure `CREATE TABLE`
+            // only needs its FK targets (`accounts`/`profiles`), which
+            // every fixture already has. No existing row anywhere is
+            // read, rewritten, or deleted, and zero `deposit_details`
+            // rows are fabricated for any pre-existing account.
+            await m.createTable(depositDetails);
           }
         },
       );

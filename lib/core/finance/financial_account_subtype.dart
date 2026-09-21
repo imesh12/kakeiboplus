@@ -29,13 +29,24 @@
 /// (which itself never creates the underlying `FinancialAccount` row --
 /// Checkpoint E ships no Add Account UX, docs/20 §13.4 checkpoint G).
 ///
+/// Checkpoint F adds [deposit] -- docs/20 §12.1's frozen `DepositDetails`
+/// asset subtype: a `FinancialAccount` with `subtype: deposit` is the
+/// only account shape a `DepositDetails` row
+/// (`lib/core/database/repositories/deposit_repository.dart`) may ever
+/// attach to. No migration ever backfills an existing row to this value
+/// -- exactly the same "never auto-convert a legacy row" discipline
+/// [creditCard] already established; a `deposit`-subtype account can
+/// only ever be created going forward, and only through
+/// `DepositRepository.createDetails` attaching metadata to an
+/// already-asset-classified account (Checkpoint F ships no Add Account
+/// UX either -- docs/20 §13.4 checkpoint G).
+///
 /// Deliberately still NOT defined here: `checking`/`savings` (bank is
-/// not split -- docs/20 §13.5 open question 1, unresolved by design) or
-/// `deposit` (docs/20 §12.1's other liability/asset-detail subtype --
-/// Checkpoint F's own scope, not E's). `subtype` is a plain `TextColumn`
-/// (matching this schema's enum-as-text convention -- see
-/// `Transactions.type`'s doc comment in `tables.dart`), so a later
-/// checkpoint can introduce a new value without a schema migration.
+/// not split -- docs/20 §13.5 open question 1, unresolved by design).
+/// `subtype` is a plain `TextColumn` (matching this schema's
+/// enum-as-text convention -- see `Transactions.type`'s doc comment in
+/// `tables.dart`), so a later checkpoint can introduce a new value
+/// without a schema migration.
 ///
 /// Stored as [storageValue]. [fromStorageValue] never throws on an
 /// unrecognized/corrupt value -- falling back to
@@ -47,6 +58,7 @@ enum FinancialAccountSubtype {
   bank('bank'),
   wallet('wallet'),
   creditCard('creditCard'),
+  deposit('deposit'),
   legacyCardNeedsReview('legacyCardNeedsReview'),
   legacyUnknownNeedsReview('legacyUnknownNeedsReview');
 

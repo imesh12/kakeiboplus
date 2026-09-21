@@ -408,6 +408,154 @@ class CreditFacilityDetails extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// Checkpoint F: one-to-one metadata for a deposit ASSET
+/// `FinancialAccount` -- docs/20 §12.1/§12.7/§12.8/§12.9. Present if and
+/// only if the linked `FinancialAccount` has `balanceClass: asset` and
+/// `subtype: deposit` (see `DepositRepository.createDetails`'s creation
+/// validation for the full rationale, mirroring `CreditFacilityDetails`'s
+/// identical account-eligibility pattern). Carries **zero ledger
+/// balance of its own** -- there is no principal/balance column here at
+/// all; the deposit's principal is simply its linked `FinancialAccount`'s
+/// own balance (`FinanceEngine.accountBalance`, unchanged), exactly the
+/// same "PaymentInstrument/CreditFacilityDetails never duplicate the
+/// ledger" discipline every prior detail table in this schema already
+/// established.
+@DataClassName('DepositDetailsRow')
+class DepositDetails extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// The single asset `FinancialAccount` (physically `accounts`) this
+  /// deposit's metadata describes. `unique()` enforces the
+  /// one-deposit-per-account invariant at the database level;
+  /// `DepositRepository.createDetails` checks for an existing row first
+  /// so a violation surfaces as `DepositValidationException`, not a raw
+  /// SQLite error -- the same pattern `CreditFacilityDetails.accountId`
+  /// already established.
+  TextColumn get accountId => text().unique().references(Accounts, #id)();
+
+  /// `fixed` / `shortTerm` / `recurring` / `other` -- docs/20 §12.1's
+  /// exact frozen values (see `DepositType`). Gates whether
+  /// [installmentAmountMinorUnits]/[installmentFrequency] may be set
+  /// (only for `recurring`) -- see `DepositRepository.createDetails`.
+  TextColumn get depositType => text()();
+
+  /// A whole number, always `>= 1` -- paired with [termUnit] to define
+  /// the deposit's declared term. Docs/20 §12.1.
+  IntColumn get termNumber => integer()();
+
+  /// `days` / `months` / `years` -- docs/20 §12.1 (see [DepositTermUnit]).
+  /// Selects which calendar-arithmetic path `DepositRepository
+  /// .createDetails` uses to compute [maturityDate] from [startDate] and
+  /// [termNumber] -- plain calendar-day addition for `days`;
+  /// `calendar_month_math.dart`'s anchor-based, leap-year-aware
+  /// arithmetic for `months`/`years` (docs/20 §12.7 -- reusing the exact
+  /// routine `RecurringSchedule` already uses, not a second one).
+  TextColumn get termUnit => text()();
+
+  /// Calendar-only UTC-midnight date -- the deposit's first day.
+  DateTimeColumn get startDate => dateTime()();
+
+  /// Calendar-only UTC-midnight date. **Computed once, at creation, from
+  /// [startDate]/[termNumber]/[termUnit], and stored** -- docs/20 §12.7:
+  /// "so the figure never drifts if calculation rules change later."
+  /// This is the ONE derived value this table deliberately persists
+  /// (unlike `DepositEstimate`'s estimated-interest/maturity-value
+  /// figures, which are calendar-date-independent money amounts that
+  /// must NEVER be persisted, docs/20 §12.8) -- a calendar date frozen
+  /// at creation time is architecturally different from a money estimate
+  /// that depends on a rate/day-count convention that could theoretically
+  /// change later.
+  DateTimeColumn get maturityDate => dateTime()();
+
+  /// The annual interest rate in basis points (e.g. `550` = 5.50%) --
+  /// docs/20 §12.8's frozen representation, converted to an exact
+  /// fraction (`/10000`) only at calculation time in `DepositCalculator`
+  /// -- never a stored `double` rate. Non-negative; zero is a valid rate
+  /// (docs/20 test item 21 -- e.g. a promotional zero-interest
+  /// introductory deposit).
+  IntColumn get interestRateBasisPoints => integer()();
+
+  /// `simple` / `compound` -- docs/20 §12.8 (see [DepositInterestMethod]).
+  /// Selects which `DepositCalculator` formula applies, and gates
+  /// [compoundingFrequency] (required for `compound`, must be absent for
+  /// `simple` -- see `DepositRepository.createDetails`).
+  TextColumn get interestMethod => text()();
+
+  /// `monthly` / `quarterly` / `semiannual` / `annual` / `atMaturity` --
+  /// docs/20 §12.8 (see [DepositCompoundingFrequency]). Meaningful ONLY
+  /// when [interestMethod] is `compound` -- `null` whenever
+  /// [interestMethod] is `simple` (`DepositRepository.createDetails`
+  /// rejects a non-null value for `simple`, matching this table's own
+  /// "meaningful only for compound" doc on the parent architecture
+  /// section).
+  TextColumn get compoundingFrequency => text().nullable()();
+
+  /// Whether this deposit renews automatically at maturity -- docs/20
+  /// §12.1. Defaults to `false`. **No automatic-renewal behavior is
+  /// implemented in V1** (this checkpoint's own explicit scope
+  /// exclusion: "Do NOT implement automatic maturity posting") -- purely
+  /// a stored declaration of intent for a future checkpoint's UI/renewal
+  /// engine to read.
+  BoolColumn get autoRenew => boolean().withDefault(const Constant(false))();
+
+  /// Free-form, informational description of what happens on renewal
+  /// (e.g. "principal only" / "principal + interest") -- docs/20 §12.1
+  /// names this field but does not freeze a fixed set of values for it,
+  /// unlike every other enum-shaped column on this table. Deliberately
+  /// left as plain text rather than an invented enum -- inventing a
+  /// closed set of renewal modes here would be exactly the "do not
+  /// invent bank-specific product categories" / "do not guess bank
+  /// behavior" this checkpoint explicitly warns against. Nullable; never
+  /// read or interpreted by any code in this checkpoint.
+  TextColumn get renewalMode => text().nullable()();
+
+  /// The asset `FinancialAccount` interest is paid into, if different
+  /// from the deposit account itself -- docs/20 §12.1. **Unlike
+  /// `CreditFacilityDetails.linkedPaymentAccountId`, this IS validated
+  /// for currency** (`DepositRepository.createDetails` requires it to
+  /// share [accountId]'s currency) -- interest is actually postable here
+  /// in V1 via an ordinary `TransactionRepository.recordIncome` call with
+  /// no FX conversion step, so a currency mismatch would silently
+  /// misstate which currency the posted interest is denominated in; a
+  /// purely-informational field like `linkedPaymentAccountId` never
+  /// reaches that code path at all. Self-referencing (equal to
+  /// [accountId]) is explicitly ALLOWED -- interest reinvested back into
+  /// the same deposit is a legitimate real-world pattern, not a circular
+  /// relationship (see `DepositRepository.createDetails`'s doc for the
+  /// full reasoning). Nullable; validated only for existence/profile-
+  /// ownership/currency at creation, never `balanceClass`/`subtype`.
+  TextColumn get interestDestinationAccountId =>
+      text().nullable().references(Accounts, #id)();
+
+  /// Only meaningful for `depositType: recurring` -- docs/20 §12.9.
+  /// `DepositRepository.createDetails` rejects a non-null value for any
+  /// other [depositType]. Purely descriptive in V1 -- see
+  /// `DepositInstallmentFrequency`'s own doc for why V1 stores but never
+  /// schedules against this.
+  IntColumn get installmentAmountMinorUnits => integer().nullable()();
+
+  /// Only meaningful for `depositType: recurring` -- same gating as
+  /// [installmentAmountMinorUnits]. See [DepositInstallmentFrequency].
+  TextColumn get installmentFrequency => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete -- same convention as every other table in this schema
+  /// from v2 onward. Checkpoint F does not build a lifecycle/UI path
+  /// that ever sets this (no deposit-deletion flow exists in V1); the
+  /// column exists for schema-wide consistency and so a later checkpoint
+  /// never needs a fresh migration merely to add it.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 class Transactions extends Table {
   /// Client-generated UUID (v4) — see `docs/03_DATABASE_SCHEMA.md`.
   TextColumn get id => text()();

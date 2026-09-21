@@ -1209,4 +1209,149 @@ void main() {
       );
     });
   });
+
+  group('Checkpoint F -- deposit funding/maturity/interest semantics', () {
+    late String depositAccountId;
+    late String bankAccountId2;
+
+    /// Seeds an asset account with subtype `deposit` directly through
+    /// the DB, bypassing `AccountRepository.createAccount` (which today
+    /// only ever produces a legacy-classified subtype, never `deposit`)
+    /// -- the same gap Checkpoint E's own `seedCreditCardAccount` above
+    /// already documents for a liability/creditCard account.
+    Future<String> seedDepositAccount({
+      String currencyCode = 'JPY',
+      int openingBalanceMinorUnits = 0,
+    }) async {
+      final String id = uuid.v4();
+      final DateTime now = DateTime.now().toUtc();
+      await db.into(db.accounts).insert(
+            AccountsCompanion.insert(
+              id: id,
+              profileId: profileId,
+              name: 'Fixed Deposit',
+              type: 'bank',
+              currencyCode: currencyCode,
+              openingBalanceMinorUnits: Value<int>(openingBalanceMinorUnits),
+              balanceClass: const Value<String>('asset'),
+              subtype: const Value<String>('deposit'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      return id;
+    }
+
+    setUp(() async {
+      depositAccountId = await seedDepositAccount();
+      bankAccountId2 = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Checking (Checkpoint F)',
+        type: 'bank',
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+      );
+    });
+
+    Future<Money> balanceOf(String accountId) async {
+      final AccountRow account = await accountRepo.requireById(accountId);
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      return FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+    }
+
+    test('26. funding a deposit is transfer semantics, not an expense', () async {
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId2,
+        destinationAccountId: depositAccountId,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      expect(await balanceOf(depositAccountId), Money.fromMinorUnits(50000, 'JPY'));
+      expect(await balanceOf(bankAccountId2), Money.fromMinorUnits(50000, 'JPY'));
+
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
+      expect(totals.expense, Money.zero('JPY'));
+      expect(totals.income, Money.zero('JPY'));
+    });
+
+    test('27. a deposit maturity principal movement is transfer-like, not income', () async {
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId2,
+        destinationAccountId: depositAccountId,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      // Maturity: the principal returns to the bank account -- an
+      // ordinary transfer, exactly like funding, never income.
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: depositAccountId,
+        destinationAccountId: bankAccountId2,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2027, 1, 1),
+      );
+      expect(await balanceOf(depositAccountId), Money.zero('JPY'));
+      expect(await balanceOf(bankAccountId2), Money.fromMinorUnits(100000, 'JPY'));
+
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
+      expect(totals.income, Money.zero('JPY'));
+      expect(totals.expense, Money.zero('JPY'));
+    });
+
+    test('28. interest actually credited is recorded as income', () async {
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId2,
+        destinationAccountId: depositAccountId,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      // Interest credited directly into the deposit account itself
+      // (the default -- no separate interestDestinationAccountId).
+      await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: depositAccountId,
+        amount: Money.fromMinorUnits(2750, 'JPY'),
+        occurredAtUtc: DateTime.utc(2027, 1, 1),
+      );
+      expect(await balanceOf(depositAccountId), Money.fromMinorUnits(52750, 'JPY'));
+
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
+      expect(totals.income, Money.fromMinorUnits(2750, 'JPY'));
+      expect(totals.expense, Money.zero('JPY'));
+    });
+
+    test('28b. interest credited to a separate interestDestinationAccountId is still income, '
+        'and never touches the deposit\'s own balance', () async {
+      await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: bankAccountId2,
+        destinationAccountId: depositAccountId,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+      await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: bankAccountId2, // interest paid out to the linked bank account
+        amount: Money.fromMinorUnits(2750, 'JPY'),
+        occurredAtUtc: DateTime.utc(2027, 1, 1),
+      );
+      expect(await balanceOf(depositAccountId), Money.fromMinorUnits(50000, 'JPY')); // unchanged
+      expect(await balanceOf(bankAccountId2), Money.fromMinorUnits(52750, 'JPY'));
+
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
+      expect(totals.income, Money.fromMinorUnits(2750, 'JPY'));
+    });
+  });
 }

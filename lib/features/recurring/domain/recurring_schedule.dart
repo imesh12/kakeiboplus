@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../../../core/finance/calendar_month_math.dart';
 import 'recurrence_frequency.dart';
 
 /// Normalizes [input] to a calendar-only UTC-midnight `DateTime` --
@@ -12,14 +13,6 @@ import 'recurrence_frequency.dart';
 /// occurrence's `scheduledDate` are calendar dates, never instants --
 /// `docs/14_DECISION_LOG.md` ADR-023.
 DateTime normalizeRecurringDate(DateTime input) => DateTime.utc(input.year, input.month, input.day);
-
-/// The last day-of-month for [year]/[month] (1-12), leap-year aware --
-/// e.g. `_lastDayOfMonth(2026, 2) == 28`, `_lastDayOfMonth(2028, 2) ==
-/// 29`. `DateTime.utc(year, month + 1, 0)` is the standard Dart idiom
-/// for "the day before the 1st of next month" -- `DateTime` normalizes
-/// `month + 1 == 13` into January of `year + 1` on its own, so this
-/// works for December without a special case.
-int _lastDayOfMonth(int year, int month) => DateTime.utc(year, month + 1, 0).day;
 
 /// A recurring rule's schedule -- pure, deterministic, and entirely
 /// independent of Drift/Riverpod/the database, per Beta 1 Task 4A's
@@ -98,14 +91,14 @@ class RecurringSchedule {
   DateTime _occurrenceAt(int k) {
     assert(k >= 0, 'k must be >= 0');
     if (_isMonthBased) {
+      // Delegates to the shared `calendar_month_math.dart` routine --
+      // see that file's doc for why this is now the ONE anchor-based
+      // month-clamping implementation in the codebase (docs/20 §12.7),
+      // rather than a second copy of the same logic. Behavior is
+      // unchanged: this is the identical algorithm that used to live
+      // inline here.
       final int monthsToAdd = k * _intervalInMonths;
-      final int anchorMonthIndex = startDateUtc.year * 12 + (startDateUtc.month - 1);
-      final int targetMonthIndex = anchorMonthIndex + monthsToAdd;
-      final int targetYear = targetMonthIndex ~/ 12;
-      final int targetMonth = targetMonthIndex % 12 + 1;
-      final int lastDay = _lastDayOfMonth(targetYear, targetMonth);
-      final int day = startDateUtc.day > lastDay ? lastDay : startDateUtc.day;
-      return DateTime.utc(targetYear, targetMonth, day);
+      return addWholeCalendarMonths(startDateUtc, monthsToAdd);
     }
     return startDateUtc.add(Duration(days: k * _intervalInDays));
   }
