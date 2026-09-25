@@ -362,4 +362,26 @@ class RecurringRuleRepository {
     }
     return _withUtcDateTimes(row);
   }
+
+  /// One-shot (non-reactive) list of every ACTIVE (non-soft-deleted)
+  /// rule that references [accountId], either as its source
+  /// ([RecurringRules.accountId]) or, for a transfer rule, its
+  /// destination ([RecurringRules.destinationAccountId]) -- Account
+  /// Lifecycle Checkpoint. What
+  /// `AccountLifecycleService.closeAccount` reads (inside an
+  /// `AppDatabase.transaction()` callback) to decide whether closing
+  /// [accountId] is safe: a non-empty result blocks the close entirely
+  /// rather than silently redirecting or deleting the rule(s) -- see
+  /// that service's own doc for why. Never used to populate a selector.
+  Future<List<RecurringRuleRow>> activeRulesReferencingAccountOnce(String accountId) async {
+    final query = _db.select(_db.recurringRules)
+      ..where(
+        (tbl) =>
+            tbl.deletedAt.isNull() &
+            (tbl.accountId.equals(accountId) | tbl.destinationAccountId.equals(accountId)),
+      )
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.createdAt)]);
+    final List<RecurringRuleRow> rows = await query.get();
+    return rows.map(_withUtcDateTimes).toList();
+  }
 }

@@ -119,6 +119,94 @@ class AccountRepository {
     return id;
   }
 
+  /// Checkpoint G: creates a new account with an EXPLICIT
+  /// [balanceClass]/[subtype] pair, rather than [createAccount]'s
+  /// legacy `type`-string inference via `classifyLegacyAccountType`
+  /// (which can only ever produce an asset-classified row, and only
+  /// from the fixed 'cash'/'bank'/'wallet'/'card' vocabulary -- see that
+  /// function's own doc). This is what lets the Add Account UX (docs/20
+  /// §13.4 checkpoint G) create a real liability account, and a real
+  /// asset account whose subtype is [FinancialAccountSubtype.deposit],
+  /// for the first time -- `AccountCreationService` is the only caller.
+  ///
+  /// [type] is presentation-only metadata (see `Accounts.type`'s own
+  /// doc in `tables.dart`) -- it has no bearing on [balanceClass]/
+  /// [subtype] here, unlike [createAccount]'s legacy inference. Callers
+  /// choose it freely (`AccountCreationKind.legacyTypeLabel` in
+  /// practice) so the existing Accounts list/detail screens -- neither
+  /// touched by this checkpoint -- still render a recognizable label/
+  /// icon for the new account kinds this method can create.
+  ///
+  /// [openingBalance] must already be denominated in [currencyCode]
+  /// (else [CurrencyMismatchException], matching [createAccount]) and
+  /// must not be negative -- an opening balance/amount is always a
+  /// non-negative, class-native magnitude (owned for an asset, owed for
+  /// a liability; see `LedgerAccount.openingBalance`'s own doc) whether
+  /// or not the account being created is a liability. There is no sign
+  /// flip anywhere in this method: a credit card's "amount currently
+  /// owed" is stored exactly as entered, in the same non-negative
+  /// magnitude convention `FinanceEngine.accountBalance` already
+  /// expects. Throws [ArgumentError] if it's negative.
+  Future<String> createClassifiedAccount({
+    required String profileId,
+    required String name,
+    required String type,
+    required BalanceClass balanceClass,
+    required FinancialAccountSubtype subtype,
+    required String currencyCode,
+    Money? openingBalance,
+    String? institutionId,
+  }) async {
+    final Money balance = openingBalance ?? Money.zero(currencyCode);
+    if (balance.currencyCode != currencyCode) {
+      throw CurrencyMismatchException(currencyCode, balance.currencyCode);
+    }
+    if (balance.isNegative) {
+      throw ArgumentError.value(
+        balance.minorUnits,
+        'openingBalance',
+        'must not be negative -- an opening balance/amount owed is always a '
+            'non-negative magnitude.',
+      );
+    }
+    final String id = _uuid.v4();
+    final DateTime now = DateTime.now().toUtc();
+    await _db.into(_db.accounts).insert(
+          AccountsCompanion.insert(
+            id: id,
+            profileId: profileId,
+            name: name,
+            type: type,
+            currencyCode: currencyCode,
+            openingBalanceMinorUnits: Value<int>(balance.minorUnits),
+            balanceClass: Value<String>(balanceClass.storageValue),
+            subtype: Value<String>(subtype.storageValue),
+            institutionId: Value<String?>(institutionId),
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+    return id;
+  }
+
+  /// Closes (soft-deletes) an account -- Account Lifecycle Checkpoint.
+  /// Sets [AccountRow.isActive] to `false` and stamps
+  /// [AccountRow.deletedAt], the SAME pair [watchActiveForProfile]
+  /// already filtered on before this checkpoint existed. Unlike every
+  /// other `deletedAt` in this schema (`Transactions`/`Budgets`/
+  /// `RecurringRules`/`SavingsGoals`, each a permanent, no-undo-UI
+  /// delete from the user's perspective), THIS is the reversible
+  /// "closed" state the Account Lifecycle Checkpoint's brief calls
+  /// INACTIVE/CLOSED -- see [reactivate]. It never touches [name],
+  /// [type], [balanceClass], [subtype], [currencyCode],
+  /// [openingBalanceMinorUnits], or any `Transactions`/
+  /// `CreditFacilityDetails`/`DepositDetails`/`PaymentInstruments` row;
+  /// `AccountLifecycleService.closeAccount` is what additionally
+  /// archives a credit-card account's `PaymentInstrument`(s) in the
+  /// same atomic transaction, and what blocks this call entirely when
+  /// an active `RecurringRules` row still references the account --
+  /// this repository method has no dependency awareness at all and
+  /// must never be called directly by UI code for that reason.
   Future<void> softDelete(String id) {
     return (_db.update(_db.accounts)..where((tbl) => tbl.id.equals(id))).write(
       AccountsCompanion(
@@ -129,17 +217,64 @@ class AccountRepository {
     );
   }
 
-  /// Reactively resolves [id] to its live row, or `null` once it's
-  /// soft-deleted or if it never existed -- the same "unavailable below
-  /// the UI layer" convention `TransactionRepository.watchById`/
-  /// `goalSummaryProvider` already use. V1 Account Detail/Edit
-  /// Checkpoint: what the account detail and edit screens watch, so a
-  /// stale or missing account id resolves to an explicit unavailable
-  /// state rather than a thrown error or stale data.
+  /// Reopens a previously-closed ([softDelete]) account -- Account
+  /// Lifecycle Checkpoint. Clears [AccountRow.deletedAt] and restores
+  /// [AccountRow.isActive] to `true`; never creates a replacement row,
+  /// never touches [name]/[type]/[balanceClass]/[subtype]/
+  /// [currencyCode]/[openingBalanceMinorUnits], and never rewrites a
+  /// single `Transactions` row -- the account's identity, balance, and
+  /// full transaction history are exactly what they were before it was
+  /// closed. `AccountLifecycleService.reactivateAccount` is what
+  /// additionally restores a credit-card account's archived
+  /// `PaymentInstrument`(s) in the same atomic transaction.
+  Future<void> reactivate(String id) async {
+    final int rowsAffected = await (_db.update(_db.accounts)..where((tbl) => tbl.id.equals(id)))
+        .write(
+      AccountsCompanion(
+        deletedAt: const Value<DateTime?>(null),
+        isActive: const Value<bool>(true),
+        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+      ),
+    );
+    if (rowsAffected != 1) {
+      throw AccountNotFoundException(id);
+    }
+  }
+
+  /// Reactively resolves [id] to its live row, or `null` only if it
+  /// never existed at all -- `null` is NEVER returned merely because
+  /// the account is closed ([softDelete]/[isActive]/[deletedAt]).
+  ///
+  /// Account Lifecycle Checkpoint: before this checkpoint, this method
+  /// excluded a soft-deleted row the same way
+  /// `TransactionRepository.watchById`/`goalSummaryProvider` do for
+  /// THEIR rows -- but an account's own soft-delete now means "closed,
+  /// reversible, still discoverable for history/reactivation" (see
+  /// [softDelete]'s own doc), not "gone", so `AccountDetailScreen`/
+  /// `EditAccountScreen` (via `accountByIdProvider`) must still resolve
+  /// a closed account's row here in order to show its closed state,
+  /// its still-correct balance/history, and a Reactivate action. Only
+  /// an [id] that never named any row at all -- a stale deep link, a
+  /// typo, a row from a different profile's export -- resolves to
+  /// `null`.
   Stream<AccountRow?> watchById(String id) {
-    final query = _db.select(_db.accounts)
-      ..where((tbl) => tbl.id.equals(id) & tbl.deletedAt.isNull());
+    final query = _db.select(_db.accounts)..where((tbl) => tbl.id.equals(id));
     return query.watchSingleOrNull();
+  }
+
+  /// Every account for [profileId] regardless of active/closed state,
+  /// alphabetically by name -- Account Lifecycle Checkpoint. Used only
+  /// where a closed account must still be resolvable: the Accounts
+  /// list's "closed accounts" section, and account-name lookups for
+  /// historical transactions (Activity, Transaction Detail). Never used
+  /// to populate an account-selector for a NEW transaction/transfer/
+  /// recurring rule -- [watchActiveForProfile] remains the only source
+  /// for that.
+  Stream<List<AccountRow>> watchAllForProfile(String profileId) {
+    final query = _db.select(_db.accounts)
+      ..where((tbl) => tbl.profileId.equals(profileId))
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]);
+    return query.watch();
   }
 
   /// Updates an existing account's safe metadata fields only -- V1

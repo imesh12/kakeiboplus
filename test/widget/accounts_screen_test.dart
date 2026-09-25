@@ -4,7 +4,10 @@ import 'package:ai_financial_coach/core/database/repositories/account_repository
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
+import 'package:ai_financial_coach/core/finance/account_creation_kind.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/accounts_screen.dart';
+import 'package:ai_financial_coach/features/accounts/presentation/add_account_form_screen.dart';
+import 'package:ai_financial_coach/features/accounts/presentation/add_account_type_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 
@@ -729,9 +732,12 @@ void main() {
     );
 
     testWidgets(
-      'H: navigation/action regression -- opening Add Account under the Japanese locale shows '
-      'a fully localized dialog, and submitting it still creates a real account that appears '
-      'in the (still Japanese) list',
+      'H: navigation/action regression -- Checkpoint G update: opening Add Account under the '
+      'Japanese locale now pushes the localized icon-led type chooser (not the old dialog), '
+      'choosing a type pushes a localized adaptive form, and submitting it still creates a '
+      'real account that appears in the (still Japanese) list. Same end-to-end guarantee the '
+      'pre-Checkpoint-G version of this test locked in for the old dialog -- only the '
+      'mechanics changed, per the Add Account UX brief.',
       (tester) async {
         final AppDatabase db = await seededDb(accounts: const <_SeedAccount>[]);
         final ProviderContainer container = ProviderContainer(
@@ -739,32 +745,74 @@ void main() {
         );
         addTearDown(() => disposeInOrder(tester, container, db));
 
-        await tester.pumpWidget(appWithAccounts(container, locale: const Locale('ja')));
+        // Checkpoint G: the FAB now pushes real routes
+        // (`AppRoutes.addAccount` / `addAccountFormPath`), so this test
+        // needs a real `GoRouter` -- `appWithAccounts`'s plain
+        // `MaterialApp(home: ...)` (used by every other test in this
+        // file, none of which exercise cross-screen navigation) is no
+        // longer enough here. Mirrors `account_detail_screen_test.dart`'s
+        // own real-`GoRouter` harness, rooted at the real
+        // `AccountsScreen` (not a stub) since that IS the screen under
+        // test for this one case.
+        final GoRouter router = GoRouter(
+          initialLocation: AppRoutes.accounts,
+          routes: <RouteBase>[
+            GoRoute(path: AppRoutes.accounts, builder: (context, state) => const AccountsScreen()),
+            GoRoute(
+              path: AppRoutes.addAccount,
+              builder: (context, state) => const AddAccountTypeScreen(),
+            ),
+            GoRoute(
+              path: AppRoutes.addAccountFormPath,
+              builder: (context, state) => AddAccountFormScreen(
+                kind: AccountCreationKind.values.byName(state.pathParameters['kind']!),
+              ),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              locale: const Locale('ja'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              routerConfig: router,
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
 
-        // Empty state is itself localized -- confirms this dialog test
-        // starts from a real "no accounts yet" condition, not a stale
-        // fixture.
+        // Empty state is itself localized -- confirms this test starts
+        // from a real "no accounts yet" condition, not a stale fixture.
         expect(find.text('口座がまだありません。+ をタップして追加してください。'), findsOneWidget);
 
         await tester.tap(find.byType(FloatingActionButton));
         await tester.pumpAndSettle();
 
-        expect(find.text('口座を追加'), findsOneWidget); // dialog title
-        expect(find.text('名前'), findsOneWidget); // Name field label
-        expect(find.text('種類'), findsOneWidget); // Type field label
-        expect(find.text('通貨'), findsOneWidget); // Currency field label
-        expect(find.text('キャンセル'), findsOneWidget); // Cancel button
-        expect(find.text('追加'), findsOneWidget); // Add button
+        // The type chooser, fully localized.
+        expect(find.text('口座を追加'), findsOneWidget); // chooser title
+        expect(find.text('現金'), findsOneWidget); // "Cash" row title
 
-        await tester.enterText(find.byType(TextFormField), 'New JPY Wallet');
-        await tester.tap(find.text('追加'));
+        await tester.tap(find.text('現金').first);
+        await tester.pumpAndSettle();
+
+        // The adaptive form for the "cash" kind, fully localized.
+        expect(find.text('名前'), findsOneWidget); // Name field label
+        expect(find.text('通貨'), findsOneWidget); // Currency field label
+        expect(find.text('開始時の残高'), findsOneWidget); // Opening balance label
+        expect(find.text('口座を作成'), findsOneWidget); // Create button
+
+        await tester.enterText(find.byType(TextFormField).at(0), 'New JPY Wallet');
+        await tester.enterText(find.byType(TextFormField).at(1), '1000');
+        await tester.tap(find.text('口座を作成'));
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        // Dialog closed and the real, persisted account now renders in
-        // the still-Japanese list with its (default) type localized.
-        expect(find.text('口座を追加'), findsNothing);
+        // Form closed (popped back to Accounts) and the real, persisted
+        // account now renders in the still-Japanese list with its
+        // (default) type localized.
+        expect(find.text('口座を作成'), findsNothing);
         expect(find.text('New JPY Wallet'), findsOneWidget);
         expect(find.textContaining('現金 ·'), findsOneWidget);
         final List<AccountRow> accounts = await db.select(db.accounts).get();
@@ -881,6 +929,219 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.text('ACCOUNT_DETAIL_STUB:${savings.id}'), findsOneWidget);
         expect(find.text('ACCOUNT_DETAIL_STUB:${mainWallet.id}'), findsNothing);
+      },
+    );
+  });
+
+  // ---------------------------------------------------------------------
+  // Account Lifecycle Checkpoint: closed accounts stay discoverable on
+  // this screen (smallest additive change -- no redesign) without ever
+  // being selectable for new activity. Each of these tests seeds its own
+  // profile/accounts directly via `ProfileRepository`/`AccountRepository`
+  // (!rather than the file's own `seededDb`/`_SeedAccount` helpers above,
+  // which have no notion of a closed account) so a "closed" account can
+  // be produced by calling `softDelete` after creation, exactly as
+  // `AccountLifecycleService.closeAccount` does in production.
+  // ---------------------------------------------------------------------
+  group('Account Lifecycle Checkpoint: closed accounts section', () {
+    Future<(AppDatabase, String)> seededProfile() async {
+      final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
+      final ProfileRepository profileRepo = ProfileRepository(db);
+      final String profileId = await profileRepo.createProfile(
+        displayName: 'Test User',
+        homeCountry: 'LK',
+        currentCountry: 'JP',
+        homeCurrency: 'LKR',
+        livingCurrency: 'JPY',
+        preferredLanguage: 'en',
+        timezone: 'Asia/Tokyo',
+        dateFormat: 'yyyy-MM-dd',
+        numberFormat: '#,##0.##',
+      );
+      return (db, profileId);
+    }
+
+    testWidgets(
+      'a closed account disappears from the active rows, appears in its own "Closed accounts" '
+      'section with a Closed suffix, and never blocks the active section from rendering',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String activeId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Active Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+        );
+        final String closedId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Old Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+        );
+        await accountRepo.softDelete(closedId);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Active row: present, no "Closed" suffix on its metadata.
+        final Finder activeRow = find.byKey(Key('accountsRowHorizontal_$activeId'));
+        expect(activeRow, findsOneWidget);
+        expect(
+          find.descendant(of: activeRow, matching: find.text('cash · USD')),
+          findsOneWidget,
+        );
+        // Closed section: header present, and the closed row itself
+        // reuses the exact same row layout/key convention as an active
+        // row -- just with the localized "Closed" suffix appended.
+        expect(find.text('Closed accounts'), findsOneWidget); // closedAccountsSectionHeader
+        final Finder closedRow = find.byKey(Key('accountsRowHorizontal_$closedId'));
+        expect(closedRow, findsOneWidget);
+        expect(
+          find.descendant(of: closedRow, matching: find.text('cash · USD · Closed')),
+          findsOneWidget,
+        );
+        expect(find.text('Old Wallet'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'the "Closed accounts" section is absent entirely when every account is active',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Active Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Closed accounts'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'zero active accounts but one closed account shows the Closed accounts section instead '
+      'of the "no accounts yet" empty state',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String closedId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Old Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+        );
+        await accountRepo.softDelete(closedId);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Closed accounts'), findsOneWidget);
+        expect(find.byKey(Key('accountsRowHorizontal_$closedId')), findsOneWidget);
+        // The true empty state (from `noAccountsYetTapToAddMessage`) must
+        // not render just because the *active* list is empty -- there is
+        // still an account on screen, it's just closed.
+        expect(find.text('No accounts yet. Tap + to add one.'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'zero accounts of any kind still shows the true "no accounts yet" empty state',
+      (tester) async {
+        // The seeded profile is deliberately left with zero accounts.
+        final (AppDatabase db, _) = await seededProfile();
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithAccounts(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Closed accounts'), findsNothing);
+        expect(find.text('No accounts yet. Tap + to add one.'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      "tapping a closed account's row navigates to that exact account's detail route by stable "
+      'id, exactly like an active row -- closed accounts remain reachable for history/'
+      'reactivation, never dead-ended',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String activeId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Active Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+        );
+        final String closedId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Old Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+        );
+        await accountRepo.softDelete(closedId);
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        // Mirrors the "V1 Accounts Detail + Edit Checkpoint: navigation"
+        // group's own local `appWithRouter` above -- kept as a separate
+        // local copy here so this addition never has to reach into that
+        // group's closure.
+        final GoRouter router = GoRouter(
+          initialLocation: AppRoutes.accounts,
+          routes: <RouteBase>[
+            GoRoute(path: AppRoutes.accounts, builder: (context, state) => const AccountsScreen()),
+            GoRoute(
+              path: AppRoutes.accountDetailPath,
+              builder: (context, state) =>
+                  Scaffold(body: Text('ACCOUNT_DETAIL_STUB:${state.pathParameters['id']}')),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              routerConfig: router,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Old Wallet'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('ACCOUNT_DETAIL_STUB:$closedId'), findsOneWidget);
+        expect(find.text('ACCOUNT_DETAIL_STUB:$activeId'), findsNothing);
       },
     );
   });

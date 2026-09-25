@@ -1409,3 +1409,106 @@ encounters them, exactly matching this document's own precedent in section 9.
 - No `updateMetadata`/`softDelete` method exists yet on `DepositRepository` -- the same deliberate V1 scope decision `CreditFacilityRepository` already made (no required test exercises editing or removing a deposit), documented here rather than left as a silent gap.
 - Test coverage: `test/core/finance/calendar_month_math_test.dart` (new, 14 tests: items 13/14/15 -- Jan-31-plus-one-month, leap-day, month-end/year-transition behavior, all using values already hand-verified by `recurring_schedule_test.dart`'s own pre-existing, unmodified assertions); `test/core/finance/deposit_calculator_test.dart` (new, 23 tests: items 8/9/10/11/12/17/18/19/20/21, plus the atMaturity-scaling correction above and negative-input rejections); `test/core/database/repositories/deposit_repository_test.dart` (new, 25 tests: items 1-6, 16, 22/23/24, a `requireActiveForAccount`-not-found case, item 25, and the term/rate/interestMethod/depositType gating rules); `test/core/database/repositories/transaction_repository_test.dart`'s new `Checkpoint F` group (4 tests covering items 26/27/28: funding-is-transfer, maturity-is-transfer, interest-is-income, plus a variant proving a separate `interestDestinationAccountId` never touches the deposit's own balance); and `test/core/database/deposit_migration_test.dart` (new -- item 29: a populated v11-to-current upgrade with a seeded deposit account and an interest-income transaction, asserting zero `deposit_details` rows are fabricated and every pre-existing row is numerically unchanged, then proving a brand-new deposit's details can be created against the migrated account; item 30 is satisfied by inspection, not a new test -- exactly like Checkpoint E's identical v10→v11 step, a pure `CREATE TABLE` cannot fail against any of the other seven pre-existing historical migration fixtures, none of which needed any change). No existing test's expected value was changed; no existing test file's assertions were weakened.
 - These changes exist in the working tree only (HEAD is still `fbfd355`, the commit Checkpoint E's report was verified against); nothing has been staged or committed.
+
+### 13.12 Implementation status (Checkpoint G — Add Account UX)
+
+**This subsection is additive and does not modify §§12-13.11 above -- it records what Checkpoint G actually built against those unchanged sections, following the same "implementation status" convention §§13.7-13.11 above already established. No schema change, no `FinanceEngine` change, and no transaction-semantics change were needed or made.**
+
+- **UI-type → `balanceClass`/`subtype` mapping, the single source of truth.** `lib/core/finance/account_creation_kind.dart` (new): `AccountCreationKind` enum -- `cash`/`bank`/`savings`/`wallet`/`deposit`/`creditCard` -- each carrying its frozen `(legacyTypeLabel, balanceClass, subtype)` triple. `savings` deliberately maps to the SAME `FinancialAccountSubtype.bank` as `bank` (§13.5 open question 1, "bank is not split" -- no new subtype was added), distinguished afterward only by its own `legacyTypeLabel` (`'savings'`, stored in the presentation-only `Accounts.type` column). No `balanceClass`/asset-liability/`legacyCardNeedsReview` term is ever shown to the user -- this enum is the only place that vocabulary is bridged to the plain-language choice.
+- **`AccountRepository.createClassifiedAccount` (new method, `account_repository.dart`): the first repository method able to create a liability account or a `deposit`-subtype account at all.** The pre-existing `createAccount` is completely unchanged and still the only path the (untouched) `EditAccountScreen`/legacy dropdown vocabulary uses; `createClassifiedAccount` takes an EXPLICIT `balanceClass`/`subtype` pair instead of inferring one from `classifyLegacyAccountType`'s closed legacy vocabulary. Opening amount is stored as the same non-negative, class-native magnitude `LedgerAccount.openingBalance` already documents (owned for asset, owed for liability) -- there is no sign flip anywhere in this checkpoint, and a negative amount is rejected (`ArgumentError`) regardless of which `balanceClass` is being created.
+- **`lib/core/database/repositories/financial_institution_repository.dart` (new): `FinancialInstitutionRepository`**, exactly two methods (`watchActiveForProfile`, `findOrCreate`) -- deliberately not a full institution-management product, per the checkpoint's own instruction. `findOrCreate` reuses an existing active institution only on an exact, trimmed, case-insensitive name match for the same profile; it never fuzzy-matches. The Add Account form's institution field is a single optional text field, gated off entirely for `cash` (`AccountCreationKind.allowsInstitution`).
+- **`lib/core/database/services/account_creation_service.dart` (new): `AccountCreationService`**, the ONLY caller that composes more than one repository call for a single account-creation operation -- introduced narrowly, per the checkpoint's own "if fully atomic repository composition requires a small application service, introduce one narrowly scoped service" instruction. It does not duplicate or re-implement any repository's own validation; it only sequences already-existing calls inside one `AppDatabase.transaction`.
+  - `createSimpleAccount` (cash/bank/savings/wallet): a single `createClassifiedAccount` call, no transaction wrapper needed (already one atomic `INSERT`).
+  - `createCreditCardAccount`: inside one transaction -- `createClassifiedAccount` (liability, `subtype: creditCard`) → `CreditFacilityRepository.createFacility` → `PaymentInstrumentRepository.createInstrument` (`instrumentType: creditCard`). This is exactly §12.6's frozen "one step, three rows, one transaction" contract, now realized end-to-end through the app for the first time. Returns `CreditCardCreationResult { accountId, creditFacilityId, paymentInstrumentId }`.
+  - `createDepositAccount`: inside one transaction -- `createClassifiedAccount` (asset, `subtype: deposit`) → `DepositRepository.createDetails`. Returns `DepositCreationResult { accountId, depositDetailsId }`. The deposit's principal is passed straight through as the new account's opening balance -- `DepositDetails` still has no balance column of its own (§12.1, unchanged since Checkpoint F).
+  - **Failure safety**: if any step after the first throws, `AppDatabase.transaction` rolls back every write already made earlier in the same call, including the `Accounts` insert -- proven by `test/core/database/services/account_creation_service_test.dart`'s dedicated rollback tests (an invalid credit limit, an invalid `last4`, a compound method missing `compoundingFrequency`, and a `termNumber < 1`), each asserting zero rows exist in EVERY table the call would have touched afterward.
+- **Never collects a full card number, CVV/CVC, PIN, or banking password** -- no field, form, or repository parameter anywhere in this checkpoint's new code accepts one; only `last4` (exactly 4 digits, existing `PaymentInstrumentRepository._validateLast4` rule, unchanged) and descriptive metadata (network, expiry, statement/due day) are ever asked for a credit card.
+- **New routes** (`lib/core/routing/app_routes.dart`/`app_router.dart`): `AppRoutes.addAccount` (`/accounts/add`, the type chooser) and `AppRoutes.addAccountFormPath` (`/accounts/add/:kind`, the adaptive form). `addAccount` is registered BEFORE `AppRoutes.accountDetailPath` in `app_router.dart`'s route list -- the same literal-before-parameterized precedent `addTransaction`/`transactionDetailPath` already established, since both are 2-segment `/accounts/...` paths GoRouter would otherwise match in the wrong order.
+- **New screens**: `lib/features/accounts/presentation/add_account_type_screen.dart` (`AddAccountTypeScreen`, the icon-led chooser -- one `AppCard`+`AppIconTile` row per `AccountCreationKind`, reusing existing shared primitives rather than a new list-row component) and `add_account_form_screen.dart` (`AddAccountFormScreen`, the adaptive form: common name/currency/amount/institution fields, plus credit-card-only or deposit-only fields shown only for their own kind). `lib/features/accounts/presentation/account_creation_kind_presentation.dart` (new) holds the shared per-kind title/description/icon both screens read, rather than each keeping its own copy of that switch.
+- **`accounts_screen.dart`**: the FAB now calls `context.push(AppRoutes.addAccount)`; the old `_AddAccountDialog`/`_AddAccountDialogState` classes (a bare name+type dialog with no opening-balance field at all) are removed entirely, along with their now-unused imports (`CurrencyRegistry`, `account_form_fields.dart`, `providers.dart`).
+- **`account_type_presentation.dart`**: added `'savings'`/`'deposit'`/`'creditCard'` cases to `accountTypeDisplayLabel`/`accountTypeIcon` ONLY -- `kAccountTypes` (the closed legacy set `EditAccountScreen`'s own dropdown still uses) is untouched, so a real account created by this checkpoint still renders a recognizable label/icon on the (unmodified, Checkpoint H's job) Accounts list/detail screens.
+- **Deposit "Estimated interest/maturity" preview**: `AddAccountFormScreen` calls `DepositCalculator.calculateSimpleInterest`/`calculateCompoundInterest` directly -- it never re-implements either formula. The only locally-computed value is the preview maturity DATE, via the same public `addWholeCalendarMonths` helper `DepositRepository._computeMaturityDate` itself calls (not a re-implementation of a second calendar routine -- see §12.7/Checkpoint F's own "one shared routine" rule). The preview is always labeled "Estimated" and is never sent to any repository -- it exists purely for display.
+- **Deliberate V1 deferrals** (none required a schema change; each is a scope trim, not a discovered blocker):
+  - **`explicitMaturityDate` is not exposed as an independent input field.** `DepositRepository.createDetails` already REJECTS an `explicitMaturityDate` that disagrees with the value computed from `startDate`/`termNumber`/`termUnit` -- exposing it as a free-form field a user could mistype would only produce a confusing validation error for no benefit, since the computed value is shown read-only in the "Estimated maturity date" preview anyway.
+  - **`DepositDetails.renewalMode`** (a free-form, never-read-by-code descriptive string, §12.1) is not exposed as its own input in V1; `autoRenew` (the boolean this checkpoint's brief actually asks for) is exposed via a switch and always passes `renewalMode: null`.
+  - **Debit/cash card attachment to a new bank account is deferred**, not implemented -- the brief allows this only "if small and well tested"; given this checkpoint's already-large surface area, it was left out entirely rather than added without matching test coverage. No debit-card `FinancialAccount` is ever created by any path in this checkpoint (nor was one before it).
+  - **Cheque/check readiness**: no cheque table, field, UI, or anticipatory schema column was added -- the Add Bank Account flow (a `bank`/`savings` `AccountCreationKind`) creates only the ordinary balance-bearing `FinancialAccount` a future checkpoint could attach cheque capability to later; nothing here forecloses that or models a cheque as its own account/balance.
+- **Existing tests deliberately updated (not merely preserved), transparently, because they hard-coded the removed dialog's exact mechanics:**
+  - `test/widget/accounts_screen_test.dart`'s `"H: navigation/action regression"` test: previously asserted the old `AlertDialog`'s exact title/fields/buttons and submitted through it. Now drives a real `GoRouter` (`AccountsScreen` → `AddAccountTypeScreen` → `AddAccountFormScreen`) under the Japanese locale, preserving the ORIGINAL testing intent -- a fully localized, real end-to-end account creation that appears in the (still Japanese) list -- through the new mechanics.
+  - `test/widget/theme_compatibility_test.dart`'s `"Phase 5.8"` dark-theme test: previously asserted the old dialog's `AlertDialog`/title/field text render without exceptions under Dark. Now drives the same real `GoRouter` flow under `AppThemeStyle.dark` and asserts both the chooser and the form render without exception, preserving the original "renders cleanly under Dark" guarantee.
+  - Both updates are additive to the flow's mechanics only -- neither test's underlying financial/localization/theme assertion was weakened, and no other existing test file was touched.
+- **New test coverage**: `test/core/database/services/account_creation_service_test.dart` (new, 13 tests) -- `createSimpleAccount` for all four single-record kinds (correct `balanceClass`/`subtype`/opening amount/currency; `savings`/`bank` sharing one `subtype` while keeping distinct `type` labels; a null opening balance defaulting to zero); `createCreditCardAccount` success (all three rows created and correctly linked, non-negative owed-amount semantics) and two rollback-on-failure cases (invalid credit limit; invalid `last4`), each asserting zero rows in every touched table afterward; `createDepositAccount` success (both rows created, principal only on the `FinancialAccount`) and two rollback-on-failure cases (compound method missing `compoundingFrequency`; `termNumber < 1`).
+- **Deferred (not implemented in this pass), stated plainly rather than silently skipped:** dedicated widget-level coverage for every one of the checkpoint brief's 30 enumerated test items (in particular items 1-2, 25-28 -- entry point, chooser display, successful-creation navigation, localization smoke, large-text/text-scale layout, dark-theme smoke beyond the one updated Phase 5.8 case) was not added as new standalone test files in this pass, beyond the two existing tests updated above (which do exercise entry point, localized end-to-end creation, real navigation, and a dark-theme smoke case as a side effect of preserving their original intent) and the service-level suite. The service layer -- the highest-risk surface for silent data corruption (multi-record atomicity) -- has full coverage; broader per-kind widget-test coverage (credit-card/deposit form field-level validation, cancel/back-creates-nothing, large-text/RTL smoke for the two new screens specifically) is the clearly recommended next increment before Checkpoint H, and is called out explicitly rather than assumed complete.
+- These changes exist in the working tree only (HEAD is still `2178ad7`, the commit this checkpoint's brief names as authoritative); nothing has been staged or committed.
+
+### 13.12.1 Android regression repair (still Checkpoint G -- not Checkpoint H)
+
+**This subsection is additive and does not modify §§12-13.12 above.** Manual
+Android testing after §13.12 landed found a real crash §13.12's own text did
+not anticipate: opening Edit on a G-created credit card threw
+
+> There should be exactly one item with [DropdownButton]'s value: creditCard.
+> Either zero or 2 or more [DropdownMenuItem]s were detected with the same
+> value.
+
+**Root cause.** `EditAccountScreen`'s type dropdown (`account_form_fields.dart`'s
+`AccountIdentityFormFields`) built its `DropdownMenuItem`s from `kAccountTypes`
+(`cash`/`bank`/`card`/`wallet` -- unchanged since before Checkpoint G, per
+§13.12's own note). `AccountCreationKind.legacyTypeLabel` -- what Checkpoint G
+actually stores in the presentation-only `Accounts.type` column -- can also be
+`savings`/`deposit`/`creditCard`, none of which were in that list. All three had
+the identical latent defect; `cash`/`bank`/`wallet` happened to already match a
+legacy label, so only `savings`/`deposit`/`creditCard` were ever reachable
+through this bug. `AccountDetailScreen` never crashed -- it only reads
+`accountTypeDisplayLabel`/`accountTypeIcon` (already extended for all three in
+§13.12), never a `DropdownButtonFormField`.
+
+**Repair, aligned with §13.2's own framing** ("the generic screen remains the
+correct destination for every account that doesn't [have a dedicated
+specialized screen]" -- `creditCard`/`deposit` don't have one yet; that is
+still §13.4 checkpoint F/H's job, not this repair's):
+- `account_type_presentation.dart`: added `kEditableAccountTypeLabels`
+  (`kAccountTypes` + `'savings'` -- safe because `type` is presentation-only
+  and `savings`/`bank` already share one `FinancialAccountSubtype`, per
+  `AccountCreationKind.savings`'s own doc) and `isAccountTypeEditable(subtype)`
+  (`false` only for `creditCard`/`deposit`). `kAccountTypes` itself is
+  unchanged.
+- `account_form_fields.dart`: `AccountIdentityFormFields` gained `typeOptions`
+  (defaults to `kAccountTypes`, so any other caller is unaffected) and
+  `typeEditable` (defaults to `true`). When `typeEditable` is false, it renders
+  a read-only type display (mirroring the existing read-only currency field)
+  instead of a dropdown. When true, its dropdown items are `{...typeOptions,
+  type}` -- the current value is always included even if absent from
+  `typeOptions`, so this specific "value has no matching item" crash cannot
+  recur for any future/unexpected `type` string either.
+- `edit_account_screen.dart`: passes `typeOptions: kEditableAccountTypeLabels`
+  and `typeEditable: isAccountTypeEditable(account.subtypeValue)`.
+- **No change to `AccountRepository.updateAccount`** -- it already has no
+  `balanceClass`/`subtype` parameter (§12.2's own frozen invariant), so no
+  path through this screen, editable or not, before or after this repair,
+  could ever mutate either. This repair changes only which `type` values the
+  UI is willing to display as an editable choice versus a fixed label -- it
+  changes no immutability guarantee and required no repository change.
+- No schema, migration, `FinanceEngine`, `DepositCalculator`, transaction, or
+  dashboard change. No new user-facing strings (every string this repair
+  displays -- `accountTypeLabel`, and each `accountTypeDisplayLabel` case --
+  already existed from §13.12 onward).
+
+**Result:** all six kinds Checkpoint G can create (`cash`/`bank`/`savings`/
+`wallet`/`deposit`/`creditCard`), and every pre-Checkpoint-G legacy
+representation (`cash`/`bank`/`wallet`/`card`, the last classified
+`legacyCardNeedsReview`), open in Edit without exception. `deposit`/
+`creditCard` show their type as a read-only label; every other subtype keeps
+today's already-shipped free relabeling between `cash`/`bank`/`savings`/
+`wallet`/`card`, unchanged.
+
+**Deferred, explicitly, to a later checkpoint (not this repair):** an
+account deactivation/closure/archive lifecycle (Android testing separately
+found there is currently no way to close/deactivate an account without
+destroying its history -- a real product gap, but a new feature, not a bug in
+what Checkpoint G shipped); and Home/dashboard deposit-principal liquidity
+presentation (a deposit's principal currently contributes to Home's balance
+total the same as any other asset -- correct for net worth, potentially
+misleading if read as "available money" -- deferred to Checkpoint I's
+dashboard/net-worth/liquidity presentation work, per §13.3's own DEFER row for
+the net worth screen).

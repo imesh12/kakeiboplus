@@ -2,8 +2,11 @@ import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
+import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequency.dart';
+import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/account_detail_screen.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/edit_account_screen.dart';
@@ -255,7 +258,11 @@ void main() {
   );
 
   testWidgets(
-    'a soft-deleted account also resolves to the same graceful unavailable state',
+    'Account Lifecycle Checkpoint: a closed (soft-deleted) account resolves as CLOSED/'
+    'reactivatable, NOT the "no longer available" state -- this supersedes the old '
+    'pre-checkpoint assumption that a soft-deleted account was indistinguishable from a '
+    'genuinely missing one; see the sibling test above (an id that never existed at all), which '
+    'is unchanged and still shows the true unavailable state',
     (tester) async {
       final (AppDatabase db, String profileId) = await seededDb();
       final AccountRepository accountRepo = AccountRepository(db);
@@ -274,7 +281,31 @@ void main() {
       await openDetail(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('This account is no longer available.'), findsOneWidget);
+      // NOT the "gone" state -- a closed account is fully resolvable: its
+      // name and closed badge render, and a Reactivate action is offered.
+      expect(find.text('This account is no longer available.'), findsNothing);
+      // `find.text('Closed Account')` now legitimately matches twice --
+      // once in the AppBar title (driven by `accountByIdProvider` via
+      // `headerAccount`) and once in the body's own identity header
+      // (driven by the separate `data:` account passed to
+      // `_AccountDetailBody`) -- so a plain `findsOneWidget` on the name
+      // alone is no longer a valid assertion. What this test actually
+      // needs to prove is that the AppBar header -- the thing that also
+      // drives `isClosed`, the Edit-icon visibility, and the Reactivate
+      // action above -- resolved to the account's real name rather than
+      // falling back to `accountFallbackTitle` (which is what a
+      // genuinely unresolved id would show instead). Anchoring on the
+      // `AppBar` ancestor is what makes this assertion mean that,
+      // structurally, rather than merely "the name is on screen
+      // somewhere."
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('Closed Account')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('accountClosedBadge')), findsOneWidget);
+      expect(find.byKey(const Key('closeOrReactivateAccount')), findsOneWidget);
+      // No Edit action for a closed account -- must Reactivate first.
+      expect(find.byKey(const Key('editAccount')), findsNothing);
     },
   );
 
@@ -527,5 +558,163 @@ void main() {
       expect(find.text('口座'), findsOneWidget); // accountFallbackTitle
       expect(find.text('この口座は利用できません。'), findsOneWidget); // accountNoLongerAvailableMessage
     });
+  });
+
+  // Account Lifecycle Checkpoint: close/reactivate reachable from Account
+  // Detail, the "closed" visual state, the Edit icon hidden while closed,
+  // and the blocking-recurring-rule error surfacing as a clear message.
+  group('Account Lifecycle Checkpoint: close/reactivate', () {
+    testWidgets(
+      'closing shows the Closed badge, hides Edit, and reactivating restores it -- no data loss',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Old Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+          openingBalance: Money.fromMinorUnits(10000, 'USD'),
+        );
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(2500, 'USD'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        // Active: Edit is shown, no Closed badge, close action present.
+        expect(find.byKey(const Key('editAccount')), findsOneWidget);
+        expect(find.byKey(const Key('accountClosedBadge')), findsNothing);
+        expect(find.byKey(const Key('closeOrReactivateAccount')), findsOneWidget);
+        // The balance before closing, to confirm it survives untouched.
+        expect(currentBalanceText('\$75.00'), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('closeOrReactivateAccount')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('confirmCloseAccount')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Closed: no Edit icon, a Closed badge, the action now offers
+        // Reactivate, and the account/balance are still shown correctly --
+        // never a "no longer available" state, never a reset balance.
+        expect(find.byKey(const Key('editAccount')), findsNothing);
+        expect(find.byKey(const Key('accountClosedBadge')), findsOneWidget);
+        expect(find.text('Old Wallet'), findsWidgets);
+        expect(currentBalanceText('\$75.00'), findsOneWidget);
+
+        final AccountRow closed = await accountRepo.requireById(accountId);
+        expect(closed.isActive, isFalse);
+        expect(closed.deletedAt, isNotNull);
+
+        await tester.tap(find.byKey(const Key('closeOrReactivateAccount')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('confirmReactivateAccount')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Reactivated: Edit is back, the badge is gone, balance unchanged.
+        expect(find.byKey(const Key('editAccount')), findsOneWidget);
+        expect(find.byKey(const Key('accountClosedBadge')), findsNothing);
+        expect(currentBalanceText('\$75.00'), findsOneWidget);
+
+        final AccountRow reactivated = await accountRepo.requireById(accountId);
+        expect(reactivated.isActive, isTrue);
+        expect(reactivated.deletedAt, isNull);
+        expect(reactivated.id, accountId); // never a replacement account
+      },
+    );
+
+    testWidgets('canceling the close confirmation dialog leaves the account untouched and active',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet',
+        type: 'cash',
+        currencyCode: 'USD',
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      await tester.tap(find.byKey(const Key('closeOrReactivateAccount')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('editAccount')), findsOneWidget);
+      expect(find.byKey(const Key('accountClosedBadge')), findsNothing);
+      final AccountRow stillActive = await accountRepo.requireById(accountId);
+      expect(stillActive.isActive, isTrue);
+      expect(stillActive.deletedAt, isNull);
+    });
+
+    testWidgets(
+      'closing an account a recurring rule still references shows a clear blocking message, not an exception',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final RecurringRuleRepository ruleRepo = RecurringRuleRepository(db, accountRepo);
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Checking',
+          type: 'bank',
+          currencyCode: 'USD',
+          openingBalance: Money.fromMinorUnits(100000, 'USD'),
+        );
+        await ruleRepo.createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: 'Rent',
+          amount: Money.fromMinorUnits(50000, 'USD'),
+          accountId: accountId,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: DateTime.utc(2026, 1, 1),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        await tester.tap(find.byKey(const Key('closeOrReactivateAccount')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('confirmCloseAccount')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Blocked -- still active, Edit still shown, no Closed badge, and
+        // a clear message shown instead of a raw exception (never
+        // exposing internal terms like "deletedAt"/"RecurringRule").
+        expect(find.byKey(const Key('editAccount')), findsOneWidget);
+        expect(find.byKey(const Key('accountClosedBadge')), findsNothing);
+        expect(
+          find.text(
+            'This account is still used by one or more recurring rules. Change or delete '
+            'them first, then try closing this account again.',
+          ),
+          findsOneWidget,
+        );
+        final AccountRow stillActive = await accountRepo.requireById(accountId);
+        expect(stillActive.isActive, isTrue);
+        expect(stillActive.deletedAt, isNull);
+      },
+    );
   });
 }

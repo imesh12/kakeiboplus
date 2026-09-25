@@ -197,18 +197,30 @@ void main() {
       expect(row.name, 'Wallet');
     });
 
-    test('emits null for a soft-deleted account', () async {
-      final String accountId = await accountRepo.createAccount(
-        profileId: profileId,
-        name: 'Wallet',
-        type: 'cash',
-        currencyCode: 'USD',
-     );
-      await accountRepo.softDelete(accountId);
+    test(
+      'Account Lifecycle Checkpoint: a closed (soft-deleted) account still emits its own row -- '
+      'CLOSED (isActive=false, deletedAt set), never null -- only a genuinely missing id does '
+      'that (see the sibling test below, unchanged). A closed account must remain fully '
+      'resolvable by id so AccountDetailScreen can show its preserved history/balance and offer '
+      'Reactivate; this supersedes the old pre-checkpoint assumption that softDelete made '
+      'watchById resolve to null.',
+      () async {
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'USD',
+        );
+        await accountRepo.softDelete(accountId);
 
-      final AccountRow? row = await accountRepo.watchById(accountId).first;
-      expect(row, isNull);
-    });
+        final AccountRow? row = await accountRepo.watchById(accountId).first;
+        expect(row, isNotNull);
+        expect(row!.id, accountId);
+        expect(row.name, 'Wallet');
+        expect(row.isActive, isFalse);
+        expect(row.deletedAt, isNotNull);
+      },
+    );
 
     test('emits null for an id that never existed', () async {
       final AccountRow? row = await accountRepo.watchById('does-not-exist').first;

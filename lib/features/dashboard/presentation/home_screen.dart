@@ -1534,7 +1534,7 @@ class _AccountTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<Money> balanceAsync = ref.watch(accountBalanceProvider(account.id));
+    final AsyncValue<Money> balanceAsync = ref.watch(accountBalanceProvider(account));
     final TextStyle? moneyStyle = Theme.of(context).textTheme.titleMedium;
     final AppTokens tokens = context.appTokens;
 

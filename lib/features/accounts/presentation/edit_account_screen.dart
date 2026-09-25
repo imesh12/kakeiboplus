@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
+import '../../../core/database/repositories/account_repository.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import 'account_form_fields.dart';
 import 'account_providers.dart';
+import 'account_type_presentation.dart';
 
 /// Resolves [accountId] to a live [AccountRow] and hands it to
 /// [_EditAccountBody] -- V1 Accounts Detail + Edit Checkpoint. Mirrors
@@ -125,6 +127,14 @@ class _EditAccountBodyState extends ConsumerState<_EditAccountBody> {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    // Checkpoint G Android regression repair (docs/20 §13.2): a
+    // `creditCard`/`deposit` account has no dedicated edit screen yet
+    // (§13.4 checkpoint F/H), so this generic screen is still what Edit
+    // reaches for one today -- but its type control must not offer a
+    // relabel that would misrepresent (without ever actually being able
+    // to change) the composite record those two subtypes carry. See
+    // `isAccountTypeEditable`'s own doc.
+    final bool typeEditable = isAccountTypeEditable(widget.account.subtypeValue);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.editAccountTitle)),
       body: SafeArea(
@@ -139,6 +149,8 @@ class _EditAccountBodyState extends ConsumerState<_EditAccountBody> {
                   nameController: _nameController,
                   type: _type,
                   onTypeChanged: (String? v) => setState(() => _type = v ?? _type),
+                  typeOptions: kEditableAccountTypeLabels,
+                  typeEditable: typeEditable,
                 ),
                 // Currency: read-only display, never a picker, in this
                 // screen -- see `AccountRepository.updateAccount`'s doc

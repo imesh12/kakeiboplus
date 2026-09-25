@@ -12,6 +12,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_tokens.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_status_chip.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
 import 'transaction_icon_badge.dart';
@@ -127,7 +128,11 @@ class _TransactionDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+    // Account Lifecycle Checkpoint: sourced from `allAccountsProvider`
+    // (not `accountsProvider`) so a transaction referencing a since-
+    // closed account still resolves that account's real name here,
+    // instead of falling back to an "unknown account" label.
+    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(allAccountsProvider);
 
     final bool isTransfer = tx.type == 'transfer';
 
@@ -144,6 +149,16 @@ class _TransactionDetailBody extends ConsumerWidget {
 
     final Map<String, String> accountNames = <String, String>{
       for (final AccountRow a in accountsAsync.valueOrNull ?? const <AccountRow>[]) a.id: a.name,
+    };
+    // Account Lifecycle UX polish: which of those same (already-
+    // resolved) accounts are CURRENTLY closed -- resolved fresh at
+    // presentation time from `allAccountsProvider`'s own rows, never
+    // written into this transaction. Reactivating the account simply
+    // stops setting this on the next rebuild; nothing about the
+    // transaction itself ever changes.
+    final Set<String> closedAccountIds = <String>{
+      for (final AccountRow a in accountsAsync.valueOrNull ?? const <AccountRow>[])
+        if (a.deletedAt != null) a.id,
     };
     // Keyed by id -> the full row (not just the name), so the header can
     // also read `CategoryRow.icon` for `TransactionIconBadge` -- still
@@ -236,6 +251,8 @@ class _TransactionDetailBody extends ConsumerWidget {
                 _DetailRow(
                   label: l10n.transactionDetailFromLabel,
                   value: accountNames[tx.accountId] ?? '—',
+                  showClosedBadge: closedAccountIds.contains(tx.accountId),
+                  closedBadgeKey: const Key('transactionDetailFromAccountClosedBadge'),
                 ),
                 const Divider(height: 1),
                 _DetailRow(
@@ -243,10 +260,18 @@ class _TransactionDetailBody extends ConsumerWidget {
                   value: tx.destinationAccountId == null
                       ? '—'
                       : (accountNames[tx.destinationAccountId] ?? '—'),
+                  showClosedBadge: tx.destinationAccountId != null &&
+                      closedAccountIds.contains(tx.destinationAccountId!),
+                  closedBadgeKey: const Key('transactionDetailToAccountClosedBadge'),
                 ),
                 const Divider(height: 1),
               ] else ...<Widget>[
-                _DetailRow(label: l10n.accountLabel, value: accountNames[tx.accountId] ?? '—'),
+                _DetailRow(
+                  label: l10n.accountLabel,
+                  value: accountNames[tx.accountId] ?? '—',
+                  showClosedBadge: closedAccountIds.contains(tx.accountId),
+                  closedBadgeKey: const Key('transactionDetailAccountClosedBadge'),
+                ),
                 const Divider(height: 1),
                 _DetailRow(label: l10n.categoryFieldLabel, value: categoryDisplayValue),
                 const Divider(height: 1),
@@ -369,9 +394,28 @@ class _DetailHeader extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.showClosedBadge = false,
+    this.closedBadgeKey,
+  });
   final String label;
   final String value;
+
+  /// Account Lifecycle UX polish: shows a small muted "Closed" badge
+  /// beside [value] when it names an account that is CURRENTLY closed.
+  /// `false` for every non-account row (date, category, note), and for
+  /// an account row whose account is active or genuinely unresolvable
+  /// (see the call sites in [_TransactionDetailBody] for how each is
+  /// told apart). Purely presentational, resolved fresh per build --
+  /// never changes [value] itself or anything about the transaction.
+  final bool showClosedBadge;
+
+  /// Distinguishes which account row's badge is which in tests (From vs.
+  /// To on a transfer, or the single Account row otherwise) -- `null`
+  /// when [showClosedBadge] is `false`.
+  final Key? closedBadgeKey;
 
   @override
   Widget build(BuildContext context) {
@@ -380,6 +424,7 @@ class _DetailRow extends StatelessWidget {
     // label/value pattern -- both are byte-for-byte the same
     // `bodyMedium`(+`onSurfaceVariant`)/`bodyMedium`+`w600` this already
     // rendered with, so this is a pure rename onto the shared roles.
+    final AppLocalizations l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
@@ -390,10 +435,33 @@ class _DetailRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: context.appTypography.body?.copyWith(fontWeight: FontWeight.w600),
+            // Account Lifecycle UX polish: `Wrap` (not `Row`) so a long
+            // account name plus the badge can drop to a second line
+            // rather than overflow -- this row already right-aligns and
+            // wraps its label column independently, so an occasional
+            // extra line here for a long name is the same trade-off the
+            // rest of this screen already makes, not a new one. When
+            // [showClosedBadge] is `false` (the common case, and every
+            // non-account row), this renders byte-for-byte the same
+            // single `Text` as before this polish.
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              runSpacing: 2,
+              children: <Widget>[
+                Text(
+                  value,
+                  textAlign: TextAlign.end,
+                  style: context.appTypography.body?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                if (showClosedBadge)
+                  AppStatusChip(
+                    key: closedBadgeKey,
+                    label: l10n.accountClosedLabel,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              ],
             ),
           ),
         ],

@@ -402,6 +402,56 @@ class AppLocalizationsEn extends AppLocalizations {
       'Currency can\'t be changed after an account is created.';
 
   @override
+  String get closeAccountAction => 'Close account';
+
+  @override
+  String get closeCreditCardAction => 'Deactivate card';
+
+  @override
+  String get reactivateAccountAction => 'Reactivate account';
+
+  @override
+  String get closeAccountConfirmTitle => 'Close this account?';
+
+  @override
+  String get closeAccountConfirmMessage =>
+      'Its transaction history stays exactly as it is. It just won\'t be available for new transactions until you reactivate it.';
+
+  @override
+  String get closeCreditCardConfirmTitle => 'Deactivate this card?';
+
+  @override
+  String get closeCreditCardConfirmMessage =>
+      'Its transaction history stays exactly as it is. It just won\'t be available for new charges or payments until you reactivate it.';
+
+  @override
+  String get reactivateAccountConfirmTitle => 'Reactivate this account?';
+
+  @override
+  String get reactivateAccountConfirmMessage =>
+      'It will be available for new transactions again, with its existing history and balance unchanged.';
+
+  @override
+  String get accountClosedLabel => 'Closed';
+
+  @override
+  String get closedAccountsSectionHeader => 'Closed accounts';
+
+  @override
+  String get accountHasActiveRecurringRulesMessage =>
+      'This account is still used by one or more recurring rules. Change or delete them first, then try closing this account again.';
+
+  @override
+  String couldNotCloseAccountMessage(String error) {
+    return 'Could not close this account: $error';
+  }
+
+  @override
+  String couldNotReactivateAccountMessage(String error) {
+    return 'Could not reactivate this account: $error';
+  }
+
+  @override
   String budgetsScreenTitle(String month) {
     return 'Budgets · $month';
   }
@@ -924,4 +974,240 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cloudAccountDialogDismissLabel => 'OK';
+
+  @override
+  String get addAccountTypeScreenTitle => 'Add account';
+
+  @override
+  String get addAccountTypeCashTitle => 'Cash';
+
+  @override
+  String get addAccountTypeCashDescription =>
+      'Physical cash you keep on hand, like bills in your wallet.';
+
+  @override
+  String get addAccountTypeBankTitle => 'Bank account';
+
+  @override
+  String get addAccountTypeBankDescription =>
+      'A checking or everyday account at a bank.';
+
+  @override
+  String get addAccountTypeSavingsTitle => 'Savings account';
+
+  @override
+  String get addAccountTypeSavingsDescription =>
+      'A savings account you keep separate from everyday spending.';
+
+  @override
+  String get addAccountTypeWalletTitle => 'E-money / Wallet';
+
+  @override
+  String get addAccountTypeWalletDescription =>
+      'A digital wallet or e-money balance, like a prepaid app balance.';
+
+  @override
+  String get addAccountTypeDepositTitle => 'Deposit';
+
+  @override
+  String get addAccountTypeDepositDescription =>
+      'A fixed or recurring deposit that earns interest until maturity.';
+
+  @override
+  String get addAccountTypeCreditCardTitle => 'Credit card';
+
+  @override
+  String get addAccountTypeCreditCardDescription =>
+      'A credit card balance you owe, with a credit limit.';
+
+  @override
+  String get addAccountAmountOwedLabel => 'Amount you currently owe';
+
+  @override
+  String get addAccountPrincipalLabel => 'Amount deposited';
+
+  @override
+  String get addAccountInstitutionLabel => 'Institution (optional)';
+
+  @override
+  String get addAccountInstitutionHint => 'e.g. Chase, HSBC';
+
+  @override
+  String get addAccountCreditLimitLabel => 'Credit limit';
+
+  @override
+  String get addAccountCardNetworkLabel => 'Card network (optional)';
+
+  @override
+  String get addAccountCardNetworkNone => 'Not specified';
+
+  @override
+  String get addAccountCardNetworkVisa => 'Visa';
+
+  @override
+  String get addAccountCardNetworkMastercard => 'Mastercard';
+
+  @override
+  String get addAccountCardNetworkJcb => 'JCB';
+
+  @override
+  String get addAccountCardNetworkAmex => 'American Express';
+
+  @override
+  String get addAccountCardNetworkOther => 'Other';
+
+  @override
+  String get addAccountLast4Label => 'Last 4 digits (optional)';
+
+  @override
+  String get addAccountLast4ErrorMessage => 'Enter exactly 4 digits.';
+
+  @override
+  String get addAccountExpiryMonthLabel => 'Expiry month (optional)';
+
+  @override
+  String get addAccountExpiryYearLabel => 'Expiry year (optional)';
+
+  @override
+  String get addAccountStatementClosingDayLabel =>
+      'Statement closing day (optional)';
+
+  @override
+  String get addAccountDueDayLabel => 'Payment due day (optional)';
+
+  @override
+  String get addAccountDayOfMonthErrorMessage =>
+      'Enter a day between 1 and 31.';
+
+  @override
+  String get addAccountDepositTypeLabel => 'Deposit type';
+
+  @override
+  String get addAccountDepositTypeFixed => 'Fixed';
+
+  @override
+  String get addAccountDepositTypeShortTerm => 'Short-term';
+
+  @override
+  String get addAccountDepositTypeRecurring => 'Recurring';
+
+  @override
+  String get addAccountDepositTypeOther => 'Other';
+
+  @override
+  String get addAccountStartDateLabel => 'Start date';
+
+  @override
+  String get addAccountChooseStartDateMessage => 'Choose a start date.';
+
+  @override
+  String get addAccountAnnualRateLabel => 'Annual interest rate (%)';
+
+  @override
+  String get addAccountInterestMethodLabel => 'Interest method';
+
+  @override
+  String get addAccountInterestMethodSimple => 'Simple';
+
+  @override
+  String get addAccountInterestMethodCompound => 'Compound';
+
+  @override
+  String get addAccountTermNumberLabel => 'Term length';
+
+  @override
+  String get addAccountTermNumberErrorMessage => 'Enter a term of at least 1.';
+
+  @override
+  String get addAccountTermUnitLabel => 'Term unit';
+
+  @override
+  String get addAccountTermUnitDays => 'Days';
+
+  @override
+  String get addAccountTermUnitMonths => 'Months';
+
+  @override
+  String get addAccountTermUnitYears => 'Years';
+
+  @override
+  String get addAccountCompoundingFrequencyLabel => 'Compounding frequency';
+
+  @override
+  String get addAccountCompoundingFrequencyMonthly => 'Monthly';
+
+  @override
+  String get addAccountCompoundingFrequencyQuarterly => 'Quarterly';
+
+  @override
+  String get addAccountCompoundingFrequencySemiannual => 'Semiannual';
+
+  @override
+  String get addAccountCompoundingFrequencyAnnual => 'Annual';
+
+  @override
+  String get addAccountCompoundingFrequencyAtMaturity => 'At maturity';
+
+  @override
+  String get addAccountChooseCompoundingFrequencyMessage =>
+      'Choose a compounding frequency.';
+
+  @override
+  String get addAccountAutoRenewLabel => 'Renew automatically at maturity';
+
+  @override
+  String get addAccountInstallmentAmountLabel =>
+      'Installment amount (optional)';
+
+  @override
+  String get addAccountInstallmentFrequencyLabel =>
+      'Installment frequency (optional)';
+
+  @override
+  String get addAccountInstallmentFrequencyNone => 'Not specified';
+
+  @override
+  String get addAccountInstallmentFrequencyWeekly => 'Weekly';
+
+  @override
+  String get addAccountInstallmentFrequencyMonthly => 'Monthly';
+
+  @override
+  String get addAccountInstallmentFrequencyQuarterly => 'Quarterly';
+
+  @override
+  String get addAccountInstallmentFrequencyYearly => 'Yearly';
+
+  @override
+  String get addAccountInterestDestinationLabel =>
+      'Send interest to (optional)';
+
+  @override
+  String get addAccountNoneOption => 'None';
+
+  @override
+  String get addAccountEstimatedInterestLabel => 'Estimated interest';
+
+  @override
+  String get addAccountEstimatedMaturityValueLabel =>
+      'Estimated maturity value';
+
+  @override
+  String get addAccountEstimatedMaturityDateLabel => 'Estimated maturity date';
+
+  @override
+  String get addAccountEstimateDisclaimer =>
+      'Estimate only -- not a guaranteed bank figure.';
+
+  @override
+  String get addAccountCreateButton => 'Create account';
+
+  @override
+  String addAccountCreationFailedMessage(String error) {
+    return 'Could not create the account: $error';
+  }
+
+  @override
+  String get addAccountExpiryMonthErrorMessage =>
+      'Enter a month between 1 and 12.';
 }

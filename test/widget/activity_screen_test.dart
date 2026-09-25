@@ -1634,4 +1634,201 @@ void main() {
     final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
     expect(shape.side.color, tokens.colors.subtleBorder);
   });
+
+  // ---------------------------------------------------------------------
+  // Account Lifecycle UX polish: a transaction referencing a CURRENTLY
+  // closed account keeps rendering exactly as before (real name, full
+  // history, no disabled/error look) with a small muted "Closed" label
+  // added beside that account's name -- resolved fresh from
+  // `allAccountsProvider` at presentation time, never written into the
+  // transaction row itself.
+  // ---------------------------------------------------------------------
+  group('Account Lifecycle UX polish: Closed indicator', () {
+    testWidgets(
+      'A: an active account\'s historical transaction shows its name with no Closed label',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Wallet'), findsOneWidget);
+        expect(find.text('Wallet · Closed'), findsNothing);
+        expect(find.textContaining('Closed'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'B: a closed account\'s historical transaction remains visible, keeps its original '
+      'account name, and shows a small Closed label',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        await AccountRepository(db).softDelete(accountId);
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // The transaction itself is still fully present -- amount and
+        // category still render exactly as an active account's would.
+        expect(find.text('-¥1,200'), findsOneWidget);
+        // Real account name preserved, with the small muted label right
+        // beside it -- not a strikethrough, not an error color, not a
+        // separate "this transaction is invalid" state.
+        expect(find.text('Wallet · Closed'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'D: reactivating the account removes the Closed label from its still-existing historical '
+      'transaction, without touching the transaction itself',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.softDelete(accountId);
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+        expect(find.text('Wallet · Closed'), findsOneWidget);
+
+        await accountRepo.reactivate(accountId);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // Same historical transaction, same account name, label gone.
+        expect(find.text('-¥1,200'), findsOneWidget);
+        expect(find.text('Wallet'), findsOneWidget);
+        expect(find.text('Wallet · Closed'), findsNothing);
+        expect(find.textContaining('Closed'), findsNothing);
+        final Transaction stillThere = await (db.select(db.transactions)
+              ..where((tbl) => tbl.id.equals(txId)))
+            .getSingle();
+        expect(stillThere.deletedAt, isNull);
+        expect(stillThere.amountMinorUnits, 1200);
+      },
+    );
+
+    testWidgets(
+      'E1: a transfer with a closed DESTINATION account marks only that side, not the source',
+      (tester) async {
+        final (AppDatabase db, String profileId, String sourceId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Savings',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        await accountRepo.softDelete(destinationId);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: sourceId,
+          destinationAccountId: destinationId,
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('Wallet'), findsOneWidget);
+        expect(find.textContaining('Savings'), findsOneWidget);
+        // The closed side (destination) carries the label; the active
+        // source side does not.
+        final Text titleWidget = tester.widget<Text>(
+          find.descendant(
+            of: find.byKey(const Key('transactionRowHorizontal')),
+            matching: find.byWidgetPredicate(
+              (Widget w) => w is Text && w.textSpan?.toPlainText().contains('→') == true,
+            ),
+          ),
+        );
+        final String plainTitle = titleWidget.textSpan!.toPlainText();
+        expect(plainTitle, contains('Savings'));
+        expect(plainTitle, contains('Closed'));
+        expect(plainTitle.indexOf('Closed'), greaterThan(plainTitle.indexOf('→')));
+      },
+    );
+
+    testWidgets(
+      'E2: a transfer with a closed SOURCE account marks only that side, not the destination',
+      (tester) async {
+        final (AppDatabase db, String profileId, String sourceId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Savings',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        await accountRepo.softDelete(sourceId);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: sourceId,
+          destinationAccountId: destinationId,
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final Text titleWidget = tester.widget<Text>(
+          find.descendant(
+            of: find.byKey(const Key('transactionRowHorizontal')),
+            matching: find.byWidgetPredicate(
+              (Widget w) => w is Text && w.textSpan?.toPlainText().contains('→') == true,
+            ),
+          ),
+        );
+        final String plainTitle = titleWidget.textSpan!.toPlainText();
+        expect(plainTitle, contains('Wallet'));
+        expect(plainTitle, contains('Closed'));
+        // The closed source's label appears BEFORE the arrow, and the
+        // active destination's name after it carries no label.
+        expect(plainTitle.indexOf('Closed'), lessThan(plainTitle.indexOf('→')));
+      },
+    );
+  });
 }

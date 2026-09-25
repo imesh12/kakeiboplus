@@ -794,6 +794,90 @@ abstract class AppLocalizations {
   /// **'Currency can\'t be changed after an account is created.'**
   String get accountCurrencyLockedMessage;
 
+  /// No description provided for @closeAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Close account'**
+  String get closeAccountAction;
+
+  /// No description provided for @closeCreditCardAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Deactivate card'**
+  String get closeCreditCardAction;
+
+  /// No description provided for @reactivateAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Reactivate account'**
+  String get reactivateAccountAction;
+
+  /// No description provided for @closeAccountConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Close this account?'**
+  String get closeAccountConfirmTitle;
+
+  /// No description provided for @closeAccountConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Its transaction history stays exactly as it is. It just won\'t be available for new transactions until you reactivate it.'**
+  String get closeAccountConfirmMessage;
+
+  /// No description provided for @closeCreditCardConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Deactivate this card?'**
+  String get closeCreditCardConfirmTitle;
+
+  /// No description provided for @closeCreditCardConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Its transaction history stays exactly as it is. It just won\'t be available for new charges or payments until you reactivate it.'**
+  String get closeCreditCardConfirmMessage;
+
+  /// No description provided for @reactivateAccountConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reactivate this account?'**
+  String get reactivateAccountConfirmTitle;
+
+  /// No description provided for @reactivateAccountConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'It will be available for new transactions again, with its existing history and balance unchanged.'**
+  String get reactivateAccountConfirmMessage;
+
+  /// No description provided for @accountClosedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get accountClosedLabel;
+
+  /// No description provided for @closedAccountsSectionHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed accounts'**
+  String get closedAccountsSectionHeader;
+
+  /// No description provided for @accountHasActiveRecurringRulesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This account is still used by one or more recurring rules. Change or delete them first, then try closing this account again.'**
+  String get accountHasActiveRecurringRulesMessage;
+
+  /// No description provided for @couldNotCloseAccountMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not close this account: {error}'**
+  String couldNotCloseAccountMessage(String error);
+
+  /// No description provided for @couldNotReactivateAccountMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reactivate this account: {error}'**
+  String couldNotReactivateAccountMessage(String error);
+
   /// No description provided for @budgetsScreenTitle.
   ///
   /// In en, this message translates to:
@@ -1713,6 +1797,444 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OK'**
   String get cloudAccountDialogDismissLabel;
+
+  /// No description provided for @addAccountTypeScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add account'**
+  String get addAccountTypeScreenTitle;
+
+  /// No description provided for @addAccountTypeCashTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash'**
+  String get addAccountTypeCashTitle;
+
+  /// No description provided for @addAccountTypeCashDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Physical cash you keep on hand, like bills in your wallet.'**
+  String get addAccountTypeCashDescription;
+
+  /// No description provided for @addAccountTypeBankTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bank account'**
+  String get addAccountTypeBankTitle;
+
+  /// No description provided for @addAccountTypeBankDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A checking or everyday account at a bank.'**
+  String get addAccountTypeBankDescription;
+
+  /// No description provided for @addAccountTypeSavingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Savings account'**
+  String get addAccountTypeSavingsTitle;
+
+  /// No description provided for @addAccountTypeSavingsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A savings account you keep separate from everyday spending.'**
+  String get addAccountTypeSavingsDescription;
+
+  /// No description provided for @addAccountTypeWalletTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'E-money / Wallet'**
+  String get addAccountTypeWalletTitle;
+
+  /// No description provided for @addAccountTypeWalletDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A digital wallet or e-money balance, like a prepaid app balance.'**
+  String get addAccountTypeWalletDescription;
+
+  /// No description provided for @addAccountTypeDepositTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit'**
+  String get addAccountTypeDepositTitle;
+
+  /// No description provided for @addAccountTypeDepositDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A fixed or recurring deposit that earns interest until maturity.'**
+  String get addAccountTypeDepositDescription;
+
+  /// No description provided for @addAccountTypeCreditCardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit card'**
+  String get addAccountTypeCreditCardTitle;
+
+  /// No description provided for @addAccountTypeCreditCardDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A credit card balance you owe, with a credit limit.'**
+  String get addAccountTypeCreditCardDescription;
+
+  /// No description provided for @addAccountAmountOwedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount you currently owe'**
+  String get addAccountAmountOwedLabel;
+
+  /// No description provided for @addAccountPrincipalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount deposited'**
+  String get addAccountPrincipalLabel;
+
+  /// No description provided for @addAccountInstitutionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Institution (optional)'**
+  String get addAccountInstitutionLabel;
+
+  /// No description provided for @addAccountInstitutionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Chase, HSBC'**
+  String get addAccountInstitutionHint;
+
+  /// No description provided for @addAccountCreditLimitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit limit'**
+  String get addAccountCreditLimitLabel;
+
+  /// No description provided for @addAccountCardNetworkLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Card network (optional)'**
+  String get addAccountCardNetworkLabel;
+
+  /// No description provided for @addAccountCardNetworkNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Not specified'**
+  String get addAccountCardNetworkNone;
+
+  /// No description provided for @addAccountCardNetworkVisa.
+  ///
+  /// In en, this message translates to:
+  /// **'Visa'**
+  String get addAccountCardNetworkVisa;
+
+  /// No description provided for @addAccountCardNetworkMastercard.
+  ///
+  /// In en, this message translates to:
+  /// **'Mastercard'**
+  String get addAccountCardNetworkMastercard;
+
+  /// No description provided for @addAccountCardNetworkJcb.
+  ///
+  /// In en, this message translates to:
+  /// **'JCB'**
+  String get addAccountCardNetworkJcb;
+
+  /// No description provided for @addAccountCardNetworkAmex.
+  ///
+  /// In en, this message translates to:
+  /// **'American Express'**
+  String get addAccountCardNetworkAmex;
+
+  /// No description provided for @addAccountCardNetworkOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get addAccountCardNetworkOther;
+
+  /// No description provided for @addAccountLast4Label.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 4 digits (optional)'**
+  String get addAccountLast4Label;
+
+  /// No description provided for @addAccountLast4ErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter exactly 4 digits.'**
+  String get addAccountLast4ErrorMessage;
+
+  /// No description provided for @addAccountExpiryMonthLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expiry month (optional)'**
+  String get addAccountExpiryMonthLabel;
+
+  /// No description provided for @addAccountExpiryYearLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expiry year (optional)'**
+  String get addAccountExpiryYearLabel;
+
+  /// No description provided for @addAccountStatementClosingDayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Statement closing day (optional)'**
+  String get addAccountStatementClosingDayLabel;
+
+  /// No description provided for @addAccountDueDayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment due day (optional)'**
+  String get addAccountDueDayLabel;
+
+  /// No description provided for @addAccountDayOfMonthErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a day between 1 and 31.'**
+  String get addAccountDayOfMonthErrorMessage;
+
+  /// No description provided for @addAccountDepositTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit type'**
+  String get addAccountDepositTypeLabel;
+
+  /// No description provided for @addAccountDepositTypeFixed.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed'**
+  String get addAccountDepositTypeFixed;
+
+  /// No description provided for @addAccountDepositTypeShortTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Short-term'**
+  String get addAccountDepositTypeShortTerm;
+
+  /// No description provided for @addAccountDepositTypeRecurring.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring'**
+  String get addAccountDepositTypeRecurring;
+
+  /// No description provided for @addAccountDepositTypeOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get addAccountDepositTypeOther;
+
+  /// No description provided for @addAccountStartDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Start date'**
+  String get addAccountStartDateLabel;
+
+  /// No description provided for @addAccountChooseStartDateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a start date.'**
+  String get addAccountChooseStartDateMessage;
+
+  /// No description provided for @addAccountAnnualRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Annual interest rate (%)'**
+  String get addAccountAnnualRateLabel;
+
+  /// No description provided for @addAccountInterestMethodLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest method'**
+  String get addAccountInterestMethodLabel;
+
+  /// No description provided for @addAccountInterestMethodSimple.
+  ///
+  /// In en, this message translates to:
+  /// **'Simple'**
+  String get addAccountInterestMethodSimple;
+
+  /// No description provided for @addAccountInterestMethodCompound.
+  ///
+  /// In en, this message translates to:
+  /// **'Compound'**
+  String get addAccountInterestMethodCompound;
+
+  /// No description provided for @addAccountTermNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Term length'**
+  String get addAccountTermNumberLabel;
+
+  /// No description provided for @addAccountTermNumberErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a term of at least 1.'**
+  String get addAccountTermNumberErrorMessage;
+
+  /// No description provided for @addAccountTermUnitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Term unit'**
+  String get addAccountTermUnitLabel;
+
+  /// No description provided for @addAccountTermUnitDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Days'**
+  String get addAccountTermUnitDays;
+
+  /// No description provided for @addAccountTermUnitMonths.
+  ///
+  /// In en, this message translates to:
+  /// **'Months'**
+  String get addAccountTermUnitMonths;
+
+  /// No description provided for @addAccountTermUnitYears.
+  ///
+  /// In en, this message translates to:
+  /// **'Years'**
+  String get addAccountTermUnitYears;
+
+  /// No description provided for @addAccountCompoundingFrequencyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Compounding frequency'**
+  String get addAccountCompoundingFrequencyLabel;
+
+  /// No description provided for @addAccountCompoundingFrequencyMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get addAccountCompoundingFrequencyMonthly;
+
+  /// No description provided for @addAccountCompoundingFrequencyQuarterly.
+  ///
+  /// In en, this message translates to:
+  /// **'Quarterly'**
+  String get addAccountCompoundingFrequencyQuarterly;
+
+  /// No description provided for @addAccountCompoundingFrequencySemiannual.
+  ///
+  /// In en, this message translates to:
+  /// **'Semiannual'**
+  String get addAccountCompoundingFrequencySemiannual;
+
+  /// No description provided for @addAccountCompoundingFrequencyAnnual.
+  ///
+  /// In en, this message translates to:
+  /// **'Annual'**
+  String get addAccountCompoundingFrequencyAnnual;
+
+  /// No description provided for @addAccountCompoundingFrequencyAtMaturity.
+  ///
+  /// In en, this message translates to:
+  /// **'At maturity'**
+  String get addAccountCompoundingFrequencyAtMaturity;
+
+  /// No description provided for @addAccountChooseCompoundingFrequencyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a compounding frequency.'**
+  String get addAccountChooseCompoundingFrequencyMessage;
+
+  /// No description provided for @addAccountAutoRenewLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Renew automatically at maturity'**
+  String get addAccountAutoRenewLabel;
+
+  /// No description provided for @addAccountInstallmentAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Installment amount (optional)'**
+  String get addAccountInstallmentAmountLabel;
+
+  /// No description provided for @addAccountInstallmentFrequencyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Installment frequency (optional)'**
+  String get addAccountInstallmentFrequencyLabel;
+
+  /// No description provided for @addAccountInstallmentFrequencyNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Not specified'**
+  String get addAccountInstallmentFrequencyNone;
+
+  /// No description provided for @addAccountInstallmentFrequencyWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly'**
+  String get addAccountInstallmentFrequencyWeekly;
+
+  /// No description provided for @addAccountInstallmentFrequencyMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get addAccountInstallmentFrequencyMonthly;
+
+  /// No description provided for @addAccountInstallmentFrequencyQuarterly.
+  ///
+  /// In en, this message translates to:
+  /// **'Quarterly'**
+  String get addAccountInstallmentFrequencyQuarterly;
+
+  /// No description provided for @addAccountInstallmentFrequencyYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get addAccountInstallmentFrequencyYearly;
+
+  /// No description provided for @addAccountInterestDestinationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Send interest to (optional)'**
+  String get addAccountInterestDestinationLabel;
+
+  /// No description provided for @addAccountNoneOption.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get addAccountNoneOption;
+
+  /// No description provided for @addAccountEstimatedInterestLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated interest'**
+  String get addAccountEstimatedInterestLabel;
+
+  /// No description provided for @addAccountEstimatedMaturityValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated maturity value'**
+  String get addAccountEstimatedMaturityValueLabel;
+
+  /// No description provided for @addAccountEstimatedMaturityDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated maturity date'**
+  String get addAccountEstimatedMaturityDateLabel;
+
+  /// No description provided for @addAccountEstimateDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimate only -- not a guaranteed bank figure.'**
+  String get addAccountEstimateDisclaimer;
+
+  /// No description provided for @addAccountCreateButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get addAccountCreateButton;
+
+  /// addAccountCreationFailedMessage
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the account: {error}'**
+  String addAccountCreationFailedMessage(String error);
+
+  /// No description provided for @addAccountExpiryMonthErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a month between 1 and 12.'**
+  String get addAccountExpiryMonthErrorMessage;
 }
 
 class _AppLocalizationsDelegate

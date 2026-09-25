@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/providers.dart';
 import '../../../core/database/repositories/account_repository.dart' show AccountRowX;
+import '../../../core/database/services/account_lifecycle_service.dart';
+import '../../../core/finance/financial_account_subtype.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
@@ -48,10 +51,118 @@ class AccountDetailScreen extends ConsumerWidget {
   const AccountDetailScreen({required this.accountId, super.key});
   final String accountId;
 
+  bool _isCreditCard(AccountRow account) =>
+      account.subtypeValue == FinancialAccountSubtype.creditCard;
+
+  /// Account Lifecycle Checkpoint: shows a confirmation dialog (the same
+  /// `showDialog<bool>` + `AlertDialog` + cancel/confirm `TextButton`/
+  /// `FilledButton` shape `TransactionDetailScreen._confirmDelete`
+  /// already uses), and on confirmation calls
+  /// `AccountLifecycleService.closeAccount`. [AccountHasActiveRecurringRulesException]
+  /// surfaces as [AppLocalizations.accountHasActiveRecurringRulesMessage]
+  /// -- a clear, non-technical, actionable message -- rather than a raw
+  /// exception; any other failure surfaces via
+  /// [AppLocalizations.couldNotCloseAccountMessage]. Never touches
+  /// [AccountRow.balanceClass]/[AccountRow.subtype]/
+  /// [AccountRow.currencyCode] -- this only ever calls the lifecycle
+  /// service, never `updateAccount`.
+  Future<void> _confirmClose(
+    BuildContext context,
+    WidgetRef ref,
+    AccountRow account,
+  ) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool isCreditCard = _isCreditCard(account);
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: Text(
+          isCreditCard ? l10n.closeCreditCardConfirmTitle : l10n.closeAccountConfirmTitle,
+        ),
+        content: Text(
+          isCreditCard ? l10n.closeCreditCardConfirmMessage : l10n.closeAccountConfirmMessage,
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('confirmCloseAccount'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(isCreditCard ? l10n.closeCreditCardAction : l10n.closeAccountAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(accountLifecycleServiceProvider).closeAccount(accountId: account.id);
+    } on AccountHasActiveRecurringRulesException {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.accountHasActiveRecurringRulesMessage)),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.couldNotCloseAccountMessage('$e'))),
+        );
+      }
+    }
+  }
+
+  /// Mirrors [_confirmClose] for the reverse action -- see
+  /// [AccountLifecycleService.reactivateAccount].
+  Future<void> _confirmReactivate(
+    BuildContext context,
+    WidgetRef ref,
+    AccountRow account,
+  ) async {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: Text(l10n.reactivateAccountConfirmTitle),
+        content: Text(l10n.reactivateAccountConfirmMessage),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('confirmReactivateAccount'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.reactivateAccountAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(accountLifecycleServiceProvider).reactivateAccount(accountId: account.id);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.couldNotReactivateAccountMessage('$e'))),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<AccountRow?> accountAsync = ref.watch(accountByIdProvider(accountId));
+    final AccountRow? headerAccount = accountAsync.valueOrNull;
+    // Account Lifecycle Checkpoint: `headerAccount` now resolves for a
+    // closed account too (see `accountByIdProvider`'s own doc) --
+    // `isClosed` below is what the Edit icon and the Close/Reactivate
+    // action branch on, not whether `headerAccount` is non-null.
+    final bool isClosed = headerAccount != null && headerAccount.deletedAt != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -60,15 +171,34 @@ class AccountDetailScreen extends ConsumerWidget {
         // if the account can't be found) is the only localizable piece
         // here, matching `GoalDetailScreen`'s `goalFallbackTitle`
         // convention.
-        title: Text(accountAsync.valueOrNull?.name ?? l10n.accountFallbackTitle),
+        title: Text(headerAccount?.name ?? l10n.accountFallbackTitle),
         actions: <Widget>[
-          if (accountAsync.valueOrNull != null)
+          if (headerAccount != null) ...<Widget>[
+            // Account Lifecycle Checkpoint: editing a closed account's
+            // name/type is out of scope for this checkpoint (and
+            // `AccountRepository.updateAccount` already refuses to write
+            // to one) -- the Edit icon is simply not offered while
+            // closed; Reactivate is the only action shown instead.
+            if (!isClosed)
+              IconButton(
+                key: const Key('editAccount'),
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: l10n.editTooltip,
+                onPressed: () => context.push(AppRoutes.editAccount(accountId)),
+              ),
             IconButton(
-              key: const Key('editAccount'),
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: l10n.editTooltip,
-              onPressed: () => context.push(AppRoutes.editAccount(accountId)),
+              key: const Key('closeOrReactivateAccount'),
+              icon: Icon(isClosed ? Icons.restore : Icons.archive_outlined),
+              tooltip: isClosed
+                  ? l10n.reactivateAccountAction
+                  : (_isCreditCard(headerAccount)
+                      ? l10n.closeCreditCardAction
+                      : l10n.closeAccountAction),
+              onPressed: () => isClosed
+                  ? _confirmReactivate(context, ref, headerAccount)
+                  : _confirmClose(context, ref, headerAccount),
             ),
+          ],
         ],
       ),
       body: accountAsync.when(
@@ -102,7 +232,7 @@ class _AccountDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final AsyncValue<Money> balanceAsync = ref.watch(accountBalanceProvider(account.id));
+    final AsyncValue<Money> balanceAsync = ref.watch(accountBalanceProvider(account));
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -139,6 +269,31 @@ class _AccountDetailBody extends ConsumerWidget {
             ),
           ],
         ),
+        // Account Lifecycle Checkpoint: a quiet, unobtrusive status
+        // label for a closed account -- never the alarming/destructive
+        // styling this design system reserves for an actual error or
+        // warning (docs/design guidance: "calm, not alarming"). Shown
+        // only once [AccountRow.deletedAt] is set; an active account
+        // renders nothing extra here, byte-for-byte the same as before
+        // this checkpoint.
+        if (account.deletedAt != null) ...<Widget>[
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              key: const Key('accountClosedBadge'),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                l10n.accountClosedLabel,
+                style: context.appTypography.caption?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         // [large current balance] -- the same derived-from-the-ledger
         // value `AccountsScreen`'s own row shows for this account, never
@@ -236,7 +391,10 @@ class _RecentActivitySection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<Transaction>> txAsync = ref.watch(accountRecentActivityProvider(accountId));
-    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+    // Account Lifecycle Checkpoint: sourced from `allAccountsProvider`
+    // (not `accountsProvider`) so a transfer whose OTHER side is a
+    // since-closed account still shows that account's real name here.
+    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(allAccountsProvider);
     // Same merge-both-types pattern `ActivityScreen` already uses --
     // expense/income each need their own category list; a transfer
     // needs neither.

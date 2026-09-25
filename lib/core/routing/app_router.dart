@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/finance/account_creation_kind.dart';
 import '../../features/accounts/presentation/account_detail_screen.dart';
 import '../../features/accounts/presentation/accounts_screen.dart';
+import '../../features/accounts/presentation/add_account_form_screen.dart';
+import '../../features/accounts/presentation/add_account_type_screen.dart';
 import '../../features/accounts/presentation/edit_account_screen.dart';
 import '../../features/budgets/presentation/budgets_screen.dart';
 import '../../features/cloud_account/presentation/cloud_account_screen.dart';
@@ -101,6 +104,26 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.editTransactionPath,
         builder: (context, state) =>
             EditTransactionScreen(transactionId: state.pathParameters['id']!),
+      ),
+      // Checkpoint G (Add Account UX): registered BEFORE
+      // `AppRoutes.accountDetailPath` below -- both are 2-segment
+      // `/accounts/...` paths, and GoRouter matches routes in list
+      // order, so the literal `/accounts/add` must be tried before the
+      // parameterized `/accounts/:id` or the latter would swallow it
+      // (the same `addTransaction`-before-`transactionDetailPath`
+      // precedent above). `addAccountFormPath` is a 3-segment path
+      // (`/accounts/add/:kind`) and never collides with either
+      // `/accounts/:id` or `/accounts/:id/edit`, so its own position
+      // relative to those doesn't matter.
+      GoRoute(
+        path: AppRoutes.addAccount,
+        builder: (context, state) => const AddAccountTypeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.addAccountFormPath,
+        builder: (context, state) => AddAccountFormScreen(
+          kind: AccountCreationKind.values.byName(state.pathParameters['kind']!),
+        ),
       ),
       // V1 Accounts Detail + Edit Checkpoint: top-level siblings of
       // the `ShellRoute` above, exactly like the transaction/goal

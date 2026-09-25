@@ -290,4 +290,54 @@ class PaymentInstrumentRepository {
       throw PaymentInstrumentNotFoundException(id);
     }
   }
+
+  /// Restores a previously-archived ([softDelete]) instrument -- Account
+  /// Lifecycle Checkpoint. Clears [PaymentInstrumentRow.deletedAt] only;
+  /// never touches [PaymentInstrumentRow.accountId]/`profileId`/
+  /// `instrumentType` (immutable, same discipline as [updateMetadata]).
+  /// `AccountLifecycleService.reactivateAccount` is the only intended
+  /// caller -- it restores exactly the instrument(s)
+  /// `AccountLifecycleService.closeAccount` archived for the same account, inside the
+  /// same atomic transaction that reactivates the account itself, so a
+  /// credit-card account and its instrument are never left in
+  /// mismatched active/archived states.
+  Future<void> restore(String id) async {
+    final int rowsAffected = await (_db.update(_db.paymentInstruments)
+          ..where((tbl) => tbl.id.equals(id) & tbl.deletedAt.isNotNull()))
+        .write(
+      PaymentInstrumentsCompanion(
+        deletedAt: const Value<DateTime?>(null),
+        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+      ),
+    );
+    if (rowsAffected != 1) {
+      throw PaymentInstrumentNotFoundException(id);
+    }
+  }
+
+  /// One-shot (non-reactive) fetch of the active instruments linked to
+  /// [accountId] -- Account Lifecycle Checkpoint. Same filter as
+  /// [watchActiveForAccount], as a `Future` rather than a `Stream` so
+  /// `AccountLifecycleService.closeAccount` can read it once from inside
+  /// an `AppDatabase.transaction()` callback.
+  Future<List<PaymentInstrumentRow>> activeForAccountOnce(String accountId) {
+    final query = _db.select(_db.paymentInstruments)
+      ..where((tbl) => tbl.accountId.equals(accountId) & tbl.deletedAt.isNull())
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.createdAt)]);
+    return query.get();
+  }
+
+  /// One-shot (non-reactive) fetch of EVERY instrument linked to
+  /// [accountId], active or archived -- Account Lifecycle Checkpoint.
+  /// What `AccountLifecycleService.reactivateAccount` reads (inside an
+  /// `AppDatabase.transaction()` callback) to find exactly the
+  /// instrument(s) a prior `AccountLifecycleService.closeAccount` call
+  /// archived, so it can [restore] each one -- never used to populate a
+  /// selector.
+  Future<List<PaymentInstrumentRow>> allForAccountOnce(String accountId) {
+    final query = _db.select(_db.paymentInstruments)
+      ..where((tbl) => tbl.accountId.equals(accountId))
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.createdAt)]);
+    return query.get();
+  }
 }

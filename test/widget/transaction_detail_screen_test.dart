@@ -728,4 +728,141 @@ void main() {
     final RoundedRectangleBorder shape = cardWidget.shape! as RoundedRectangleBorder;
     expect(shape.side.color, tokens.colors.subtleBorder);
   });
+
+  // ---------------------------------------------------------------------
+  // Account Lifecycle UX polish: Transaction Detail shows the same small
+  // muted "Closed" indicator (via the shared `AppStatusChip`) beside an
+  // account name that is CURRENTLY closed, resolved fresh from
+  // `allAccountsProvider` at presentation time, never written into the
+  // transaction itself. Mirrors the coverage added to
+  // `activity_screen_test.dart`'s "Account Lifecycle UX polish: Closed
+  // indicator" group.
+  // ---------------------------------------------------------------------
+  group('Account Lifecycle UX polish: Closed indicator', () {
+    testWidgets(
+      'C: Transaction Detail for a closed account keeps its details and original account name '
+      'visible, and shows the Closed indicator on the Account row',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+        );
+        await AccountRepository(db).softDelete(accountId);
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, txId));
+        await tester.tap(find.text('open detail'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // The transaction's own details remain fully visible.
+        expect(find.text('-¥1,200'), findsOneWidget);
+        expect(find.text('Category'), findsOneWidget);
+        // Real account name preserved on the Account row, with the
+        // Closed indicator beside it.
+        expect(find.text('Wallet'), findsOneWidget);
+        expect(find.byKey(const Key('transactionDetailAccountClosedBadge')), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('transactionDetailAccountClosedBadge')),
+            matching: find.text('Closed'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'D: reactivating the account removes the Closed indicator from Transaction Detail without '
+      'touching the transaction itself',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+        );
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.softDelete(accountId);
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, txId));
+        await tester.tap(find.text('open detail'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('transactionDetailAccountClosedBadge')), findsOneWidget);
+
+        await accountRepo.reactivate(accountId);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('-¥1,200'), findsOneWidget);
+        expect(find.text('Wallet'), findsOneWidget);
+        expect(find.byKey(const Key('transactionDetailAccountClosedBadge')), findsNothing);
+        final Transaction stillThere = await (db.select(db.transactions)
+              ..where((tbl) => tbl.id.equals(txId)))
+            .getSingle();
+        expect(stillThere.deletedAt, isNull);
+        expect(stillThere.amountMinorUnits, 1200);
+      },
+    );
+
+    testWidgets(
+      'E: a transfer detail screen marks each of the From/To rows independently, matching '
+      'whichever side is currently closed',
+      (tester) async {
+        final (AppDatabase db, String profileId, String sourceId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Savings',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        await accountRepo.softDelete(destinationId);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: sourceId,
+          destinationAccountId: destinationId,
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, txId));
+        await tester.tap(find.text('open detail'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Wallet'), findsOneWidget); // From = active source, unchanged
+        expect(find.text('Savings'), findsOneWidget); // To = closed destination, name preserved
+        // Only the destination (To) side carries the Closed indicator;
+        // the active source (From) side does not.
+        expect(find.byKey(const Key('transactionDetailFromAccountClosedBadge')), findsNothing);
+        expect(find.byKey(const Key('transactionDetailToAccountClosedBadge')), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('transactionDetailToAccountClosedBadge')),
+            matching: find.text('Closed'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+  });
 }

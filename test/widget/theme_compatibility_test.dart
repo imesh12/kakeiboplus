@@ -8,7 +8,11 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/money/money_formatter.dart';
+import 'package:ai_financial_coach/core/finance/account_creation_kind.dart';
+import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/accounts_screen.dart';
+import 'package:ai_financial_coach/features/accounts/presentation/add_account_form_screen.dart';
+import 'package:ai_financial_coach/features/accounts/presentation/add_account_type_screen.dart';
 import 'package:ai_financial_coach/features/dashboard/presentation/home_screen.dart';
 import 'package:ai_financial_coach/features/settings/presentation/more_screen.dart';
 import 'package:ai_financial_coach/features/settings/presentation/settings_screen.dart';
@@ -31,6 +35,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 // Checkpoint 8.2 (Whole-App Theme Compatibility & Visual Polish): focused
 // cross-theme coverage per the checkpoint's own Phase 5 minimum list.
@@ -330,29 +335,70 @@ void main() {
     });
   });
 
-  group('Phase 5.8: a dialog renders correctly under Dark', () {
-    testWidgets('the Add Account dialog opens and its fields render without exceptions', (
-      tester,
-    ) async {
-      final (AppDatabase db, String profileId, String accountId) = await seededDb();
-      final ProviderContainer container =
-          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
-      addTearDown(() => disposeInOrder(tester, container, db));
+  group('Phase 5.8: the Add Account flow renders correctly under Dark', () {
+    testWidgets(
+      'Checkpoint G update: the Add Account type chooser and adaptive form open and render '
+      'without exceptions -- same guarantee this test locked in for the old dialog, now '
+      'covering the new multi-screen flow (docs/20 §13.4) instead of a single AlertDialog',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
 
-      await tester.pumpWidget(appWithTheme(container, const AccountsScreen(), AppThemeStyle.dark));
-      await tester.pumpAndSettle();
+        // Checkpoint G: the FAB now pushes real routes, so this test
+        // needs a real `GoRouter` -- `appWithTheme`'s plain
+        // `MaterialApp(home: ...)` (shared by many other tests in this
+        // file, none of which exercise cross-screen navigation) is not
+        // changed; this test builds its own router directly instead,
+        // mirroring `accounts_screen_test.dart`'s own updated "H:" test.
+        final GoRouter router = GoRouter(
+          initialLocation: AppRoutes.accounts,
+          routes: <RouteBase>[
+            GoRoute(path: AppRoutes.accounts, builder: (context, state) => const AccountsScreen()),
+            GoRoute(
+              path: AppRoutes.addAccount,
+              builder: (context, state) => const AddAccountTypeScreen(),
+            ),
+            GoRoute(
+              path: AppRoutes.addAccountFormPath,
+              builder: (context, state) => AddAccountFormScreen(
+                kind: AccountCreationKind.values.byName(state.pathParameters['kind']!),
+              ),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              theme: AppTheme.resolve(AppThemeStyle.dark),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              routerConfig: router,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(FloatingActionButton));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byType(FloatingActionButton));
+        await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
-      expect(find.byType(AlertDialog), findsOneWidget);
-      // `l10n.addAccountDialogTitle` is "Add account"; the name field's
-      // `l10n.accountNameLabel` is just "Name" (app_en.arb), not "Account
-      // name".
-      expect(find.text('Add account'), findsOneWidget);
-      expect(find.text('Name'), findsOneWidget);
-    });
+        expect(tester.takeException(), isNull);
+        // The type chooser -- `l10n.addAccountTypeScreenTitle` is "Add
+        // account"; the "Cash" row's `l10n.addAccountTypeCashTitle`.
+        expect(find.text('Add account'), findsOneWidget);
+        expect(find.text('Cash'), findsOneWidget);
+
+        await tester.tap(find.text('Cash').first);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // The adaptive form -- `l10n.accountNameLabel` is just "Name"
+        // (app_en.arb), not "Account name", same as the old test asserted.
+        expect(find.text('Name'), findsOneWidget);
+      },
+    );
   });
 
   group('Phase 5.9 (Semantic Finance Safety regression): Forest income color', () {

@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/currency/currency_registry.dart';
 import '../../../core/database/app_database.dart';
-import '../../../core/database/providers.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
-import 'account_form_fields.dart';
+import '../../../shared/widgets/app_section_header.dart';
 import 'account_providers.dart';
 import 'account_type_presentation.dart';
 
@@ -24,6 +22,18 @@ class AccountsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+    // Account Lifecycle Checkpoint: closed accounts must remain
+    // discoverable somewhere on this screen (for history/reactivation)
+    // without redesigning it -- `allAccountsProvider` (every account,
+    // active or closed) is the source for the additive "closed accounts"
+    // section below only; `accountsProvider` above (active-only) still
+    // drives everything else on this screen exactly as before this
+    // checkpoint.
+    final AsyncValue<List<AccountRow>> allAccountsAsync = ref.watch(allAccountsProvider);
+    final List<AccountRow> closedAccounts =
+        (allAccountsAsync.valueOrNull ?? const <AccountRow>[])
+            .where((AccountRow a) => a.deletedAt != null)
+            .toList();
     return Scaffold(
       appBar: AppBar(title: Text(l10n.accountsSectionTitle)),
       body: accountsAsync.when(
@@ -31,7 +41,7 @@ class AccountsScreen extends ConsumerWidget {
         error: (Object e, StackTrace st) =>
             Center(child: Text(l10n.couldNotLoadAccounts(e.toString()))),
         data: (List<AccountRow> accounts) {
-          if (accounts.isEmpty) {
+          if (accounts.isEmpty && closedAccounts.isEmpty) {
             // Visual System Convergence Checkpoint 7.3: restyled with the
             // shared `secondaryBody` role (muted body text), matching
             // Activity's true empty state -- same message, no action
@@ -58,7 +68,7 @@ class AccountsScreen extends ConsumerWidget {
                   builder: (BuildContext context, WidgetRef ref, _) {
                     final AppLocalizations rowL10n = AppLocalizations.of(context);
                     final AsyncValue<Money> balanceAsync =
-                        ref.watch(accountBalanceProvider(account.id));
+                        ref.watch(accountBalanceProvider(account));
                     final String metadata =
                         '${accountTypeDisplayLabel(rowL10n, account.type)} · ${account.currencyCode}';
                     // CP5.2b: was a bare `ListTile(title:, subtitle:,
@@ -156,21 +166,84 @@ class AccountsScreen extends ConsumerWidget {
                     );
                   },
                 ),
+              // Account Lifecycle Checkpoint: an additive-only "closed
+              // accounts" section -- never rendered unless at least one
+              // exists, so an active-only profile's screen is
+              // byte-for-byte unchanged from before this checkpoint.
+              // Each row reuses the exact same tappable `AppCard` ->
+              // `AccountDetailScreen` navigation as an active row (a
+              // closed account still opens its real detail screen, with
+              // its Reactivate action), just visually muted via
+              // `Opacity` and with a localized "Closed" suffix on its
+              // metadata line -- a "clear but unobtrusive" state, never
+              // hidden and never alarming.
+              if (closedAccounts.isNotEmpty) ...<Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: AppSectionHeader(title: l10n.closedAccountsSectionHeader, eyebrow: true),
+                ),
+                for (final AccountRow account in closedAccounts)
+                  Consumer(
+                    builder: (BuildContext context, WidgetRef ref, _) {
+                      final AppLocalizations rowL10n = AppLocalizations.of(context);
+                      final AsyncValue<Money> balanceAsync =
+                          ref.watch(accountBalanceProvider(account));
+                      final String metadata =
+                          '${accountTypeDisplayLabel(rowL10n, account.type)} · '
+                          '${account.currencyCode} · ${rowL10n.accountClosedLabel}';
+                      return Opacity(
+                        opacity: 0.6,
+                        child: AppCard(
+                          bordered: true,
+                          margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          onTap: () => context.push(AppRoutes.accountDetail(account.id)),
+                          child: balanceAsync.when(
+                            loading: () => _AccountsRow(
+                              accountId: account.id,
+                              name: account.name,
+                              metadata: metadata,
+                              money: const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                            error: (Object e, StackTrace st) => _AccountsRow(
+                              accountId: account.id,
+                              name: account.name,
+                              metadata: metadata,
+                              money: const Icon(Icons.error_outline),
+                            ),
+                            data: (Money balance) {
+                              final String formatted = _formatter.format(balance);
+                              final TextStyle? moneyStyle = context.appTypography.mediumMoney;
+                              return _AccountsRow(
+                                accountId: account.id,
+                                name: account.name,
+                                metadata: metadata,
+                                money: Text(formatted, style: moneyStyle),
+                                moneyMeasureText: formatted,
+                                moneyStyle: moneyStyle,
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
             ],
           );
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddAccountDialog(context, ref),
+        // Checkpoint G (Add Account UX): the FAB now pushes the new
+        // icon-led type chooser instead of opening the old
+        // `_AddAccountDialog` (removed below) -- see docs/20 §13.4.
+        onPressed: () => context.push(AppRoutes.addAccount),
         child: const Icon(Icons.add),
       ),
-    );
-  }
-
-  Future<void> _showAddAccountDialog(BuildContext context, WidgetRef ref) async {
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) => const _AddAccountDialog(),
     );
   }
 }
@@ -323,89 +396,6 @@ class _AccountsRow extends StatelessWidget {
           );
         },
       ),
-    );
-  }
-}
-
-class _AddAccountDialog extends ConsumerStatefulWidget {
-  const _AddAccountDialog();
-
-  @override
-  ConsumerState<_AddAccountDialog> createState() => _AddAccountDialogState();
-}
-
-class _AddAccountDialogState extends ConsumerState<_AddAccountDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  String _type = 'cash';
-  String _currencyCode = CurrencyRegistry.seed.first.code;
-  bool _isSaving = false;
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _isSaving = true);
-    try {
-      final ProfileRow? profile = await ref.read(profileRepositoryProvider).getProfile();
-      if (profile == null) return;
-      await ref.read(accountRepositoryProvider).createAccount(
-            profileId: profile.id,
-            name: _nameController.text.trim(),
-            type: _type,
-            currencyCode: _currencyCode,
-          );
-      if (mounted) Navigator.of(context).pop();
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    return AlertDialog(
-      title: Text(l10n.addAccountDialogTitle),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            // V1 Accounts Detail + Edit Checkpoint: name + type are now
-            // the shared `AccountIdentityFormFields` widget, so this
-            // dialog and `EditAccountScreen` render/validate them
-            // identically instead of each keeping its own copy.
-            AccountIdentityFormFields(
-              nameController: _nameController,
-              type: _type,
-              onTypeChanged: (v) => setState(() => _type = v ?? _type),
-            ),
-            DropdownButtonFormField<String>(
-              initialValue: _currencyCode,
-              decoration: InputDecoration(labelText: l10n.currencySection),
-              items: <DropdownMenuItem<String>>[
-                for (final currency in CurrencyRegistry.seed)
-                  DropdownMenuItem<String>(value: currency.code, child: Text(currency.code)),
-              ],
-              onChanged: (v) => setState(() => _currencyCode = v ?? _currencyCode),
-            ),
-          ],
-        ),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: Text(l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: _isSaving ? null : _submit,
-          child: Text(l10n.addAccountButton),
-        ),
-      ],
     );
   }
 }

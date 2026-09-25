@@ -85,7 +85,11 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   @override
   Widget build(BuildContext context) {
     final AsyncValue<List<Transaction>> transactionsAsync = ref.watch(activeTransactionsProvider);
-    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+    // Account Lifecycle Checkpoint: sourced from `allAccountsProvider`
+    // (not `accountsProvider`) so a transaction referencing a since-
+    // closed account still resolves that account's real name here,
+    // instead of falling back to an "unknown account" label.
+    final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(allAccountsProvider);
     final AsyncValue<List<CategoryRow>> expenseCategoriesAsync =
         ref.watch(categoriesForTypeProvider('expense'));
     final AsyncValue<List<CategoryRow>> incomeCategoriesAsync =
@@ -95,6 +99,16 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
 
     final Map<String, String> accountNames = <String, String>{
       for (final AccountRow a in accountsAsync.valueOrNull ?? const <AccountRow>[]) a.id: a.name,
+    };
+    // Account Lifecycle UX polish: which of those same (already-resolved)
+    // accounts are CURRENTLY closed -- resolved fresh at presentation
+    // time from `allAccountsProvider`'s own rows, never written into a
+    // transaction row. A reactivated account's id simply stops
+    // appearing here on the next rebuild; no historical transaction is
+    // ever touched.
+    final Set<String> closedAccountIds = <String>{
+      for (final AccountRow a in accountsAsync.valueOrNull ?? const <AccountRow>[])
+        if (a.deletedAt != null) a.id,
     };
     // Keyed by id -> the full row (not just the name) so the icon badge
     // can also read `CategoryRow.icon` -- still derived entirely from
@@ -175,6 +189,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                           for (final ActivitySearchable<Transaction> row in filtered) row.item,
                         ],
                         accountNames: accountNames,
+                        closedAccountIds: closedAccountIds,
                         categoriesById: categoriesById,
                       ),
               ),
@@ -348,11 +363,18 @@ class _GroupedTransactionList extends StatelessWidget {
   const _GroupedTransactionList({
     required this.transactions,
     required this.accountNames,
+    required this.closedAccountIds,
     required this.categoriesById,
   });
 
   final List<Transaction> transactions;
   final Map<String, String> accountNames;
+
+  /// Account Lifecycle UX polish: ids of accounts that are CURRENTLY
+  /// closed, from the same `allAccountsProvider` snapshot [accountNames]
+  /// was built from -- see [ActivityScreen]'s own doc comment on this
+  /// set for why it's resolved fresh here rather than stored anywhere.
+  final Set<String> closedAccountIds;
   final Map<String, CategoryRow> categoriesById;
 
   @override
@@ -392,6 +414,13 @@ class _GroupedTransactionList extends StatelessWidget {
           accountName: accountNames[tx.accountId] ?? '—',
           destinationAccountName:
               tx.destinationAccountId == null ? null : accountNames[tx.destinationAccountId],
+          // Resolved fresh per row, from the same snapshot as the names
+          // above -- a genuinely unresolvable id (never in
+          // `allAccountsProvider`'s rows at all) is never in this set
+          // either, so it never shows Closed.
+          sourceAccountClosed: closedAccountIds.contains(tx.accountId),
+          destinationAccountClosed: tx.destinationAccountId != null &&
+              closedAccountIds.contains(tx.destinationAccountId!),
           category: tx.categoryId == null ? null : categoriesById[tx.categoryId],
         );
       },
@@ -495,12 +524,28 @@ class _TransactionRow extends StatelessWidget {
     required this.tx,
     required this.accountName,
     required this.destinationAccountName,
+    required this.sourceAccountClosed,
+    required this.destinationAccountClosed,
     required this.category,
   });
 
   final Transaction tx;
   final String accountName;
   final String? destinationAccountName;
+
+  /// Account Lifecycle UX polish: whether the account named by
+  /// [accountName] is CURRENTLY closed -- presentation only, resolved
+  /// fresh by the caller from `allAccountsProvider` on every build.
+  /// Never persisted onto this transaction; a reactivated account stops
+  /// setting this on the very next rebuild with no historical data
+  /// touched. See the class doc comment above for the row's overall
+  /// "historical data stays visible/trustworthy" contract, which this
+  /// extends rather than replaces.
+  final bool sourceAccountClosed;
+
+  /// Same as [sourceAccountClosed], for [destinationAccountName] on a
+  /// transfer. Always `false` when there is no destination account.
+  final bool destinationAccountClosed;
   final CategoryRow? category;
 
   /// The fixed size of [TransactionIconBadge] -- reproduced here (not
@@ -565,8 +610,18 @@ class _TransactionRow extends StatelessWidget {
     };
     // Date is intentionally NOT repeated here -- it's now conveyed by
     // the section header above this row.
+    //
+    // Account Lifecycle UX polish: a closed source account's own
+    // "Closed" label is appended here as just another metadata segment
+    // -- the exact same "· Closed" convention `AccountsScreen`'s own
+    // closed-accounts section already established, not a new visual
+    // language. Never for a transfer here (a transfer's account names
+    // live in `title` below instead, since neither side is repeated in
+    // this subtitle line -- see [_TransactionRow]'s own doc comment on
+    // why a transfer excludes `accountName` from this join).
     final String subtitle = <String?>[
       if (!isTransfer) accountName,
+      if (!isTransfer && sourceAccountClosed) l10n.accountClosedLabel,
       if (tx.note != null && tx.note!.isNotEmpty) tx.note,
     ].nonNulls.join(' · ');
 
@@ -602,8 +657,34 @@ class _TransactionRow extends StatelessWidget {
     // line with an ellipsis rather than wrapping unpredictably or taking
     // space the amount needs. Content/semantics are unchanged from
     // before this checkpoint -- only the overflow behavior is new.
-    final Widget titleText =
-        Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle);
+    // Account Lifecycle UX polish: a transfer's title is the ONE place
+    // either account name renders for this row (see the subtitle
+    // comment above), so a closed side is marked right there, inline,
+    // in a smaller/muted span (`AppTypography.caption` -- the same
+    // muted role the subtitle already uses) rather than in the bold
+    // `titleStyle` the account names themselves keep -- the transaction
+    // itself must never look closed/disabled, only the account name it
+    // sits beside. Non-transfer rows are completely unchanged: still the
+    // same plain `Text(title, ...)` as before this polish.
+    final TextStyle? closedInlineStyle = context.appTypography.caption;
+    final Widget titleText = isTransfer
+        ? Text.rich(
+            TextSpan(
+              style: titleStyle,
+              children: <InlineSpan>[
+                TextSpan(text: accountName),
+                if (sourceAccountClosed)
+                  TextSpan(text: '  ${l10n.accountClosedLabel}', style: closedInlineStyle),
+                const TextSpan(text: ' → '),
+                TextSpan(text: destinationAccountName ?? '—'),
+                if (destinationAccountClosed)
+                  TextSpan(text: '  ${l10n.accountClosedLabel}', style: closedInlineStyle),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )
+        : Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle);
     final Widget? subtitleText = subtitle.isEmpty
         ? null
         : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: subtitleStyle);

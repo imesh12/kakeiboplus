@@ -389,6 +389,56 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accountCurrencyLockedMessage => '口座を作成した後は通貨を変更できません。';
 
   @override
+  String get closeAccountAction => '口座を閉じる';
+
+  @override
+  String get closeCreditCardAction => 'カードを停止する';
+
+  @override
+  String get reactivateAccountAction => '口座を再開する';
+
+  @override
+  String get closeAccountConfirmTitle => 'この口座を閉じますか？';
+
+  @override
+  String get closeAccountConfirmMessage =>
+      '取引履歴はそのまま保持されます。再開するまで、新しい取引には使用できなくなります。';
+
+  @override
+  String get closeCreditCardConfirmTitle => 'このカードを停止しますか？';
+
+  @override
+  String get closeCreditCardConfirmMessage =>
+      '取引履歴はそのまま保持されます。再開するまで、新しい支払いや返済には使用できなくなります。';
+
+  @override
+  String get reactivateAccountConfirmTitle => 'この口座を再開しますか？';
+
+  @override
+  String get reactivateAccountConfirmMessage =>
+      '既存の履歴や残高はそのまま、新しい取引に再び使用できるようになります。';
+
+  @override
+  String get accountClosedLabel => '閉鎖済み';
+
+  @override
+  String get closedAccountsSectionHeader => '閉鎖済みの口座';
+
+  @override
+  String get accountHasActiveRecurringRulesMessage =>
+      'この口座はまだ1件以上の定期ルールで使用されています。先にそれらを変更または削除してから、もう一度お試しください。';
+
+  @override
+  String couldNotCloseAccountMessage(String error) {
+    return 'この口座を閉じられませんでした: $error';
+  }
+
+  @override
+  String couldNotReactivateAccountMessage(String error) {
+    return 'この口座を再開できませんでした: $error';
+  }
+
+  @override
   String budgetsScreenTitle(String month) {
     return '予算 · $month';
   }
@@ -898,4 +948,227 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get cloudAccountDialogDismissLabel => 'OK';
+
+  @override
+  String get addAccountTypeScreenTitle => '口座を追加';
+
+  @override
+  String get addAccountTypeCashTitle => '現金';
+
+  @override
+  String get addAccountTypeCashDescription => 'お財布の中の紙幣など、手元で管理する現金です。';
+
+  @override
+  String get addAccountTypeBankTitle => '銀行口座';
+
+  @override
+  String get addAccountTypeBankDescription => '普通預金など、日常使いの銀行口座です。';
+
+  @override
+  String get addAccountTypeSavingsTitle => '貯蓄口座';
+
+  @override
+  String get addAccountTypeSavingsDescription => '日常の支払いとは別に管理する貯蓄用の口座です。';
+
+  @override
+  String get addAccountTypeWalletTitle => '電子マネー / ウォレット';
+
+  @override
+  String get addAccountTypeWalletDescription =>
+      'プリペイド式アプリの残高など、デジタルウォレットや電子マネーの残高です。';
+
+  @override
+  String get addAccountTypeDepositTitle => '定期預金';
+
+  @override
+  String get addAccountTypeDepositDescription => '満期まで利息がつく、定期または積立の預金です。';
+
+  @override
+  String get addAccountTypeCreditCardTitle => 'クレジットカード';
+
+  @override
+  String get addAccountTypeCreditCardDescription =>
+      '利用限度額のある、支払い義務が生じるクレジットカードの残高です。';
+
+  @override
+  String get addAccountAmountOwedLabel => '現在の未払い残高';
+
+  @override
+  String get addAccountPrincipalLabel => '預入金額';
+
+  @override
+  String get addAccountInstitutionLabel => '金融機関 (任意)';
+
+  @override
+  String get addAccountInstitutionHint => '例: 三菱UFJ銀行、みずほ銀行';
+
+  @override
+  String get addAccountCreditLimitLabel => '利用限度額';
+
+  @override
+  String get addAccountCardNetworkLabel => 'カードブランド (任意)';
+
+  @override
+  String get addAccountCardNetworkNone => '指定なし';
+
+  @override
+  String get addAccountCardNetworkVisa => 'Visa';
+
+  @override
+  String get addAccountCardNetworkMastercard => 'Mastercard';
+
+  @override
+  String get addAccountCardNetworkJcb => 'JCB';
+
+  @override
+  String get addAccountCardNetworkAmex => 'American Express';
+
+  @override
+  String get addAccountCardNetworkOther => 'その他';
+
+  @override
+  String get addAccountLast4Label => '末尾4桁 (任意)';
+
+  @override
+  String get addAccountLast4ErrorMessage => '4桁の数字を入力してください。';
+
+  @override
+  String get addAccountExpiryMonthLabel => '有効期限の月 (任意)';
+
+  @override
+  String get addAccountExpiryYearLabel => '有効期限の年 (任意)';
+
+  @override
+  String get addAccountStatementClosingDayLabel => '締め日 (任意)';
+
+  @override
+  String get addAccountDueDayLabel => '支払期日 (任意)';
+
+  @override
+  String get addAccountDayOfMonthErrorMessage => '1から31の間の日を入力してください。';
+
+  @override
+  String get addAccountDepositTypeLabel => '預金の種類';
+
+  @override
+  String get addAccountDepositTypeFixed => '固定期間';
+
+  @override
+  String get addAccountDepositTypeShortTerm => '短期';
+
+  @override
+  String get addAccountDepositTypeRecurring => '積立';
+
+  @override
+  String get addAccountDepositTypeOther => 'その他';
+
+  @override
+  String get addAccountStartDateLabel => '開始日';
+
+  @override
+  String get addAccountChooseStartDateMessage => '開始日を選択してください。';
+
+  @override
+  String get addAccountAnnualRateLabel => '年利 (%)';
+
+  @override
+  String get addAccountInterestMethodLabel => '利息の計算方法';
+
+  @override
+  String get addAccountInterestMethodSimple => '単利';
+
+  @override
+  String get addAccountInterestMethodCompound => '複利';
+
+  @override
+  String get addAccountTermNumberLabel => '預入期間';
+
+  @override
+  String get addAccountTermNumberErrorMessage => '1以上の期間を入力してください。';
+
+  @override
+  String get addAccountTermUnitLabel => '期間の単位';
+
+  @override
+  String get addAccountTermUnitDays => '日';
+
+  @override
+  String get addAccountTermUnitMonths => 'ヶ月';
+
+  @override
+  String get addAccountTermUnitYears => '年';
+
+  @override
+  String get addAccountCompoundingFrequencyLabel => '複利計算の頻度';
+
+  @override
+  String get addAccountCompoundingFrequencyMonthly => '毎月';
+
+  @override
+  String get addAccountCompoundingFrequencyQuarterly => '四半期ごと';
+
+  @override
+  String get addAccountCompoundingFrequencySemiannual => '半年ごと';
+
+  @override
+  String get addAccountCompoundingFrequencyAnnual => '毎年';
+
+  @override
+  String get addAccountCompoundingFrequencyAtMaturity => '満期時';
+
+  @override
+  String get addAccountChooseCompoundingFrequencyMessage => '複利計算の頻度を選択してください。';
+
+  @override
+  String get addAccountAutoRenewLabel => '満期時に自動更新する';
+
+  @override
+  String get addAccountInstallmentAmountLabel => '積立金額 (任意)';
+
+  @override
+  String get addAccountInstallmentFrequencyLabel => '積立の頻度 (任意)';
+
+  @override
+  String get addAccountInstallmentFrequencyNone => '指定なし';
+
+  @override
+  String get addAccountInstallmentFrequencyWeekly => '毎週';
+
+  @override
+  String get addAccountInstallmentFrequencyMonthly => '毎月';
+
+  @override
+  String get addAccountInstallmentFrequencyQuarterly => '四半期ごと';
+
+  @override
+  String get addAccountInstallmentFrequencyYearly => '毎年';
+
+  @override
+  String get addAccountInterestDestinationLabel => '利息の受取先 (任意)';
+
+  @override
+  String get addAccountNoneOption => 'なし';
+
+  @override
+  String get addAccountEstimatedInterestLabel => '予想利息';
+
+  @override
+  String get addAccountEstimatedMaturityValueLabel => '満期時の予想金額';
+
+  @override
+  String get addAccountEstimatedMaturityDateLabel => '予想満期日';
+
+  @override
+  String get addAccountEstimateDisclaimer => 'これは目安です -- 銀行が保証する金額ではありません。';
+
+  @override
+  String get addAccountCreateButton => '口座を作成';
+
+  @override
+  String addAccountCreationFailedMessage(String error) {
+    return '口座を作成できませんでした: $error';
+  }
+
+  @override
+  String get addAccountExpiryMonthErrorMessage => '1から12の間の月を入力してください。';
 }

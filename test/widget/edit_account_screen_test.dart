@@ -1,8 +1,19 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/credit_facility_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/deposit_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/financial_institution_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/payment_instrument_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
+import 'package:ai_financial_coach/core/database/services/account_creation_service.dart';
+import 'package:ai_financial_coach/core/finance/account_creation_kind.dart';
+import 'package:ai_financial_coach/core/finance/balance_class.dart';
+import 'package:ai_financial_coach/core/finance/deposit_interest_method.dart';
+import 'package:ai_financial_coach/core/finance/deposit_term_unit.dart';
+import 'package:ai_financial_coach/core/finance/deposit_type.dart';
+import 'package:ai_financial_coach/core/finance/financial_account_subtype.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/account_detail_screen.dart';
@@ -95,6 +106,23 @@ void main() {
     container.dispose();
     await tester.pumpAndSettle();
     await db.close();
+  }
+
+  /// Checkpoint G Android regression repair: builds a real
+  /// `AccountCreationService` (the exact production composition used by
+  /// `AddAccountFormScreen`) so these regression tests create accounts
+  /// the same way the app actually does, rather than hand-rolling
+  /// `createClassifiedAccount`/child-repository calls that could drift
+  /// from what production really composes.
+  AccountCreationService buildCreationService(AppDatabase db, AccountRepository accountRepo) {
+    return AccountCreationService(
+      db: db,
+      accountRepository: accountRepo,
+      creditFacilityRepository: CreditFacilityRepository(db, accountRepo),
+      depositRepository: DepositRepository(db, accountRepo),
+      paymentInstrumentRepository: PaymentInstrumentRepository(db, accountRepo),
+      financialInstitutionRepository: FinancialInstitutionRepository(db),
+    );
   }
 
   /// Detail -> tap Edit -- lands on the real `EditAccountScreen`.
@@ -327,5 +355,259 @@ void main() {
       final AccountRow row = await accountRepo.requireById(accountId);
       expect(row.name, 'Main Wallet'); // unchanged -- no edit was made, just saved as-is
     });
+  });
+
+  // ==========================================================================
+  // Checkpoint G Android regression repair.
+  //
+  // Manual Android testing found that opening Edit on a G-created credit
+  // card threw: "There should be exactly one item with [DropdownButton]'s
+  // value: creditCard. Either zero or 2 or more [DropdownMenuItem]s were
+  // detected with the same value." Root cause: `EditAccountScreen`'s type
+  // dropdown built its items from the closed, pre-Checkpoint-G
+  // `kAccountTypes` list (`cash`/`bank`/`card`/`wallet`), but
+  // `AccountCreationKind.legacyTypeLabel` -- what G actually stores in
+  // `Accounts.type` -- can also be `savings`/`deposit`/`creditCard`, none
+  // of which were in that list. `savings`/`deposit`/`creditCard` all had
+  // the same latent defect; only `cash`/`bank`/`wallet` happened to
+  // already match a legacy label.
+  //
+  // The repair (see `account_type_presentation.dart`'s
+  // `kEditableAccountTypeLabels`/`isAccountTypeEditable`, and
+  // `account_form_fields.dart`'s `typeOptions`/`typeEditable`):
+  // `savings` was added to the freely-relabelable set (safe -- it shares
+  // `bank`'s exact `FinancialAccountSubtype`, so relabeling is purely
+  // cosmetic); `deposit`/`creditCard` instead get a read-only type
+  // display, since those two subtypes carry a mandatory composite record
+  // and relabeling them would misrepresent (without truly being able to
+  // change) what the account actually is. `AccountRepository.updateAccount`
+  // has no `balanceClass`/`subtype` parameter at all, so no path through
+  // this screen -- editable or not -- can ever mutate either.
+  group('Checkpoint G Android regression repair: simple kinds stay freely relabelable', () {
+    const List<(AccountCreationKind, String)> simpleCases = <(AccountCreationKind, String)>[
+      (AccountCreationKind.cash, 'cash'),
+      (AccountCreationKind.bank, 'bank'),
+      (AccountCreationKind.savings, 'Savings account'),
+      (AccountCreationKind.wallet, 'wallet'),
+    ];
+    for (final (AccountCreationKind kind, String expectedLabel) in simpleCases) {
+      testWidgets(
+        'a G-created ${kind.name} account opens in Edit with its type shown as an editable '
+        'dropdown, and a rename saves without touching currency/balanceClass/subtype',
+        (tester) async {
+          final (AppDatabase db, String profileId) = await seededDb();
+          final AccountRepository accountRepo = AccountRepository(db);
+          final AccountCreationService service = buildCreationService(db, accountRepo);
+          final String accountId = await service.createSimpleAccount(
+            kind: kind,
+            profileId: profileId,
+            name: 'Test account',
+            currencyCode: 'JPY',
+          );
+          final ProviderContainer container =
+              ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+          addTearDown(() => disposeInOrder(tester, container, db));
+
+          await tester.pumpWidget(appWithRouter(container, accountId));
+          await openEdit(tester);
+
+          expect(tester.takeException(), isNull);
+          expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+          expect(find.text(expectedLabel), findsOneWidget);
+
+          await tester.enterText(find.byType(TextFormField).first, 'Renamed');
+          await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          final AccountRow after = await accountRepo.requireById(accountId);
+          expect(after.name, 'Renamed');
+          expect(after.subtypeValue, kind.subtype);
+          expect(after.balanceClassValue, kind.balanceClass);
+          expect(after.currencyCode, 'JPY');
+        },
+      );
+    }
+  });
+
+  group(
+    'Checkpoint G Android regression repair: deposit/credit-card get a read-only type display',
+    () {
+      testWidgets(
+        'a G-created deposit account opens in Edit without exception, shows a read-only type '
+        'display (not a dropdown), and neither opening it nor renaming it duplicates its '
+        'DepositDetails row or touches currency/balanceClass/subtype',
+        (tester) async {
+          final (AppDatabase db, String profileId) = await seededDb();
+          final AccountRepository accountRepo = AccountRepository(db);
+          final AccountCreationService service = buildCreationService(db, accountRepo);
+          final DepositCreationResult created = await service.createDepositAccount(
+            profileId: profileId,
+            name: 'Fixed deposit',
+            currencyCode: 'JPY',
+            principal: Money.fromMinorUnits(100000, 'JPY'),
+            depositType: DepositType.fixed,
+            termNumber: 12,
+            termUnit: DepositTermUnit.months,
+            startDateUtc: DateTime.utc(2026, 1, 1),
+            interestRateBasisPoints: 500,
+            interestMethod: DepositInterestMethod.simple,
+          );
+          Future<int> depositDetailsCount() async =>
+              (await db.select(db.depositDetails).get()).length;
+
+          final ProviderContainer container =
+              ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+          addTearDown(() => disposeInOrder(tester, container, db));
+
+          await tester.pumpWidget(appWithRouter(container, created.accountId));
+          await openEdit(tester);
+
+          expect(tester.takeException(), isNull);
+          // No forbidden subtype-changing dropdown -- a read-only display instead.
+          expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+          expect(find.widgetWithText(TextFormField, 'Deposit'), findsOneWidget);
+          expect(await depositDetailsCount(), 1); // merely opening created no second row
+
+          await tester.enterText(find.byType(TextFormField).first, 'Renamed deposit');
+          await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(await depositDetailsCount(), 1); // still exactly one -- not duplicated
+
+          final AccountRow after = await accountRepo.requireById(created.accountId);
+          expect(after.name, 'Renamed deposit');
+          expect(after.subtypeValue, FinancialAccountSubtype.deposit);
+          expect(after.balanceClassValue, BalanceClass.asset);
+          expect(after.currencyCode, 'JPY');
+        },
+      );
+
+      testWidgets(
+        'REGRESSION: a G-created credit-card account (subtype creditCard) previously crashed '
+        "Edit with the DropdownButtonFormField 'exactly one matching item' assertion -- it now "
+        'opens without exception, shows a read-only type display, and neither opening it nor '
+        'renaming it duplicates its CreditFacilityDetails/PaymentInstrument row or changes its '
+        'liability balanceClass/subtype/currency',
+        (tester) async {
+          final (AppDatabase db, String profileId) = await seededDb();
+          final AccountRepository accountRepo = AccountRepository(db);
+          final AccountCreationService service = buildCreationService(db, accountRepo);
+          final CreditCardCreationResult created = await service.createCreditCardAccount(
+            profileId: profileId,
+            name: 'Everyday card',
+            currencyCode: 'JPY',
+            owedAmount: Money.fromMinorUnits(15000, 'JPY'),
+            creditLimit: Money.fromMinorUnits(500000, 'JPY'),
+          );
+          Future<int> facilityCount() async =>
+              (await db.select(db.creditFacilityDetails).get()).length;
+          Future<int> instrumentCount() async =>
+              (await db.select(db.paymentInstruments).get()).length;
+
+          final ProviderContainer container =
+              ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+          addTearDown(() => disposeInOrder(tester, container, db));
+
+          await tester.pumpWidget(appWithRouter(container, created.accountId));
+          await openEdit(tester);
+
+          // This is exactly the scenario that used to throw: opening Edit on
+          // a `subtype: creditCard` account. The fix makes creditCard a
+          // read-only display instead of a dropdown value, so there is no
+          // DropdownButtonFormField<String> -- and therefore no "exactly
+          // one matching item" assertion -- for this account at all.
+          expect(tester.takeException(), isNull);
+          expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+          expect(find.widgetWithText(TextFormField, 'Credit card'), findsOneWidget);
+          expect(await facilityCount(), 1);
+          expect(await instrumentCount(), 1);
+
+          await tester.enterText(find.byType(TextFormField).first, 'Renamed card');
+          await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          expect(await facilityCount(), 1); // not duplicated by opening/saving Edit
+          expect(await instrumentCount(), 1);
+
+          final AccountRow after = await accountRepo.requireById(created.accountId);
+          expect(after.name, 'Renamed card');
+          expect(after.subtypeValue, FinancialAccountSubtype.creditCard);
+          expect(after.balanceClassValue, BalanceClass.liability);
+          expect(after.currencyCode, 'JPY');
+        },
+      );
+
+      testWidgets(
+        'cancel/back on a credit-card account leaves it, and its CreditFacilityDetails/'
+        'PaymentInstrument rows, completely untouched',
+        (tester) async {
+          final (AppDatabase db, String profileId) = await seededDb();
+          final AccountRepository accountRepo = AccountRepository(db);
+          final AccountCreationService service = buildCreationService(db, accountRepo);
+          final CreditCardCreationResult created = await service.createCreditCardAccount(
+            profileId: profileId,
+            name: 'Everyday card',
+            currencyCode: 'JPY',
+            owedAmount: Money.fromMinorUnits(15000, 'JPY'),
+            creditLimit: Money.fromMinorUnits(500000, 'JPY'),
+          );
+          final AccountRow before = await accountRepo.requireById(created.accountId);
+
+          final ProviderContainer container =
+              ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+          addTearDown(() => disposeInOrder(tester, container, db));
+
+          await tester.pumpWidget(appWithRouter(container, created.accountId));
+          await openEdit(tester);
+          await tester.enterText(find.byType(TextFormField).first, 'Never saved');
+
+          // Android-style back -- the AppBar's implicit back button, not Save.
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          final AccountRow after = await accountRepo.requireById(created.accountId);
+          expect(after.name, before.name);
+          expect(after.subtype, before.subtype);
+          expect(after.balanceClass, before.balanceClass);
+          expect(after.currencyCode, before.currencyCode);
+          expect((await db.select(db.creditFacilityDetails).get()).length, 1);
+          expect((await db.select(db.paymentInstruments).get()).length, 1);
+        },
+      );
+    },
+  );
+
+  group("Checkpoint G Android regression repair: legacy/pre-G accounts keep today's behavior", () {
+    testWidgets(
+      "a legacy type: 'card' account (subtype legacyCardNeedsReview) keeps its existing "
+      'editable type dropdown, unaffected by the deposit/creditCard read-only change',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Old card',
+          type: 'card',
+          currencyCode: 'JPY',
+        );
+        final AccountRow seeded = await accountRepo.requireById(accountId);
+        expect(seeded.subtypeValue, FinancialAccountSubtype.legacyCardNeedsReview); // sanity
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openEdit(tester);
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+        expect(find.text('card'), findsOneWidget);
+      },
+    );
   });
 }

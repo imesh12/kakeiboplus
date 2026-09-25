@@ -15,6 +15,27 @@ abstract class AppRoutes {
   static const String profile = '/profile';
   static const String accounts = '/accounts';
 
+  /// Checkpoint G (Add Account UX, docs/20 §13.4): the icon-led
+  /// account-type chooser -- the FAB on [accounts] now pushes here
+  /// instead of opening the old `_AddAccountDialog`. Registered BEFORE
+  /// [accountDetailPath] below in `app_router.dart` -- both are
+  /// 2-segment `/accounts/...` paths, and GoRouter matches routes in
+  /// list order, so the literal `/accounts/add` must be tried before
+  /// the parameterized `/accounts/:id` or the latter would swallow it
+  /// (the same `addTransaction`-before-`transactionDetailPath`
+  /// precedent already established above).
+  static const String addAccount = '/accounts/add';
+
+  /// Path template for [GoRoute] registration -- see [addAccountForm]
+  /// for building an actual navigable path for a specific
+  /// `AccountCreationKind.name`. The adaptive Add Account form screen,
+  /// reached by choosing a type on [addAccount].
+  static const String addAccountFormPath = '/accounts/add/:kind';
+
+  /// The path for the Add Account form for [kind] -- an
+  /// `AccountCreationKind.name` string (e.g. `'cash'`, `'creditCard'`).
+  static String addAccountForm(String kind) => '/accounts/add/$kind';
+
   /// Path template for [GoRoute] registration -- see [accountDetail] for
   /// building an actual navigable path for a specific account id. V1
   /// Accounts Detail + Edit Checkpoint. A pushed screen with no bottom

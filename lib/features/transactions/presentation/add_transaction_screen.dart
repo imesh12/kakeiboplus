@@ -171,6 +171,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       _ => colors.error,
     };
     final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+    // Account Lifecycle Compatibility repair: `allAccountsProvider`
+    // (the same active+closed list Activity/Transaction Detail's own
+    // Closed-label logic already reads) is what lets EDIT mode resolve
+    // a transaction's persisted account even after it's been closed.
+    // `accountsProvider` above stays active-only and is never itself
+    // widened -- a closed account still can't become generally
+    // selectable anywhere else in the app; see
+    // `_selectableSourceAccounts` below for the actual policy.
+    final AsyncValue<List<AccountRow>> allAccountsAsync = ref.watch(allAccountsProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(_titleFor(l10n, _type))),
@@ -180,7 +189,49 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           error: (Object e, StackTrace st) =>
               Center(child: Text(l10n.couldNotLoadAccounts(e.toString()))),
           data: (List<AccountRow> accounts) {
-            if (accounts.isEmpty) {
+            // Account Lifecycle Compatibility repair -- fixes the exact
+            // Android crash this repair was written for: "There should
+            // be exactly one item with [DropdownButton]'s value: <id>.
+            // Either zero or 2 or more [DropdownMenuItem]s were
+            // detected with the same value." That happened because the
+            // account dropdown's `items` came only from `accounts`
+            // (active-only), while EDIT mode seeds `_accountId`/
+            // `_destinationAccountId` from the transaction's PERSISTED
+            // account ids in `initState` -- if either account has
+            // since been closed, it's absent from `accounts` and the
+            // dropdown had zero matching items instead of exactly one.
+            //
+            // `sourceOptions`/`destinationOptions` are each `accounts`
+            // itself for a NEW transaction (`widget.existingTransaction
+            // == null`) -- unchanged, closed accounts stay unselectable
+            // there -- and, in edit mode, `accounts` plus, if and only
+            // if the transaction's own persisted source/destination
+            // account has since been closed, exactly that one account
+            // appended. The two lists are computed independently
+            // (never merged) so a closed source is never offered as a
+            // destination, or vice versa. `allAccountsAsync.valueOrNull
+            // ?? const []` (rather than gating this whole build on it)
+            // is deliberate: on the rare frame where it hasn't resolved
+            // yet, `sourceOptions`/`destinationOptions` simply fall
+            // back to `accounts` alone, and the guarded
+            // `initialValue`s below (`... .any(...) ? id : null`) mean
+            // that transient frame shows no selection rather than
+            // crashing -- it self-corrects on the very next frame once
+            // `allAccountsAsync` resolves.
+            final List<AccountRow> allAccounts = allAccountsAsync.valueOrNull ?? const <AccountRow>[];
+            final List<AccountRow> sourceOptions = _selectableSourceAccounts(accounts, allAccounts);
+            final List<AccountRow> destinationOptions =
+                _selectableDestinationAccounts(accounts, allAccounts);
+            // Account Lifecycle Compatibility repair: this empty check
+            // now guards on `sourceOptions`, not the plain active
+            // `accounts` list -- a user whose only account has since
+            // been closed still has a valid historical transaction to
+            // edit, and must reach the real edit form (with that one
+            // closed account representable, per the policy above), not
+            // this "add an account first" message, which is only truly
+            // correct when there is nothing at all to select from (the
+            // unchanged behavior for a brand NEW transaction).
+            if (sourceOptions.isEmpty) {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
@@ -188,8 +239,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                 ),
               );
             }
-            _accountId ??= accounts.first.id;
-            final AccountRow? selectedAccount = _findAccount(accounts, _accountId);
+            if (accounts.isNotEmpty) _accountId ??= accounts.first.id;
+            final AccountRow? selectedAccount = _findAccount(sourceOptions, _accountId);
 
             return Form(
               key: _formKey,
@@ -247,7 +298,24 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                     child: Column(
                       children: <Widget>[
                         DropdownButtonFormField<String>(
-                          initialValue: _accountId,
+                          // Account Lifecycle Compatibility repair:
+                          // guarded exactly like
+                          // `_DestinationAccountDropdown`'s own
+                          // `initialValue` already was -- only ever
+                          // pass a value that's actually present in
+                          // `sourceOptions`. For a closed-but-
+                          // resolvable persisted account this is
+                          // always true (it was appended just for
+                          // this, above). For a genuinely missing/
+                          // unresolvable persisted account id (never
+                          // produced by this app's soft-delete-only
+                          // lifecycle, but handled defensively) this
+                          // gracefully shows no selection instead of
+                          // crashing -- it never fabricates a fake item
+                          // for it.
+                          initialValue: sourceOptions.any((AccountRow a) => a.id == _accountId)
+                              ? _accountId
+                              : null,
                           // CP6.2 follow-up: `isExpanded: true` -- without it,
                           // `DropdownButton`'s own inner Row sizes itself to the
                           // UNCLAMPED intrinsic width of the selected item's Text,
@@ -265,11 +333,24 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                             labelText: _isTransfer ? l10n.fromAccountLabel : l10n.accountLabel,
                           ),
                           items: <DropdownMenuItem<String>>[
-                            for (final AccountRow account in accounts)
+                            for (final AccountRow account in sourceOptions)
                               DropdownMenuItem<String>(
                                 value: account.id,
                                 child: Text(
-                                  '${account.name} (${account.currencyCode})',
+                                  // Account Lifecycle Compatibility
+                                  // repair: the only account this list
+                                  // can ever contain with `deletedAt !=
+                                  // null` is the transaction's own
+                                  // persisted (now-closed) account
+                                  // appended above -- reuses the
+                                  // existing `accountClosedLabel`
+                                  // Activity/Transaction Detail already
+                                  // show the same way; no new
+                                  // localization.
+                                  account.deletedAt != null
+                                      ? '${account.name} (${account.currencyCode}) · '
+                                          '${l10n.accountClosedLabel}'
+                                      : '${account.name} (${account.currencyCode})',
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -289,8 +370,8 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                             ),
                           ),
                           _DestinationAccountDropdown(
-                            accounts: accounts,
-                            sourceAccountId: _accountId,
+                            accounts: destinationOptions,
+                            sourceAccount: selectedAccount,
                             value: _destinationAccountId,
                             onChanged: (String? id) => setState(() => _destinationAccountId = id),
                           ),
@@ -435,6 +516,69 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       if (a.id == id) return a;
     }
     return null;
+  }
+
+  /// Accounts the SOURCE/account dropdown may offer -- Account
+  /// Lifecycle Compatibility repair (fixes the exact Android crash:
+  /// "There should be exactly one item with [DropdownButton]'s value:
+  /// ...", zero matches, when editing a historical transaction whose
+  /// account has since been closed -- see this method's call site's
+  /// own doc comment for the full story). For a NEW transaction
+  /// ([widget.existingTransaction] null) this is always exactly
+  /// [activeAccounts], unchanged -- closed accounts must never be
+  /// selectable for something new. In edit mode, if the transaction's
+  /// currently persisted account has since been closed, that ONE
+  /// account is appended so the persisted value stays representable;
+  /// every other closed account remains absent.
+  List<AccountRow> _selectableSourceAccounts(
+    List<AccountRow> activeAccounts,
+    List<AccountRow> allAccounts,
+  ) {
+    final Transaction? existing = widget.existingTransaction;
+    if (existing == null) return activeAccounts;
+    return _withPersistedAccountIfClosed(activeAccounts, allAccounts, existing.accountId);
+  }
+
+  /// Same idea as [_selectableSourceAccounts], but for the
+  /// transaction's persisted DESTINATION account (transfers only) --
+  /// kept as its own list (never merged with the source list) so a
+  /// closed source is never accidentally offered as a destination, and
+  /// vice versa, even when both sides of one transfer are closed.
+  List<AccountRow> _selectableDestinationAccounts(
+    List<AccountRow> activeAccounts,
+    List<AccountRow> allAccounts,
+  ) {
+    final String? destinationId = widget.existingTransaction?.destinationAccountId;
+    if (destinationId == null) return activeAccounts;
+    return _withPersistedAccountIfClosed(activeAccounts, allAccounts, destinationId);
+  }
+
+  /// If [persistedId] already names one of [activeAccounts], returns
+  /// [activeAccounts] unchanged -- an active account never needs (or
+  /// gets) a second, duplicate entry from this compatibility path;
+  /// dedup is by account id. Otherwise looks up [persistedId] in
+  /// [allAccounts] ([allAccountsProvider]'s active+closed snapshot) and
+  /// appends that row only if it's genuinely found there. A
+  /// [persistedId] that resolves to nothing in either list -- a
+  /// genuinely missing/deleted account, never produced by this app's
+  /// soft-delete-only lifecycle, but handled defensively -- is never
+  /// fabricated into a fake dropdown item; the caller's own
+  /// `sourceOptions.any(...)`/`eligible.any(...)` guard is what then
+  /// keeps the dropdown's displayed value gracefully unselected instead
+  /// of crashing.
+  List<AccountRow> _withPersistedAccountIfClosed(
+    List<AccountRow> activeAccounts,
+    List<AccountRow> allAccounts,
+    String persistedId,
+  ) {
+    if (activeAccounts.any((AccountRow a) => a.id == persistedId)) {
+      return activeAccounts;
+    }
+    final AccountRow? persisted = _findAccount(allAccounts, persistedId);
+    if (persisted == null) {
+      return activeAccounts;
+    }
+    return <AccountRow>[...activeAccounts, persisted];
   }
 
   Future<void> _pickDate() async {
@@ -613,13 +757,28 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
 class _DestinationAccountDropdown extends StatelessWidget {
   const _DestinationAccountDropdown({
     required this.accounts,
-    required this.sourceAccountId,
+    required this.sourceAccount,
     required this.value,
     required this.onChanged,
   });
 
+  /// Account Lifecycle Compatibility repair: callers now pass the
+  /// already edit-compatible destination list -- active accounts,
+  /// plus the transaction's persisted destination account only if it's
+  /// since been closed (see
+  /// `_AddTransactionScreenState._selectableDestinationAccounts`) --
+  /// rather than the plain active list. This widget itself still knows
+  /// nothing about "closed"; it just filters whatever it's given to
+  /// same-currency, non-source options, exactly as before.
   final List<AccountRow> accounts;
-  final String? sourceAccountId;
+
+  /// Account Lifecycle Compatibility repair: the source account is now
+  /// passed in already resolved (it may itself be a closed account
+  /// still being edited), instead of a bare id this widget had to
+  /// search `accounts` for -- searching `accounts` would have failed
+  /// to find a closed source, since `accounts` here only ever holds
+  /// destination-side candidates.
+  final AccountRow? sourceAccount;
   final String? value;
   final ValueChanged<String?> onChanged;
 
@@ -629,28 +788,17 @@ class _DestinationAccountDropdown extends StatelessWidget {
     // `AddTransactionScreen.build`'s -- it's a separate `StatelessWidget`
     // with its own `context`, same pattern `_CategoryDropdown` below uses.
     final AppLocalizations l10n = AppLocalizations.of(context);
-    AccountRow? source;
-    for (final AccountRow candidate in accounts) {
-      if (candidate.id == sourceAccountId) {
-        source = candidate;
-        break;
-      }
-    }
     // ADR-019 (Decision 5): Beta 0 supports same-currency transfers only.
     // Enforced here at the form layer by only ever offering same-currency
     // destinations — not just relying on the repository to reject an
     // invalid choice after the fact.
-    //
-    // `source` is copied to a non-nullable local before the closure below
-    // because Dart does not carry null-promotion of a captured variable
-    // into a closure.
     final List<AccountRow> eligible;
-    final AccountRow? sourceAccount = source;
-    if (sourceAccount == null) {
+    final AccountRow? source = sourceAccount;
+    if (source == null) {
       eligible = const <AccountRow>[];
     } else {
       eligible = accounts
-          .where((a) => a.id != sourceAccount.id && a.currencyCode == sourceAccount.currencyCode)
+          .where((a) => a.id != source.id && a.currencyCode == source.currencyCode)
           .toList(growable: false);
     }
 
@@ -662,17 +810,35 @@ class _DestinationAccountDropdown extends StatelessWidget {
     }
 
     return DropdownButtonFormField<String>(
+      // Account Lifecycle Compatibility repair: this guard already
+      // existed before the repair (a destination that fell out of
+      // `eligible` -- e.g. the source account changed -- fell back to
+      // no selection rather than crashing); it now ALSO covers the new
+      // "current destination is closed" case, since a closed
+      // destination is only ever in `eligible` when it's the
+      // transaction's own persisted one.
       initialValue: eligible.any((a) => a.id == value) ? value : null,
       // See the account dropdown's own comment above (same file) --
-      // without this, a long account name can overflow this button's row
-      // at a narrow viewport/large text scale in any locale.
+      // without this, a long account name can overflow this button's
+      // row at a narrow viewport/large text scale in any locale.
       isExpanded: true,
       decoration: InputDecoration(labelText: l10n.toAccountLabel),
       items: <DropdownMenuItem<String>>[
         for (final AccountRow account in eligible)
           DropdownMenuItem<String>(
             value: account.id,
-            child: Text(account.name, overflow: TextOverflow.ellipsis),
+            child: Text(
+              // Account Lifecycle Compatibility repair: the only
+              // account `eligible` can ever contain with `deletedAt !=
+              // null` is the transaction's own persisted (now-closed)
+              // destination -- reuses the existing `accountClosedLabel`
+              // Activity/Transaction Detail already show the same way;
+              // no new localization.
+              account.deletedAt != null
+                  ? '${account.name} · ${l10n.accountClosedLabel}'
+                  : account.name,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: onChanged,

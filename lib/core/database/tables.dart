@@ -169,9 +169,31 @@ class Accounts extends Table {
   /// Money, stored as integer minor units — see ADR-017. Never a REAL
   /// column.
   IntColumn get openingBalanceMinorUnits => integer().withDefault(const Constant(0))();
+
+  /// Account Lifecycle Checkpoint: together with [deletedAt] below, this
+  /// is what "closed" (a.k.a. "deactivated"/"reopened") means for an
+  /// account -- `AccountRepository.softDelete`/`reactivate` toggle both
+  /// together, and `AccountRepository.watchActiveForProfile` filters on
+  /// both. Unlike every OTHER `deletedAt` in this schema (`Transactions`/
+  /// `Budgets`/`RecurringRules`/`SavingsGoals`, each a permanent, no-undo
+  /// -UI delete from the user's perspective), an account's is
+  /// deliberately reversible -- see [deletedAt]'s own doc. Present since
+  /// before this checkpoint (schema v2) but never wired to any
+  /// production UI action until now.
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+
+  /// Account Lifecycle Checkpoint: set (together with [isActive] above)
+  /// when a user closes an account via `AccountRepository.softDelete`,
+  /// cleared by `AccountRepository.reactivate`. Deliberately reversible
+  /// -- see [isActive]'s own doc for why this is NOT the same convention
+  /// as every other `deletedAt` in this schema. A closed account's row
+  /// remains fully resolvable (`AccountRepository.watchById`/
+  /// `watchAllForProfile`) for its transaction history and for
+  /// reactivation; only `watchActiveForProfile` (new-transaction
+  /// account-selector population) and the presentation layer's
+  /// "editable" gating treat this as unavailable.
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   /// Checkpoint B (schema v9): the frozen asset/liability classification

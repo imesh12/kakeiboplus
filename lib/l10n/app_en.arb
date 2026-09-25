@@ -231,6 +231,34 @@
   "accountNoRecentActivityMessage": "No recent activity for this account.",
   "editAccountTitle": "Edit account",
   "accountCurrencyLockedMessage": "Currency can't be changed after an account is created.",
+  "closeAccountAction": "Close account",
+  "closeCreditCardAction": "Deactivate card",
+  "reactivateAccountAction": "Reactivate account",
+  "closeAccountConfirmTitle": "Close this account?",
+  "closeAccountConfirmMessage": "Its transaction history stays exactly as it is. It just won't be available for new transactions until you reactivate it.",
+  "closeCreditCardConfirmTitle": "Deactivate this card?",
+  "closeCreditCardConfirmMessage": "Its transaction history stays exactly as it is. It just won't be available for new charges or payments until you reactivate it.",
+  "reactivateAccountConfirmTitle": "Reactivate this account?",
+  "reactivateAccountConfirmMessage": "It will be available for new transactions again, with its existing history and balance unchanged.",
+  "accountClosedLabel": "Closed",
+  "closedAccountsSectionHeader": "Closed accounts",
+  "accountHasActiveRecurringRulesMessage": "This account is still used by one or more recurring rules. Change or delete them first, then try closing this account again.",
+  "couldNotCloseAccountMessage": "Could not close this account: {error}",
+  "@couldNotCloseAccountMessage": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotReactivateAccountMessage": "Could not reactivate this account: {error}",
+  "@couldNotReactivateAccountMessage": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "budgetsScreenTitle": "Budgets · {month}",
   "@budgetsScreenTitle": {
     "placeholders": {
@@ -540,5 +568,86 @@
   "cloudAccountSignOutNeverDeletesLocalDataNote": "Signing out never deletes anything saved on this device.",
   "cloudAccountDifferentAccountDialogTitle": "Can't switch cloud accounts",
   "cloudAccountDifferentAccountDialogMessage": "This device is already linked to a different cloud account. Switching to a new cloud account on a device with existing local data isn't supported yet. Your local data has not been changed.",
-  "cloudAccountDialogDismissLabel": "OK"
+  "cloudAccountDialogDismissLabel": "OK",
+  "addAccountTypeScreenTitle": "Add account",
+  "addAccountTypeCashTitle": "Cash",
+  "addAccountTypeCashDescription": "Physical cash you keep on hand, like bills in your wallet.",
+  "addAccountTypeBankTitle": "Bank account",
+  "addAccountTypeBankDescription": "A checking or everyday account at a bank.",
+  "addAccountTypeSavingsTitle": "Savings account",
+  "addAccountTypeSavingsDescription": "A savings account you keep separate from everyday spending.",
+  "addAccountTypeWalletTitle": "E-money / Wallet",
+  "addAccountTypeWalletDescription": "A digital wallet or e-money balance, like a prepaid app balance.",
+  "addAccountTypeDepositTitle": "Deposit",
+  "addAccountTypeDepositDescription": "A fixed or recurring deposit that earns interest until maturity.",
+  "addAccountTypeCreditCardTitle": "Credit card",
+  "addAccountTypeCreditCardDescription": "A credit card balance you owe, with a credit limit.",
+  "addAccountAmountOwedLabel": "Amount you currently owe",
+  "addAccountPrincipalLabel": "Amount deposited",
+  "addAccountInstitutionLabel": "Institution (optional)",
+  "addAccountInstitutionHint": "e.g. Chase, HSBC",
+  "addAccountCreditLimitLabel": "Credit limit",
+  "addAccountCardNetworkLabel": "Card network (optional)",
+  "addAccountCardNetworkNone": "Not specified",
+  "addAccountCardNetworkVisa": "Visa",
+  "addAccountCardNetworkMastercard": "Mastercard",
+  "addAccountCardNetworkJcb": "JCB",
+  "addAccountCardNetworkAmex": "American Express",
+  "addAccountCardNetworkOther": "Other",
+  "addAccountLast4Label": "Last 4 digits (optional)",
+  "addAccountLast4ErrorMessage": "Enter exactly 4 digits.",
+  "addAccountExpiryMonthLabel": "Expiry month (optional)",
+  "addAccountExpiryYearLabel": "Expiry year (optional)",
+  "addAccountStatementClosingDayLabel": "Statement closing day (optional)",
+  "addAccountDueDayLabel": "Payment due day (optional)",
+  "addAccountDayOfMonthErrorMessage": "Enter a day between 1 and 31.",
+  "addAccountDepositTypeLabel": "Deposit type",
+  "addAccountDepositTypeFixed": "Fixed",
+  "addAccountDepositTypeShortTerm": "Short-term",
+  "addAccountDepositTypeRecurring": "Recurring",
+  "addAccountDepositTypeOther": "Other",
+  "addAccountStartDateLabel": "Start date",
+  "addAccountChooseStartDateMessage": "Choose a start date.",
+  "addAccountAnnualRateLabel": "Annual interest rate (%)",
+  "addAccountInterestMethodLabel": "Interest method",
+  "addAccountInterestMethodSimple": "Simple",
+  "addAccountInterestMethodCompound": "Compound",
+  "addAccountTermNumberLabel": "Term length",
+  "addAccountTermNumberErrorMessage": "Enter a term of at least 1.",
+  "addAccountTermUnitLabel": "Term unit",
+  "addAccountTermUnitDays": "Days",
+  "addAccountTermUnitMonths": "Months",
+  "addAccountTermUnitYears": "Years",
+  "addAccountCompoundingFrequencyLabel": "Compounding frequency",
+  "addAccountCompoundingFrequencyMonthly": "Monthly",
+  "addAccountCompoundingFrequencyQuarterly": "Quarterly",
+  "addAccountCompoundingFrequencySemiannual": "Semiannual",
+  "addAccountCompoundingFrequencyAnnual": "Annual",
+  "addAccountCompoundingFrequencyAtMaturity": "At maturity",
+  "addAccountChooseCompoundingFrequencyMessage": "Choose a compounding frequency.",
+  "addAccountAutoRenewLabel": "Renew automatically at maturity",
+  "addAccountInstallmentAmountLabel": "Installment amount (optional)",
+  "addAccountInstallmentFrequencyLabel": "Installment frequency (optional)",
+  "addAccountInstallmentFrequencyNone": "Not specified",
+  "addAccountInstallmentFrequencyWeekly": "Weekly",
+  "addAccountInstallmentFrequencyMonthly": "Monthly",
+  "addAccountInstallmentFrequencyQuarterly": "Quarterly",
+  "addAccountInstallmentFrequencyYearly": "Yearly",
+  "addAccountInterestDestinationLabel": "Send interest to (optional)",
+  "addAccountNoneOption": "None",
+  "addAccountEstimatedInterestLabel": "Estimated interest",
+  "addAccountEstimatedMaturityValueLabel": "Estimated maturity value",
+  "addAccountEstimatedMaturityDateLabel": "Estimated maturity date",
+  "addAccountEstimateDisclaimer": "Estimate only -- not a guaranteed bank figure.",
+  "addAccountCreateButton": "Create account",
+  "addAccountCreationFailedMessage": "Could not create the account: {error}",
+  "@addAccountCreationFailedMessage": {
+    "description": "addAccountCreationFailedMessage",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addAccountExpiryMonthErrorMessage": "Enter a month between 1 and 12."
 }

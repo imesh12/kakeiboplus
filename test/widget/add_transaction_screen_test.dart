@@ -9,6 +9,7 @@ import 'package:ai_financial_coach/features/transactions/presentation/add_transa
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:ai_financial_coach/shared/widgets/money_text_field.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -907,6 +908,545 @@ void main() {
       expect(find.byType(ChoiceChip), findsNothing);
       expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(2));
     });
+  });
+
+  // -- Account Lifecycle Compatibility repair: closed-account
+  // dropdown crash fix. Reproduces the exact Android production
+  // regression -- editing a historical transaction whose account has
+  // since been closed crashed with `DropdownButton`'s "There should be
+  // exactly one item with [DropdownButton]'s value: <id>. Either zero
+  // or 2 or more [DropdownMenuItem]s were detected with the same
+  // value." -- and locks in the required NEW-vs-EDIT distinction: a
+  // closed account must never be selectable for something new, but an
+  // existing transaction/transfer's own persisted (now-closed) account
+  // must remain representable when editing it.
+  group('Account Lifecycle Compatibility repair: closed-account dropdown', () {
+    Future<(AppDatabase, String profileId)> seededProfile() async {
+      final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
+      final ProfileRepository profileRepo = ProfileRepository(db);
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final String profileId = await profileRepo.createProfile(
+        displayName: 'Test User',
+        homeCountry: 'LK',
+        currentCountry: 'JP',
+        homeCurrency: 'LKR',
+        livingCurrency: 'JPY',
+        preferredLanguage: 'en',
+        timezone: 'Asia/Tokyo',
+        dateFormat: 'yyyy-MM-dd',
+        numberFormat: '#,##0.##',
+      );
+      return (db, profileId);
+    }
+
+    Future<Transaction> transactionRow(AppDatabase db, String id) {
+      return (db.select(db.transactions)..where((tbl) => tbl.id.equals(id))).getSingle();
+    }
+
+    testWidgets(
+      '1: a NEW expense/income transaction never offers a closed account as a selectable '
+      'source',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Active Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final String closedId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Old Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        await accountRepo.softDelete(closedId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, const AddTransactionScreen(initialType: 'expense')),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Old Wallet'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '2: editing a transaction whose account is still active opens successfully with '
+      'existing behavior unchanged -- no Closed label anywhere',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(500, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Edit expense'), findsOneWidget);
+        expect(find.text('Wallet (JPY)'), findsOneWidget);
+        expect(find.textContaining('Closed'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '3: editing a transaction whose source account was subsequently closed opens with no '
+      'Flutter exception, resolves the dropdown to exactly one matching item, shows the '
+      'closed account with a Closed label, and excludes an unrelated closed account',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String walletId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final String unrelatedClosedId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Unrelated Old Account',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        await accountRepo.softDelete(unrelatedClosedId);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: walletId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        await accountRepo.softDelete(walletId);
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        // No DropdownButton assertion, no other exception, across the
+        // whole open sequence -- this is the exact crash this repair
+        // fixes.
+        expect(tester.takeException(), isNull);
+        expect(find.text('Edit expense'), findsOneWidget);
+        // Exactly one matching item is resolved and shown as selected.
+        expect(find.text('Wallet (JPY) · Closed'), findsOneWidget);
+        expect(
+          tester.widget<TextFormField>(find.byType(TextFormField).first).controller!.text,
+          '1200',
+        );
+        expect(find.textContaining('Unrelated Old Account'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '4: saving an unrelated edit while the closed source account remains selected succeeds, '
+      'keeps the transaction on that same account, and never reactivates it',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String walletId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: walletId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          note: 'Lunch',
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        await accountRepo.softDelete(walletId);
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Edit only the note -- the account dropdown is left exactly as
+        // it opened, still showing the closed account.
+        await tester.enterText(find.byType(TextFormField).last, 'Lunch with client');
+        await scrollToSaveButton(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+        await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
+
+        expect(find.text('open'), findsOneWidget); // popped -- saved successfully
+        final Transaction updated = await transactionRow(db, txId);
+        expect(updated.accountId, walletId); // still references the same (closed) account
+        expect(updated.note, 'Lunch with client');
+        expect(updated.amountMinorUnits, 1200); // accounting/amount untouched by this edit
+
+        // A one-shot read (`requireById`), not a live Drift watch
+        // stream -- `.watchById(...).first` awaited the FIRST emission
+        // of a Drift stream query, which Drift schedules via a real
+        // zero-duration `Timer` even inside flutter_test's FakeAsync
+        // zone; with no further `pump`/`pumpAndSettle` call afterward
+        // to elapse that timer, the awaited Future never completed,
+        // hanging this test deterministically until Flutter's 10-minute
+        // test timeout. `requireById` is a plain one-shot `getSingle()`
+        // query -- no stream, no Timer -- exactly like `transactionRow`
+        // above already uses for the same kind of post-save read.
+        final AccountRow account = await accountRepo.requireById(walletId);
+        expect(account.deletedAt, isNotNull); // still closed
+        expect(account.isActive, isFalse); // never reactivated by this edit
+      },
+    );
+
+    testWidgets(
+      '5: after the account is reactivated, the same transaction\'s edit screen behaves like '
+      'an ordinary active-account edit -- no Closed suffix remains',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String walletId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: walletId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        await accountRepo.softDelete(walletId);
+        await accountRepo.reactivate(walletId);
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Wallet (JPY)'), findsOneWidget);
+        expect(find.textContaining('Closed'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '6: editing a transfer whose source account was subsequently closed opens without '
+      'exception, keeps the closed source representable, and leaves an unrelated closed '
+      'account unavailable',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String sourceId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Savings',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final String unrelatedClosedId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Unrelated Old Account',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        await accountRepo.softDelete(unrelatedClosedId);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: sourceId,
+          destinationAccountId: destinationId,
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        await accountRepo.softDelete(sourceId);
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Edit transfer'), findsOneWidget);
+        expect(find.text('Wallet (JPY) · Closed'), findsOneWidget);
+        expect(find.text('Savings'), findsOneWidget);
+        expect(find.textContaining('Unrelated Old Account'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '7: editing a transfer whose destination account was subsequently closed opens without '
+      'exception, keeps the closed destination representable, and preserves same-currency '
+      'destination filtering',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String sourceId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Savings',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        // A different-currency active account -- must never appear as a
+        // destination option, closed or not; proves the pre-existing
+        // same-currency filter (ADR-019) survives this repair.
+        await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'LKR Wallet',
+          type: 'cash',
+          currencyCode: 'LKR',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: sourceId,
+          destinationAccountId: destinationId,
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        await accountRepo.softDelete(destinationId);
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Wallet (JPY)'), findsOneWidget); // source, still active, unaffected
+        expect(find.text('Savings · Closed'), findsOneWidget);
+        expect(find.textContaining('LKR Wallet'), findsNothing); // same-currency filter holds
+      },
+    );
+
+    testWidgets(
+      '8: editing a transfer whose source AND destination were both subsequently closed opens '
+      'without the DropdownButton assertion, resolving each persisted side exactly once',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String sourceId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Savings',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: sourceId,
+          destinationAccountId: destinationId,
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        await accountRepo.softDelete(sourceId);
+        await accountRepo.softDelete(destinationId);
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Wallet (JPY) · Closed'), findsOneWidget);
+        expect(find.text('Savings · Closed'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      '9: a transaction referencing a genuinely missing/unresolvable account opens without '
+      'crashing and never fabricates a fake dropdown option for it',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String walletId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: walletId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+        // Simulates a genuinely missing/unresolvable account reference
+        // -- never produced by this app's own soft-delete-only
+        // lifecycle, but exercised directly here (a raw row update,
+        // bypassing the repository) to prove this repair's dropdown
+        // guard degrades gracefully instead of crashing or fabricating
+        // a fake option, distinct from the "closed" case above.
+        await (db.update(db.transactions)..where((tbl) => tbl.id.equals(txId)))
+            .write(const TransactionsCompanion(accountId: Value('does-not-exist-account')));
+        final Transaction existing = await transactionRow(db, txId);
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        // No DropdownButton assertion, no other exception.
+        expect(tester.takeException(), isNull);
+        expect(find.text('Edit expense'), findsOneWidget); // a real edit form, not an error screen
+        expect(find.textContaining('does-not-exist'), findsNothing); // no fabricated item
+
+        // The persisted (missing) account id matches zero items in
+        // `sourceOptions`, unlike the closed-account case (which IS
+        // pre-selected, with a "· Closed" suffix) -- so the dropdown
+        // opens with no selection at all, and 'Wallet (JPY)' isn't
+        // rendered anywhere until the menu itself is opened. Open it,
+        // the same way test 1/10 above do, to confirm the real, active
+        // account remains a normal, selectable option -- distinct from
+        // both the closed-account and the fabricated-item cases.
+        await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+        await tester.pumpAndSettle();
+        expect(find.text('Wallet (JPY)'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      "10: a NEW transfer's destination dropdown excludes a closed account too -- it never "
+      'appears as a selectable destination',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededProfile();
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Active Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final String closedId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Old Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        await accountRepo.softDelete(closedId);
+        await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Second Active Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, const AddTransactionScreen(initialType: 'transfer')),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Open the destination dropdown -- the second
+        // `DropdownButtonFormField` on a transfer form -- and confirm
+        // the closed account never appears among its items.
+        await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Old Wallet'), findsNothing);
+        expect(find.text('Second Active Wallet'), findsWidgets); // the real eligible option
+      },
+    );
   });
 
   // -- CP6.2 (Localization Phase 1): Full Add Transaction Form
