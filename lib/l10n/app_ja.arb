@@ -116,6 +116,14 @@
     }
   },
   "totalAvailableBalance": "利用可能残高の合計",
+  "homeNetWorthLine": "純資産: {amount}",
+  "@homeNetWorthLine": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "incomeThisMonth": "今月の収入",
   "spentThisMonth": "今月の支出",
   "dailySpendingPace": "1日あたりの支出ペース",

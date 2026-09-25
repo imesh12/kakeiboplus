@@ -200,6 +200,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get totalAvailableBalance => 'Total available balance';
 
   @override
+  String homeNetWorthLine(String amount) {
+    return 'Net worth: $amount';
+  }
+
+  @override
   String get incomeThisMonth => 'Income this month';
 
   @override

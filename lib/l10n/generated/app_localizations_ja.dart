@@ -196,6 +196,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get totalAvailableBalance => '利用可能残高の合計';
 
   @override
+  String homeNetWorthLine(String amount) {
+    return '純資産: $amount';
+  }
+
+  @override
   String get incomeThisMonth => '今月の収入';
 
   @override

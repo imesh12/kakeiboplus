@@ -116,6 +116,15 @@
     }
   },
   "totalAvailableBalance": "Total available balance",
+  "homeNetWorthLine": "Net worth: {amount}",
+  "@homeNetWorthLine": {
+    "description": "Checkpoint I: a small secondary line on the Home dashboard currency card, shown only when net worth (assets minus liabilities, including deposit principal and closed-account balances) differs from the immediately available balance shown as the card's primary figure.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "incomeThisMonth": "Income this month",
   "spentThisMonth": "Spent this month",
   "dailySpendingPace": "Daily spending pace",

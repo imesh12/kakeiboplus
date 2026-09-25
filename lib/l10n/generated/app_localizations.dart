@@ -440,6 +440,12 @@ abstract class AppLocalizations {
   /// **'Total available balance'**
   String get totalAvailableBalance;
 
+  /// Checkpoint I: a small secondary line on the Home dashboard currency card, shown only when net worth (assets minus liabilities, including deposit principal and closed-account balances) differs from the immediately available balance shown as the card's primary figure.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth: {amount}'**
+  String homeNetWorthLine(String amount);
+
   /// No description provided for @incomeThisMonth.
   ///
   /// In en, this message translates to:

@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/repositories/account_repository.dart';
 import '../../../core/finance/finance_engine.dart';
+import '../../../core/finance/financial_account_subtype.dart';
 import '../../../core/finance/ledger_models.dart';
 import '../../../core/money/money.dart';
 import '../../accounts/presentation/account_providers.dart';
@@ -25,7 +26,8 @@ import '../../transactions/presentation/transaction_providers.dart';
 class CurrencyDashboardSummary {
   const CurrencyDashboardSummary({
     required this.currencyCode,
-    required this.balance,
+    required this.availableBalance,
+    required this.netWorth,
     required this.income,
     required this.expense,
     required this.dailyPace,
@@ -33,10 +35,38 @@ class CurrencyDashboardSummary {
 
   final String currencyCode;
 
-  /// Sum of every active account's derived balance in this currency
-  /// (`FinanceEngine.accountBalance`, summed — never a raw stored
-  /// balance column).
-  final Money balance;
+  /// Checkpoint I (docs/20 §13.4 checkpoint I): immediately available/
+  /// liquid money in this currency — the sum of `FinanceEngine.
+  /// accountBalance` over every ACTIVE (`AccountRow.isActive`), ASSET
+  /// (`AccountRowX.isAsset`), NON-DEPOSIT (`subtypeValue !=
+  /// FinancialAccountSubtype.deposit`) account. Deliberately excludes:
+  /// a deposit's principal (locked, not currently spendable — docs/20
+  /// §5's "vault/lock icon, reinforcing that the money is not currently
+  /// spendable"); every liability account (a credit card's owed balance
+  /// is debt, never available cash, and its available *credit* is a
+  /// borrowing capacity, not money already owned); and a closed
+  /// account's balance (Account Lifecycle: a closed account cannot be
+  /// selected for a new transaction, so its balance is not usable
+  /// today even though it is still owned — see [netWorth]).
+  ///
+  /// This is the dashboard's primary, most prominent figure — "how much
+  /// can I actually spend right now."
+  final Money availableBalance;
+
+  /// Checkpoint I: net worth in this currency, matching this
+  /// document's frozen §4 definition ("Net worth = Assets −
+  /// Liabilities"): every account in this currency, active OR closed —
+  /// an asset's `accountBalance` added, a liability's `accountBalance`
+  /// (`FinanceEngine`'s non-negative "amount owed" magnitude, see that
+  /// class's own doc) subtracted. Includes deposit principal (still an
+  /// owned asset, just not liquid — see [availableBalance]) and a
+  /// closed account's balance (Account Lifecycle Checkpoint's
+  /// conservative policy: closing an account must not silently destroy
+  /// financial value or history — money owned, or owed, does not
+  /// disappear merely because an account became inactive; only its
+  /// *selectability* for new transactions changes). This is a total
+  /// *position*, never itself presented as spendable cash.
+  final Money netWorth;
 
   /// This calendar month's income in this currency, transfers excluded.
   final Money income;
@@ -103,11 +133,14 @@ final Provider<MonthlyBudgetSummary> monthlyBudgetSummaryProvider =
 });
 
 /// The Home dashboard's core financial summary: one
-/// [CurrencyDashboardSummary] per currency the profile actually holds
-/// money in (i.e. has at least one active account in), ordered with the
-/// profile's living currency first, then its home currency (if
-/// different), then any others alphabetically — purely a display
-/// ordering choice, not a financial calculation.
+/// [CurrencyDashboardSummary] per currency the profile holds money in —
+/// including a currency whose only account(s) are now closed (Account
+/// Lifecycle Checkpoint's conservative policy: closing an account must
+/// not make its currency, or its financial history, silently vanish
+/// from the dashboard) — ordered with the profile's living currency
+/// first, then its home currency (if different), then any others
+/// alphabetically — purely a display ordering choice, not a financial
+/// calculation.
 ///
 /// **Why a list instead of one number:** Beta 0/1 has no FX conversion
 /// layer (`lib/features/fx/README.md` — that's Beta 2), and
@@ -124,12 +157,23 @@ final Provider<MonthlyBudgetSummary> monthlyBudgetSummaryProvider =
 /// pre-Beta-1 `currentMonthTotalsProvider` this replaces — the router
 /// keeps `HomeScreen` off-screen until then anyway) and
 /// `AsyncValue.data(<CurrencyDashboardSummary>[])` once there's a
-/// profile but zero accounts, which the UI renders as its own empty
-/// state rather than a spinner.
+/// profile but zero accounts (active or closed) ever existed, which the
+/// UI renders as its own empty state rather than a spinner.
+///
+/// Checkpoint I (docs/20 §13.4 checkpoint I): reads [allAccountsProvider]
+/// (active + closed), not [accountsProvider] (active-only) — every
+/// account this profile has ever owned contributes to [_summaryForCurrency],
+/// which is what lets [CurrencyDashboardSummary.netWorth] correctly
+/// preserve a closed account's balance while
+/// [CurrencyDashboardSummary.availableBalance] still correctly excludes
+/// it (see that field's own doc). `HomeScreen`'s separate "Accounts"
+/// list section is unaffected — it still reads [accountsProvider]
+/// directly and unchanged, since that section's own job (what can I add
+/// a transaction to today) is intentionally active-only.
 final Provider<AsyncValue<List<CurrencyDashboardSummary>>> dashboardCurrencySummariesProvider =
     Provider<AsyncValue<List<CurrencyDashboardSummary>>>((ref) {
   final AsyncValue<ProfileRow?> profileAsync = ref.watch(activeProfileProvider);
-  final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(accountsProvider);
+  final AsyncValue<List<AccountRow>> accountsAsync = ref.watch(allAccountsProvider);
   final AsyncValue<List<LedgerTransaction>> ledgerAsync = ref.watch(ledgerProvider);
 
   if (profileAsync.isLoading || accountsAsync.isLoading || ledgerAsync.isLoading) {
@@ -209,10 +253,34 @@ CurrencyDashboardSummary _summaryForCurrency(
   required DateTime monthEnd,
   required int daysElapsedInclusive,
 }) {
-  Money balance = Money.zero(currencyCode);
+  // Checkpoint I (docs/20 §13.4 checkpoint I / §4's frozen "Net worth =
+  // Assets − Liabilities"): [accounts] here is every account this
+  // profile has ever owned in [currencyCode], active or closed
+  // (`allAccountsProvider` — see this provider's own doc). Two
+  // independent totals fall out of the SAME loop, over the SAME
+  // `FinanceEngine.accountBalance` call per account — never a second,
+  // divergent calculation:
+  //
+  // - `availableBalance`: active + asset + non-deposit accounts only.
+  // - `netWorth`: every account, asset added, liability subtracted.
+  Money availableBalance = Money.zero(currencyCode);
+  Money netWorth = Money.zero(currencyCode);
   for (final AccountRow account in accounts) {
     if (account.currencyCode != currencyCode) continue;
-    balance = balance + FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+    final Money accountBalance = FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+
+    // `accountBalance` is always a non-negative, class-native magnitude
+    // (owned for an asset, owed for a liability — see
+    // `FinanceEngine.accountBalance`'s own doc) — never itself negative
+    // for a liability, so a liability's contribution to net worth is
+    // this magnitude SUBTRACTED, not a stored negative number added.
+    netWorth = account.isLiability ? netWorth - accountBalance : netWorth + accountBalance;
+
+    final bool isAvailable =
+        account.isActive && account.isAsset && account.subtypeValue != FinancialAccountSubtype.deposit;
+    if (isAvailable) {
+      availableBalance = availableBalance + accountBalance;
+    }
   }
 
   final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(
@@ -229,7 +297,8 @@ CurrencyDashboardSummary _summaryForCurrency(
 
   return CurrencyDashboardSummary(
     currencyCode: currencyCode,
-    balance: balance,
+    availableBalance: availableBalance,
+    netWorth: netWorth,
     income: totals.income,
     expense: totals.expense,
     dailyPace: dailyPace,

@@ -112,6 +112,12 @@ class HomeScreen extends ConsumerWidget {
                 onRefresh: () async {
                   ref.invalidate(activeProfileProvider);
                   ref.invalidate(accountsProvider);
+                  // Checkpoint I: dashboardCurrencySummariesProvider now
+                  // reads allAccountsProvider (active + closed), not
+                  // accountsProvider alone -- both are invalidated on
+                  // pull-to-refresh for the same reason the original
+                  // line invalidated accountsProvider.
+                  ref.invalidate(allAccountsProvider);
                 },
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
@@ -346,7 +352,7 @@ class _HeroCurrencyCard extends StatelessWidget {
     final TextTheme text = Theme.of(context).textTheme;
     final AppTokens tokens = context.appTokens;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool isNegative = summary.balance.isNegative;
+    final bool isNegative = summary.availableBalance.isNegative;
 
     return Stack(
       children: <Widget>[
@@ -414,7 +420,7 @@ class _HeroCurrencyCard extends StatelessWidget {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: AppMoneyText(
-                          _formatter.format(summary.balance),
+                          _formatter.format(summary.availableBalance),
                           emphasis: AppMoneyEmphasis.hero,
                           color: isNegative ? colors.error : colors.onPrimaryContainer,
                         ),
@@ -432,13 +438,15 @@ class _HeroCurrencyCard extends StatelessWidget {
                 // see [_LivingCurrencyEquivalentLine]'s own doc for that
                 // case. Never combined with or substituted for the
                 // balance above, which remains the sole authoritative
-                // figure.
+                // figure. Checkpoint I: converts `availableBalance` (the
+                // figure actually shown above), not `netWorth` -- the
+                // "≈" line is always about the SAME figure it sits under.
                 if (summary.currencyCode != livingCurrencyCode)
                   _LivingCurrencyEquivalentLine(
                     key: Key('livingCurrencyEquivalent_${summary.currencyCode}'),
                     currencyCode: summary.currencyCode,
                     livingCurrencyCode: livingCurrencyCode,
-                    balance: summary.balance,
+                    balance: summary.availableBalance,
                     tint: colors.onPrimaryContainer.withValues(alpha: 0.85),
                   ),
                 // Visual System Convergence Checkpoint 7.2: styled with
@@ -449,13 +457,37 @@ class _HeroCurrencyCard extends StatelessWidget {
                 // to `onPrimaryContainer` (at reduced emphasis) since
                 // this card sits on a filled `primaryContainer`
                 // background. The string itself (`l10n.totalAvailableBalance`)
-                // is unchanged -- only its style.
+                // is unchanged -- only its style. Checkpoint I: this
+                // caption now correctly describes `availableBalance`
+                // (immediately spendable money) rather than the old,
+                // unqualified per-currency sum that used to silently
+                // include locked deposit principal.
                 Text(
                   l10n.totalAvailableBalance,
                   style: context.appTypography.eyebrow?.copyWith(
                     color: colors.onPrimaryContainer.withValues(alpha: 0.85),
                   ),
                 ),
+                // Checkpoint I (docs/20 §13.4 checkpoint I): a single,
+                // restrained secondary line for net worth -- shown ONLY
+                // when it actually differs from the available balance
+                // already shown above (i.e. this currency holds at
+                // least one deposit and/or liability account, active or
+                // closed). For the common case (only cash/bank/savings/
+                // wallet accounts) `netWorth == availableBalance` and
+                // this renders nothing at all, keeping the hero card
+                // exactly as restrained as before this checkpoint --
+                // "do not turn Home into an accounting report."
+                if (summary.netWorth != summary.availableBalance)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      l10n.homeNetWorthLine(_formatter.format(summary.netWorth)),
+                      style: context.appTypography.eyebrow?.copyWith(
+                        color: colors.onPrimaryContainer.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ),
               ],
             ),
         ),
@@ -485,7 +517,7 @@ class _SecondaryCurrencyCard extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final bool isNegative = summary.balance.isNegative;
+    final bool isNegative = summary.availableBalance.isNegative;
 
     return AppCard(
       key: Key('secondaryCurrencyCard_${summary.currencyCode}'),
@@ -526,7 +558,7 @@ class _SecondaryCurrencyCard extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: AppMoneyText(
-                    _formatter.format(summary.balance),
+                    _formatter.format(summary.availableBalance),
                     color: isNegative ? colors.error : colors.onSurface,
                   ),
                 ),
@@ -536,16 +568,31 @@ class _SecondaryCurrencyCard extends StatelessWidget {
           // CP9.5 Task F / Repair #2: see `_HeroCurrencyCard`'s identical
           // line for the full doc comment (including why the equivalent
           // widget is never constructed at all for a same-currency card).
+          // Checkpoint I: converts `availableBalance`, same reasoning as
+          // the hero card's identical line.
           if (summary.currencyCode != livingCurrencyCode)
             _LivingCurrencyEquivalentLine(
               key: Key('livingCurrencyEquivalent_${summary.currencyCode}'),
               currencyCode: summary.currencyCode,
               livingCurrencyCode: livingCurrencyCode,
-              balance: summary.balance,
+              balance: summary.availableBalance,
             ),
           // CP7.2: shared `eyebrow` role, matching the hero card's own
-          // caption above -- see that widget's comment.
+          // caption above -- see that widget's comment. Checkpoint I:
+          // now correctly describes `availableBalance` -- see the hero
+          // card's identical caption comment.
           Text(l10n.totalAvailableBalance, style: context.appTypography.eyebrow),
+          // Checkpoint I: see `_HeroCurrencyCard`'s identical net-worth
+          // line for the full doc comment -- same restrained,
+          // only-when-it-differs rule applies here.
+          if (summary.netWorth != summary.availableBalance)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                l10n.homeNetWorthLine(_formatter.format(summary.netWorth)),
+                style: context.appTypography.eyebrow,
+              ),
+            ),
           const SizedBox(height: 12),
           _MonthlyMetricsSection(summary: summary, emphasize: false),
         ],

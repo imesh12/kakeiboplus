@@ -6,6 +6,8 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_contribution_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_repository.dart';
+import 'package:ai_financial_coach/core/finance/balance_class.dart';
+import 'package:ai_financial_coach/core/finance/financial_account_subtype.dart';
 import 'package:ai_financial_coach/core/fx/fx_rate.dart';
 import 'package:ai_financial_coach/core/fx/fx_rate_provider.dart';
 import 'package:ai_financial_coach/core/fx/in_memory_reference_fx_rate_cache.dart';
@@ -2316,6 +2318,256 @@ void main() {
             '$overflowException',
           );
         }
+      },
+    );
+  });
+
+  // -- Checkpoint I (docs/20 §13.4 checkpoint I / §13.13): Home dashboard
+  // net worth / available-money / liquidity presentation. The
+  // underlying aggregation (available vs. net worth, deposit/liability
+  // treatment, closed-account treatment) already has dedicated,
+  // exhaustive coverage in `test/core/dashboard/dashboard_providers_test.dart`
+  // (per this file's own top-of-file note: presentation only here) --
+  // these tests exist only to lock in that `HomeScreen` actually wires
+  // that data up correctly: the new "Net worth" line appears only when
+  // it should, every pre-existing sibling section is unaffected, and the
+  // changed summary cards survive narrow-width + large-text-scale
+  // rendering.
+  group('Checkpoint I -- Home dashboard net worth line', () {
+    /// Directly classifies each account via [AccountRepository.createClassifiedAccount]
+    /// (Checkpoint B/G's real classification API) rather than
+    /// [seededDb]'s plain-cash-only helper above, since these tests need
+    /// a real `deposit`/`creditCard` subtype -- see
+    /// `financial_account_subtype.dart`.
+    Future<AppDatabase> seedClassifiedDb({
+      required String living,
+      required String home,
+    }) async {
+      final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
+      final ProfileRepository profileRepo = ProfileRepository(db);
+      await profileRepo.createProfile(
+        displayName: 'Test User',
+        homeCountry: 'LK',
+        currentCountry: 'JP',
+        homeCurrency: home,
+        livingCurrency: living,
+        preferredLanguage: 'en',
+        timezone: 'Asia/Tokyo',
+        dateFormat: 'yyyy-MM-dd',
+        numberFormat: '#,##0.##',
+      );
+      return db;
+    }
+
+    testWidgets(
+      'a deposit makes the hero card show BOTH the (now-lower) available balance AND a '
+      '"Net worth" line, while a plain-cash secondary currency shows no such line at all',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seedClassifiedDb(living: 'JPY', home: 'USD');
+        final String profileId = (await ProfileRepository(db).getProfile())!.id;
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.cash,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(5000, 'JPY'),
+        );
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Fixed Deposit',
+          type: 'deposit',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.deposit,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'USD Wallet',
+          type: 'cash',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.cash,
+          currencyCode: 'USD',
+          openingBalance: Money.fromMinorUnits(2000, 'USD'),
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        final Finder heroCard = find.byKey(const Key('heroCurrencyCard_JPY'));
+        final Finder secondaryCard = find.byKey(const Key('secondaryCurrencyCard_USD'));
+        expect(heroCard, findsOneWidget);
+        expect(secondaryCard, findsOneWidget);
+
+        // Hero (JPY): available excludes the deposit (5000, not 105000)
+        // and a "Net worth" line appears with the full total (105000).
+        expect(find.descendant(of: heroCard, matching: find.text('¥5,000')), findsOneWidget);
+        expect(
+          find.descendant(of: heroCard, matching: find.textContaining('Net worth')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: heroCard, matching: find.text('Net worth: ¥105,000')),
+          findsOneWidget,
+        );
+
+        // Secondary (USD): plain cash only -- available equals net
+        // worth, so no "Net worth" line renders at all, exactly as
+        // before this checkpoint.
+        expect(find.descendant(of: secondaryCard, matching: find.text('\$20.00')), findsOneWidget);
+        expect(
+          find.descendant(of: secondaryCard, matching: find.textContaining('Net worth')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'a mixed deposit + credit-card portfolio, plus a configured budget, leaves the budget '
+      'card and the accounts list section completely unaffected by the new net worth line',
+      (tester) async {
+        useTallSurface(tester);
+        final AppDatabase db = await seedClassifiedDb(living: 'JPY', home: 'JPY');
+        final String profileId = (await ProfileRepository(db).getProfile())!.id;
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.cash,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(5000, 'JPY'),
+        );
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Fixed Deposit',
+          type: 'deposit',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.deposit,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Credit Card',
+          type: 'creditCard',
+          balanceClass: BalanceClass.liability,
+          subtype: FinancialAccountSubtype.creditCard,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(30000, 'JPY'),
+        );
+        await BudgetRepository(db).setOverallBudget(
+          profileId: profileId,
+          month: BudgetMonth.fromUtc(DateTime.now().toUtc()),
+          amount: Money.fromMinorUnits(50000, 'JPY'),
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // New net worth line: 5000 + 100000 - 30000 = 75000.
+        expect(find.text('Net worth: ¥75,000'), findsOneWidget);
+
+        // Budget card is completely untouched by this checkpoint --
+        // still renders the configured budget's own remaining figure.
+        expect(find.text('of ¥50,000'), findsOneWidget);
+
+        // The Accounts list section (active-only, unrelated provider)
+        // still lists every active account by name, unaffected by the
+        // new classified accounts or the dashboard aggregation change.
+        expect(find.text('Wallet'), findsOneWidget);
+        expect(find.text('Fixed Deposit'), findsOneWidget);
+        expect(find.text('Credit Card'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'the hero card with both an available balance AND a net worth line survives a narrow '
+      '(320px-wide) screen at a 1.6x text scale without overflow, with both figures still '
+      'findable',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 2200);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final AppDatabase db = await seedClassifiedDb(living: 'JPY', home: 'JPY');
+        final String profileId = (await ProfileRepository(db).getProfile())!.id;
+        final AccountRepository accountRepo = AccountRepository(db);
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Wallet',
+          type: 'cash',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.cash,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(5000, 'JPY'),
+        );
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Fixed Deposit',
+          type: 'deposit',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.deposit,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Credit Card',
+          type: 'creditCard',
+          balanceClass: BalanceClass.liability,
+          subtype: FinancialAccountSubtype.creditCard,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(30000, 'JPY'),
+        );
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[
+            appDatabaseProvider.overrideWithValue(db),
+            fxRateProviderProvider.overrideWithValue(_AlwaysUnavailableFxRateProvider()),
+            referenceFxRateCacheProvider.overrideWithValue(InMemoryReferenceFxRateCache()),
+          ],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithHome(container));
+        await tester.pumpAndSettle();
+
+        final Object? overflowException = tester.takeException();
+        if (overflowException != null) {
+          fail(
+            'Narrow-screen (320px) + 1.6x text scale hero card (available + net worth) threw '
+            'an exception:\n\n$overflowException',
+          );
+        }
+
+        expect(find.text('¥5,000'), findsOneWidget);
+        expect(find.text('Net worth: ¥75,000'), findsOneWidget);
       },
     );
   });
