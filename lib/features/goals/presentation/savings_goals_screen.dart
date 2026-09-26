@@ -157,6 +157,12 @@ class _CreateGoalDialogState extends ConsumerState<_CreateGoalDialog> {
   }
 
   Future<void> _submit() async {
+    // Re-entrancy guard against a double-tap/rapid-repeat submit -- see
+    // `goal_detail_screen.dart`'s `_AddContributionDialogState._submit`
+    // for the full reasoning and `docs/14_DECISION_LOG.md` ADR-042.
+    // Without this, two `onPressed` calls landing before the disabled
+    // button ever rebuilds could create the same goal twice.
+    if (_isSaving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final Money? amount = _parsedAmount;
     if (amount == null) return;

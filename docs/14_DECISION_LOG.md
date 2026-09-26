@@ -2496,3 +2496,179 @@ production behavior changed. No schema change (still schema v13). No `FinanceEng
    only files changed are `test/features/budgets/presentation/budget_providers_test.dart` and
    `test/widget/budgets_screen_test.dart` (new test coverage) and this decision log entry. No
    production file changed.
+
+## ADR-042 — Checkpoint S: Savings Goals completion is a hardening pass over ADR-022's architecture, plus one genuine double-submit fix
+
+Decision: Checkpoint S audited the existing savings-goals feature
+(schema version 3, ADR-022) against a 55-item completion checklist and
+found the architecture itself already correct end to end. This entry
+records that audit's findings, the one real production defect it
+surfaced and fixed, the regression coverage added to actually prove the
+contract rather than merely assert it in a doc comment, and one
+deliberate deferral.
+
+1. **Persistence model is unchanged; no migration.** `savings_goals`/
+   `savings_goal_contributions` were introduced correctly at schema
+   version 3 and the app is at schema version 13 today — no legacy
+   pre-v3 goals data exists to migrate, `SavingsGoalRepository`
+   validates every write before it reaches the table (rejecting a
+   non-positive target/contribution amount, per ADR-022), and no
+   import/bulk-write feature exists that could bypass that validation.
+   A target of zero or less is therefore not representable through any
+   current production code path; the pure `evaluateSavingsGoalStatus`
+   function's deliberate `throw ArgumentError` for that input (already
+   tested in `savings_goal_status_test.dart`) is the correct contract
+   for an invariant that should never actually be reachable, not a
+   robustness gap to work around with new defensive machinery.
+
+2. **The one genuine production defect: a double-submit re-entrancy
+   gap in all three savings-goal dialogs.** `_AddContributionDialogState
+   ._submit`, `_EditGoalDialogState._submit`
+   (`goal_detail_screen.dart`), and `_CreateGoalDialogState._submit`
+   (`savings_goals_screen.dart`) each disable their Save button via
+   `onPressed: _isSaving ? null : _submit`, but `setState` only takes
+   effect on Flutter's NEXT rendered frame — it does not retroactively
+   block a second tap that lands before that frame renders. Two
+   `onPressed` invocations arriving before any rebuild (a real
+   double-tap, or a slow/busy device) both ran `_submit`'s full body,
+   including the second, un-guarded call to `addContribution`/
+   `createGoal`/`updateGoal`. The fix is the smallest possible
+   correction: `if (_isSaving) return;` as the very first line of each
+   `_submit`, so a re-entrant call is a no-op regardless of whether a
+   rebuild has happened yet.
+
+   **Test-technique correction (post-Checkpoint-S-report Windows
+   validation):** the first draft of this coverage modeled the
+   re-entrancy by calling `tester.tap` twice on the same `Finder` with
+   no `pump()`/`pumpAndSettle()` between the calls. A real `flutter
+   test` run caught this as a potential false positive: `tester.tap`'s
+   own gesture-dispatch code (`TestAsyncUtils.guard`/`startGesture`/
+   `gesture.up()`) contains genuine `await` points, and Dart yields to
+   the microtask queue at every `await` — even one that resolves
+   immediately. That is enough for the FIRST tap's pending `await
+   addContribution(...)`/`createGoal(...)` (a plain `Future`, not the
+   Timer-based Drift stream watches documented elsewhere in this
+   project, so no `pump()` is needed for it to progress) to complete and
+   pop the dialog before the SECOND tap's hit-test ever runs — Flutter
+   then correctly warns that the second tap's precomputed offset no
+   longer lands on the (now closing/gone) `FilledButton`. Had that
+   happened, "only one row written" would have been true for an
+   uninteresting reason (the second tap hit nothing) rather than because
+   `_isSaving` intercepted a genuine second concurrent submit.
+
+   The corrected technique fetches the CURRENT `FilledButton` widget
+   once via `tester.widget<FilledButton>(...)` and invokes its real
+   `onPressed` callback — the actual `_submit` closure each dialog's
+   `build` wired up — twice in a row with no `await` between the two
+   calls; two back-to-back synchronous statements never yield to the
+   microtask queue, so this deterministically fires `_submit()` twice
+   before either call's own `await` can resolve, without any gesture/
+   hit-testing involved and without a test-only production seam. Three
+   tests now use this technique, one per guarded dialog: "rapid
+   double-tap on Add Contribution's save button" and "the same
+   re-entrancy guard on Edit Goal's save button" in
+   `goal_detail_screen_test.dart`, and "two rapid submit attempts when
+   creating a goal" in `savings_goals_screen_test.dart` — each asserting
+   exactly one row was written (or, for Edit Goal, exactly one update
+   applied), not two.
+
+3. **Contribution ledger weight: zero, confirmed end to end, not just
+   by inspection.** ADR-022 already established that a contribution
+   creates no `Transactions` row; this checkpoint additionally proved,
+   with a new regression test
+   (`savings_goal_contribution_repository_test.dart`, "Checkpoint S:
+   zero ledger weight"), that adding AND deleting a contribution never
+   changes `FinanceEngine.accountBalance`'s result for a real account —
+   computed from that account plus whatever the real ledger actually
+   contains, before and after, not a value re-derived from the
+   contribution data itself. A goal's target/remaining/percentage/
+   completion state have the same zero ledger weight by construction:
+   none of `savings_goal_calculation.dart`, `savings_goal_status.dart`,
+   or `savings_goal_providers.dart` reference `FinanceEngine`, any
+   account, or any transaction at all — confirmed by a full-codebase
+   search finding no such reference anywhere. Home's priority-goal card
+   reads `homeGoalSelectionProvider` purely for display and never feeds
+   into the dashboard's Net Worth/Available Money figures, which remain
+   computed exclusively from `FinanceEngine`.
+
+4. **Derived completion already produces the right answer for every
+   target-edit direction; only the regression tests were missing.**
+   Because `SavingsGoalCalculator.evaluate` always recomputes `status`
+   fresh from the CURRENT `target`/`saved` (never a persisted flag),
+   lowering a goal's target below its already-contributed amount
+   correctly completes the goal (remaining becomes zero, the real
+   contribution amount is preserved untouched, `wholePercentSaved`
+   reads the true uncapped figure, e.g. 180%) with no code change
+   needed, and raising a completed goal's target back above its saved
+   amount correctly returns it to `inProgress` the same way. Deleting a
+   contribution that had completed a goal correctly returns it to
+   `inProgress` for the identical reason. All three are now explicit
+   regression tests in `savings_goal_providers_test.dart` (previously
+   untested at any layer, despite the architecture already being
+   correct).
+
+5. **Widget-level coverage gap: Overdue/Completed/>100% states, target
+   date, recommended-daily-contribution, and milestone chips had zero
+   test coverage.** Neither `goal_detail_screen_test.dart` nor
+   `savings_goals_screen_test.dart` contained a single assertion on the
+   "Overdue" or "Completed" status label, the milestone chips'
+   reached-vs-not-reached visual state, the target-date/recommended-
+   daily-contribution detail rows rendering, or the >100% uncapped
+   percentage text before this checkpoint — despite all of that being
+   correctly implemented already. Six new widget tests close this gap
+   in `goal_detail_screen_test.dart`'s new "Checkpoint S" group. One
+   test-writing note worth recording: a completed goal's "recommended
+   daily contribution" is ALSO a real `Money.zero` (ADR-022 point 2 —
+   completed always answers zero, never null, regardless of target
+   date), so asserting the Remaining row's "¥0" text requires scoping
+   to that row's own `Row` ancestor (`find.ancestor(...).first` +
+   `find.descendant`) rather than a bare `find.text('¥0')`, which would
+   otherwise match both rows.
+
+6. **Goal creation/editing validation, currency anchoring, target-date
+   normalization, milestone overflow-safety, and soft-delete
+   invariants were all re-audited and found unchanged and correctly
+   tested already (ADR-022 points 1, 3, 4, 5, 6, 8).** No code or test
+   changes were needed for any of these; this checkpoint did not touch
+   `savings_goal_calculation.dart`, `savings_goal_status.dart`,
+   `savings_goal_milestones.dart`, `goal_target_date.dart`,
+   `savings_goal_repository.dart`, or
+   `savings_goal_contribution_repository.dart` at all.
+
+7. **Deliberately deferred: the pre-existing Riverpod `.stream`
+   deprecation info inside `savings_goal_providers.dart`.**
+   `_activeContributionsProvider` builds its reactive aggregate via
+   `ref.watch(_activeGoalRowsProvider.stream).asyncExpand(...)` —
+   `StreamProvider.stream` has carried a Riverpod deprecation notice
+   since well before this project's pinned `flutter_riverpod: ^2.6.1`
+   (recommending `ref.listen` for the simple "subscribe and react"
+   case). That recommended replacement does not cover this file's
+   actual use, which is combining/re-subscribing an INNER stream
+   whenever an OUTER one changes (a live re-`asyncExpand`), not a
+   simple listen-and-react; Riverpod's own maintainer treats that
+   specific stream-combinator case as still lacking a clean built-in
+   replacement as of this writing. Rewriting it without one would mean
+   inventing new state-management machinery for an already-correct,
+   already load-bearing, extensively-tested reactive aggregation this
+   checkpoint has no mandate to redesign — exactly the "requires
+   unrelated architectural churn" case Checkpoint S's brief says to
+   document and defer rather than fix. Left exactly as before,
+   alongside the other pre-existing `.stream` info in
+   `app_router.dart` (routing, out of this checkpoint's scope
+   regardless).
+
+8. **`lib/features/goals/README.md` was stale and has been corrected.**
+   It previously read "Not implemented yet," left over from before
+   ADR-022 shipped the feature; it now points at ADR-022 and this entry
+   and briefly explains why `savings_streaks`/`savings_milestones` from
+   `docs/03_DATABASE_SCHEMA.md` were never added as separate tables
+   (milestone attainment is derived, not persisted or streak-tracked, in
+   Beta 1's scope).
+
+9. **Budgets (Checkpoint R/ADR-041), accounts, transactions, Net Worth,
+   Home's privacy boundary, routing, and every other feature are
+   unaffected** — the only production files this checkpoint changed are
+   `lib/features/goals/presentation/goal_detail_screen.dart`,
+   `lib/features/goals/presentation/savings_goals_screen.dart` (the
+   double-submit guard, both trivial one-line additions plus a comment),
+   and `lib/features/goals/README.md` (documentation only).

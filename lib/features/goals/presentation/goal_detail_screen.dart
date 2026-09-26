@@ -493,6 +493,16 @@ class _AddContributionDialogState extends ConsumerState<_AddContributionDialog> 
   bool _isSaving = false;
 
   Future<void> _submit() async {
+    // Re-entrancy guard against a double-tap/rapid-repeat submit: two
+    // `onPressed` invocations can both fire before Flutter ever rebuilds
+    // this dialog with the disabled button (`setState` only schedules a
+    // rebuild for the NEXT frame -- it does not retroactively block a
+    // second tap that lands before that frame renders). Checking
+    // `_isSaving` here, in addition to disabling the button in [build],
+    // is what actually prevents a second concurrent
+    // `addContribution` call, not merely the visual disabled state --
+    // see `docs/14_DECISION_LOG.md` ADR-042.
+    if (_isSaving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final Money? amount = _parsedAmount;
     if (amount == null) return;
@@ -578,6 +588,9 @@ class _EditGoalDialogState extends ConsumerState<_EditGoalDialog> {
   }
 
   Future<void> _submit() async {
+    // Same double-tap re-entrancy guard as `_AddContributionDialogState
+    // ._submit` -- see that method's comment and ADR-042.
+    if (_isSaving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final Money? amount = _parsedAmount;
     if (amount == null) return;

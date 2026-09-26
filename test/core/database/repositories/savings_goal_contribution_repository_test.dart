@@ -1,7 +1,11 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
+import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_contribution_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/savings_goal_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
+import 'package:ai_financial_coach/core/finance/finance_engine.dart';
+import 'package:ai_financial_coach/core/finance/ledger_models.dart';
 import 'package:ai_financial_coach/core/money/currency_mismatch_exception.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:drift/native.dart';
@@ -205,5 +209,58 @@ void main() {
           await contributionRepo.watchActiveTotalForGoal(goalId: jpyGoalId, currencyCode: 'JPY').first;
       expect(total, Money.zero('JPY'));
     });
+  });
+
+  // -------------------------------------------------------------------
+  // Checkpoint S (Section K): a savings goal contribution is
+  // tracking-only ledger metadata -- it must have ZERO effect on any
+  // real account balance. `FinanceEngine.accountBalance` is "the ONLY
+  // place in the app that computes a balance" (its own doc comment), so
+  // proving it returns the exact same balance before and after a
+  // contribution -- computed from the SAME account plus whatever the
+  // real ledger actually contains -- is a direct, end-to-end proof of
+  // zero ledger weight, not just an inference from "no Transactions row
+  // is created" (already covered above).
+  // -------------------------------------------------------------------
+  group('Checkpoint S: zero ledger weight (Section K)', () {
+    test(
+      'adding, then deleting, a savings goal contribution never changes a real account\'s '
+      'derived balance',
+      () async {
+        final AccountRepository accountRepo = AccountRepository(db);
+        final TransactionRepository transactionRepo = TransactionRepository(db, accountRepo);
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Everyday Chequing',
+          type: 'bank',
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(500000, 'JPY'),
+        );
+
+        Future<Money> currentBalance() async {
+          final AccountRow account = await accountRepo.requireById(accountId);
+          final List<LedgerTransaction> ledger =
+              await transactionRepo.watchLedgerForProfile(profileId).first;
+          return FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+        }
+
+        final Money before = await currentBalance();
+        expect(before, Money.fromMinorUnits(500000, 'JPY')); // sanity: just the opening balance
+
+        final String contributionId = await contributionRepo.addContribution(
+          goalId: jpyGoalId,
+          amount: Money.fromMinorUnits(5000, 'JPY'),
+        );
+        expect(await currentBalance(), before); // unaffected by adding a contribution
+
+        await contributionRepo.softDeleteContribution(contributionId);
+        expect(await currentBalance(), before); // unaffected by deleting one too
+
+        // The account row itself was never touched either -- its own
+        // stored opening balance is exactly what it started as.
+        final AccountRow account = await accountRepo.requireById(accountId);
+        expect(account.openingBalance, Money.fromMinorUnits(500000, 'JPY'));
+      },
+    );
   });
 }

@@ -210,6 +210,38 @@ void main() {
       return value;
     }
 
+    /// Checkpoint S: waits for [goalSummariesProvider] to emit a value
+    /// satisfying [predicate], attaching the listener BEFORE the caller
+    /// performs whatever write is expected to produce it -- same race
+    /// avoidance as the "a soft-deleted goal disappears..." test above
+    /// (the listener must be registered before the write, not after,
+    /// since Drift's stream-invalidation notification can otherwise
+    /// arrive before a listener attached only after the write settles).
+    /// Checks the CURRENT value first so a call made after the write
+    /// already landed doesn't hang waiting for a future emission that
+    /// will never come.
+    Future<AsyncValue<List<SavingsGoalSummary>>> waitForSummaries(
+      ProviderContainer container,
+      bool Function(List<SavingsGoalSummary>) predicate,
+    ) async {
+      final AsyncValue<List<SavingsGoalSummary>> current = container.read(goalSummariesProvider);
+      if (current.hasValue && predicate(current.requireValue)) return current;
+
+      final Completer<AsyncValue<List<SavingsGoalSummary>>> completer =
+          Completer<AsyncValue<List<SavingsGoalSummary>>>();
+      final ProviderSubscription<AsyncValue<List<SavingsGoalSummary>>> subscription = container
+          .listen<AsyncValue<List<SavingsGoalSummary>>>(goalSummariesProvider, (previous, next) {
+        if (next.hasValue && predicate(next.requireValue) && !completer.isCompleted) {
+          completer.complete(next);
+        }
+      });
+      try {
+        return await completer.future;
+      } finally {
+        subscription.close();
+      }
+    }
+
     late AppDatabase db;
     late ProfileRepository profileRepo;
     late SavingsGoalRepository goalRepo;
@@ -401,5 +433,120 @@ void main() {
       expect(forA, hasLength(1));
       expect(forA.single.amountMinorUnits, 1000);
     });
+
+    // -----------------------------------------------------------------
+    // Checkpoint S: genuine gaps the audit found -- see
+    // `docs/14_DECISION_LOG.md` ADR-042. None of these needed a
+    // production fix (the derived-completion architecture already
+    // produces the right answer); what was missing was regression
+    // coverage actually proving it.
+    // -----------------------------------------------------------------
+
+    test(
+      'deleting a contribution that completed a goal returns it to inProgress, since '
+      'completion is always derived, never persisted (Section G/33)',
+      () async {
+        final String profileId = await seedProfile();
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final String contributionId = await contributionRepo.addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        await container.read(activeProfileProvider.future);
+        final SavingsGoalCalculation fundedCalc =
+            (await readSettledSummaries(container)).requireValue.single.calculation;
+        expect(fundedCalc.status, SavingsGoalStatus.completed);
+        expect(fundedCalc.remaining, Money.zero('JPY'));
+
+        final Future<AsyncValue<List<SavingsGoalSummary>>> pending = waitForSummaries(
+          container,
+          (summaries) => summaries.single.calculation.status == SavingsGoalStatus.inProgress,
+        );
+        await contributionRepo.softDeleteContribution(contributionId);
+        final SavingsGoalCalculation afterDeleteCalc =
+            (await pending).requireValue.single.calculation;
+
+        expect(afterDeleteCalc.status, SavingsGoalStatus.inProgress);
+        expect(afterDeleteCalc.saved, Money.zero('JPY'));
+        expect(afterDeleteCalc.remaining, Money.fromMinorUnits(100000, 'JPY'));
+      },
+    );
+
+    test(
+      "lowering a goal's target below the already-contributed amount completes the goal, "
+      'zeroes remaining, and leaves the contribution itself completely unchanged '
+      '(Section D/17)',
+      () async {
+        final String profileId = await seedProfile();
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final String contributionId = await contributionRepo.addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(90000, 'JPY'),
+        );
+        await container.read(activeProfileProvider.future);
+        final SavingsGoalCalculation beforeCalc =
+            (await readSettledSummaries(container)).requireValue.single.calculation;
+        expect(beforeCalc.status, SavingsGoalStatus.inProgress);
+
+        final Future<AsyncValue<List<SavingsGoalSummary>>> pending = waitForSummaries(
+          container,
+          (summaries) => summaries.single.calculation.status == SavingsGoalStatus.completed,
+        );
+        await goalRepo.updateGoal(id: goalId, targetAmount: Money.fromMinorUnits(50000, 'JPY'));
+        final SavingsGoalCalculation afterCalc = (await pending).requireValue.single.calculation;
+
+        expect(afterCalc.status, SavingsGoalStatus.completed);
+        expect(afterCalc.remaining, Money.zero('JPY'));
+        // The real contributed amount is preserved -- never clamped to
+        // the new (lower) target, never refunded/fabricated away.
+        expect(afterCalc.saved, Money.fromMinorUnits(90000, 'JPY'));
+        // Uncapped, exactly matching the over-target formula (Section F).
+        expect(afterCalc.wholePercentSaved, 180);
+
+        final List<SavingsGoalContributionRow> contributions =
+            await contributionRepo.watchActiveForGoal(goalId).first;
+        expect(contributions, hasLength(1));
+        expect(contributions.single.id, contributionId);
+        expect(contributions.single.amountMinorUnits, 90000); // completely untouched
+      },
+    );
+
+    test(
+      "raising a completed goal's target back above its saved amount returns it to "
+      'inProgress, since completion is derived rather than a separate persisted flag '
+      '(Section D/18)',
+      () async {
+        final String profileId = await seedProfile();
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(50000, 'JPY'),
+        );
+        await contributionRepo.addContribution(goalId: goalId, amount: Money.fromMinorUnits(50000, 'JPY'));
+        await container.read(activeProfileProvider.future);
+        final SavingsGoalCalculation beforeCalc =
+            (await readSettledSummaries(container)).requireValue.single.calculation;
+        expect(beforeCalc.status, SavingsGoalStatus.completed);
+
+        final Future<AsyncValue<List<SavingsGoalSummary>>> pending = waitForSummaries(
+          container,
+          (summaries) => summaries.single.calculation.status == SavingsGoalStatus.inProgress,
+        );
+        await goalRepo.updateGoal(id: goalId, targetAmount: Money.fromMinorUnits(100000, 'JPY'));
+        final SavingsGoalCalculation afterCalc = (await pending).requireValue.single.calculation;
+
+        expect(afterCalc.status, SavingsGoalStatus.inProgress);
+        expect(afterCalc.saved, Money.fromMinorUnits(50000, 'JPY')); // unchanged
+        expect(afterCalc.remaining, Money.fromMinorUnits(50000, 'JPY'));
+      },
+    );
   });
 }

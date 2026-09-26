@@ -7,6 +7,8 @@ import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/goals/presentation/goal_detail_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
+import 'package:ai_financial_coach/shared/widgets/app_progress_bar.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -714,6 +716,316 @@ void main() {
           '¥30,000',
         );
         expect(find.text('積立はまだありません。'), findsNothing);
+      },
+    );
+  });
+
+  // ---------------------------------------------------------------------
+  // Checkpoint S: Savings Goals completion -- genuine gaps the audit
+  // found (see `docs/14_DECISION_LOG.md` ADR-042): no widget coverage
+  // existed anywhere for the Overdue/Completed/>100% status displays,
+  // for the milestone chips actually reflecting reached-vs-not-reached
+  // state, for the target-date/recommended-daily-contribution detail
+  // rows rendering together, or for the double-submit re-entrancy guard
+  // this checkpoint added to `_AddContributionDialogState._submit`.
+  // ---------------------------------------------------------------------
+  group('Checkpoint S -- completion, overdue, milestones, duplicate submission', () {
+    testWidgets(
+      'a goal funded to exactly 60% shows the 25%/50% milestones as reached and 75%/100% as '
+      'not yet reached',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final SavingsGoalContributionRepository contributionRepo =
+            SavingsGoalContributionRepository(db, goalRepo);
+        await contributionRepo.addContribution(goalId: goalId, amount: Money.fromMinorUnits(60000, 'JPY'));
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final BuildContext context = tester.element(find.byKey(const Key('goalSavedAmount')));
+        final ColorScheme colors = Theme.of(context).colorScheme;
+
+        Chip chipLabeled(String label) => tester.widget<Chip>(find.widgetWithText(Chip, label));
+
+        expect(chipLabeled('25%').backgroundColor, colors.primaryContainer); // reached
+        expect(chipLabeled('50%').backgroundColor, colors.primaryContainer); // reached
+        expect(chipLabeled('75%').backgroundColor, colors.surfaceContainerHighest); // not reached
+        expect(chipLabeled('100%').backgroundColor, colors.surfaceContainerHighest); // not reached
+        expect(find.byIcon(Icons.check), findsNWidgets(2)); // only the two reached chips
+      },
+    );
+
+    testWidgets(
+      'an exactly-100%-funded goal shows Completed, ¥0 remaining, all four milestones '
+      'reached, and a fully-filled progress bar',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final SavingsGoalContributionRepository contributionRepo =
+            SavingsGoalContributionRepository(db, goalRepo);
+        await contributionRepo.addContribution(
+          goalId: goalId,
+          amount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Completed'), findsOneWidget);
+        // A completed goal's "recommended daily contribution" is ALSO a
+        // real Money.zero (ADR-022 point 2 -- completed always answers
+        // zero, never null, regardless of target date), so a bare
+        // `find.text('¥0')` would match both that row and the Remaining
+        // row; scope to the Remaining row's own Row specifically.
+        final Finder remainingRow =
+            find.ancestor(of: find.text('Remaining'), matching: find.byType(Row)).first;
+        expect(find.descendant(of: remainingRow, matching: find.text('¥0')), findsOneWidget);
+        // Scoped to the "· 100%" summary-line form -- distinct from
+        // the milestone chip that also reads the bare text '100%'.
+        expect(find.textContaining('· 100%'), findsOneWidget);
+        expect(find.byIcon(Icons.check), findsNWidgets(4)); // every milestone reached
+        expect(tester.widget<AppProgressBar>(find.byType(AppProgressBar)).value, 1.0);
+      },
+    );
+
+    testWidgets(
+      'an overfunded goal (target ¥20,000, saved ¥25,000) shows the uncapped 125%, '
+      '¥0 remaining, Completed, and a fully-filled but never-overflowed progress bar',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(20000, 'JPY'),
+        );
+        final SavingsGoalContributionRepository contributionRepo =
+            SavingsGoalContributionRepository(db, goalRepo);
+        await contributionRepo.addContribution(goalId: goalId, amount: Money.fromMinorUnits(25000, 'JPY'));
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Completed'), findsOneWidget);
+        // Same "recommended daily contribution is also ¥0" collision as
+        // the exact-100% test above -- scope to the Remaining row.
+        final Finder remainingRow =
+            find.ancestor(of: find.text('Remaining'), matching: find.byType(Row)).first;
+        expect(
+          find.descendant(of: remainingRow, matching: find.text('¥0')),
+          findsOneWidget,
+        ); // remaining row, never negative
+        expect(find.textContaining('· 125%'), findsOneWidget); // uncapped, never "100%"
+        expect(find.byIcon(Icons.check), findsNWidgets(4));
+        // The bar's fill fraction clamps to 1.0 -- it cannot visually
+        // render past full -- while the text above stays truthfully 125%.
+        expect(tester.widget<AppProgressBar>(find.byType(AppProgressBar)).value, 1.0);
+      },
+    );
+
+    testWidgets(
+      'an overdue, unfunded goal with a past target date shows Overdue and no recommended '
+      'daily contribution row',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+          targetDate: DateTime.now().toUtc().subtract(const Duration(days: 2)),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Overdue'), findsOneWidget);
+        expect(find.text('Recommended daily contribution'), findsNothing); // not applicable
+        expect(find.byType(Chip), findsNothing); // 0% saved -- no milestone reached yet
+      },
+    );
+
+    testWidgets(
+      'a future target date and a recommended daily contribution both render as detail rows',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(50000, 'JPY'),
+          targetDate: DateTime.now().toUtc().add(const Duration(days: 10)),
+        );
+        final SavingsGoalContributionRepository contributionRepo =
+            SavingsGoalContributionRepository(db, goalRepo);
+        await contributionRepo.addContribution(goalId: goalId, amount: Money.fromMinorUnits(10000, 'JPY'));
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Target date'), findsOneWidget);
+        expect(find.text('Recommended daily contribution'), findsOneWidget);
+        // 40000 remaining over 11 remaining days (today + 10 counts as day
+        // one) -- ceiling division, never floor (ADR-022 point 2).
+        expect(find.text('¥3,637'), findsOneWidget); // ceil(40000 / 11) = 3637
+      },
+    );
+
+    testWidgets(
+      "rapid double-tap on Add Contribution's save button records only one contribution, not "
+      'two',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Emergency Fund',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addContributionFab')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('contributionAmountField')), '30000');
+
+        // NOT two physical `tester.tap()` calls: a first investigation
+        // round used that pattern and a real Windows `flutter test` run
+        // caught it as a potential false positive -- `tester.tap()`'s own
+        // internal gesture-dispatch code contains genuine `await` points
+        // (TestAsyncUtils.guard/startGesture/gesture.up()), and Dart
+        // yields to the microtask queue at every `await`, even one that
+        // resolves immediately. That is enough for the FIRST tap's
+        // `_submit()` to run its pending `await addContribution(...)` to
+        // completion and pop the dialog (a genuine async Future
+        // continuation, unlike the Timer-based Drift stream hangs
+        // documented elsewhere in this repo -- no `pump()` is needed for
+        // a plain Future to progress) before the SECOND tap's hit-test
+        // ever runs. Once the dialog is gone/mid-transition, the second
+        // tap's precomputed offset no longer lands on the (now stale)
+        // `FilledButton`, so Flutter warns that the tap missed -- and,
+        // worse, "only one contribution recorded" would then be true for
+        // an uninteresting reason (the second tap hit nothing) rather
+        // than because the `_isSaving` guard actually intercepted a
+        // second concurrent submit.
+        //
+        // Instead: fetch the CURRENT `FilledButton` widget once, then
+        // invoke its `onPressed` callback -- the real `_submit` closure
+        // `_AddContributionDialogState.build` actually wired up -- twice
+        // in a row with NO `await` between the two calls. Two
+        // back-to-back synchronous statements never yield to the
+        // microtask queue, so this deterministically fires `_submit()`
+        // twice before either call's `await addContribution(...)` can
+        // resolve, which is exactly the re-entrancy hazard the
+        // `_isSaving` guard (ADR-042) defends against -- without any
+        // gesture/hit-testing involved, and without touching production
+        // code or adding a test-only seam.
+        final FilledButton saveButton =
+            tester.widget<FilledButton>(find.byKey(const Key('saveContribution')));
+        saveButton.onPressed!();
+        saveButton.onPressed!();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Add a contribution'), findsNothing); // dialog closed
+        // A one-shot query against the table directly, NOT
+        // `contributionRepo.watchActiveForGoal(goalId).first` -- a Drift
+        // query `Stream`'s `.first` is a documented hang risk in this
+        // suite (see e.g. `savings_goal_contribution_repository_test.dart`'s
+        // use of `db.select(db.transactions).get()` for the same reason):
+        // it waits for the stream's *next* qualifying emission, and
+        // nothing here guarantees one arrives on a schedule this test can
+        // rely on. A one-shot `.get()` reads the current row set directly
+        // and returns as soon as that single query resolves.
+        final List<SavingsGoalContributionRow> rows = await (db.select(db.savingsGoalContributions)
+              ..where((tbl) => tbl.goalId.equals(goalId) & tbl.deletedAt.isNull()))
+            .get();
+        expect(rows, hasLength(1)); // not 2
+        expect(rows.single.amountMinorUnits, 30000);
+        expect(
+          tester.widget<Text>(find.byKey(const Key('goalSavedAmount'))).data,
+          '¥30,000', // not ¥60,000
+        );
+      },
+    );
+
+    testWidgets(
+      "the same re-entrancy guard on Edit Goal's save button records only one update, not two",
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final SavingsGoalRepository goalRepo = SavingsGoalRepository(db);
+        final String goalId = await goalRepo.createGoal(
+          profileId: profileId,
+          name: 'Old Name',
+          targetAmount: Money.fromMinorUnits(100000, 'JPY'),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithGoalDetail(container, goalId));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('editGoal')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('editGoalNameField')), 'New Name');
+        await tester.enterText(find.byKey(const Key('editGoalTargetAmountField')), '200000');
+
+        // Same technique as the Add Contribution test above -- see that
+        // test's comment for why two physical `tester.tap()` calls would
+        // be a potential false positive here too. `_EditGoalDialogState
+        // ._submit` carries the identical `if (_isSaving) return;` guard
+        // (ADR-042).
+        final FilledButton saveButton =
+            tester.widget<FilledButton>(find.byKey(const Key('saveEditGoal')));
+        saveButton.onPressed!();
+        saveButton.onPressed!();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit goal'), findsNothing); // dialog closed
+        final SavingsGoalRow row = await goalRepo.requireActiveGoal(goalId);
+        expect(row.name, 'New Name'); // not corrupted by a second concurrent write
+        expect(row.targetAmountMinorUnits, 200000);
       },
     );
   });

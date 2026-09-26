@@ -9,6 +9,7 @@ import 'package:ai_financial_coach/features/goals/presentation/goal_detail_scree
 import 'package:ai_financial_coach/features/goals/presentation/savings_goals_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -575,6 +576,69 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------
+  // Checkpoint S: same re-entrancy guard the goal detail screen's Add
+  // Contribution dialog needed (ADR-042), applied here to goal creation
+  // -- two `onPressed` invocations landing before the disabled button
+  // ever rebuilds must not create the same goal twice.
+  //
+  // NOT two physical `tester.tap()` calls: a real Windows `flutter test`
+  // run against the Add Contribution version of this test (originally
+  // written the same way) caught a Flutter hit-test warning -- the
+  // FIRST tap's `_submit()` can run its pending
+  // `await createGoal(...)` to completion and pop the dialog DURING the
+  // second `tester.tap()` call's own internal `await` points (Dart
+  // yields to the microtask queue at every `await`, even an
+  // already-resolved one, and `tester.tap()`'s gesture dispatch contains
+  // several), so the second tap's precomputed offset can land on a
+  // stale/closing dialog instead of the real button. See
+  // `goal_detail_screen_test.dart`'s "rapid double-tap on Add
+  // Contribution" test for the full investigation.
+  //
+  // Instead: fetch the CURRENT `FilledButton` once and invoke its real
+  // `onPressed` (`_submit`) twice with no `await` between the calls --
+  // deterministic, no gesture/hit-testing involved, and exercises the
+  // exact same closure a real double-tap would.
+  // ---------------------------------------------------------------------
+  testWidgets(
+    'Checkpoint S: two rapid submit attempts when creating a goal create only one goal, not two',
+    (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithGoals(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('addGoalFab')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('goalNameField')), 'Emergency Fund');
+      await tester.enterText(find.byKey(const Key('goalTargetAmountField')), '120000');
+
+      final FilledButton saveButton =
+          tester.widget<FilledButton>(find.byKey(const Key('saveGoal')));
+      saveButton.onPressed!();
+      saveButton.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(find.text('New savings goal'), findsNothing); // dialog closed
+      // A one-shot query against the table directly, NOT
+      // `SavingsGoalRepository(db).watchActiveGoals(profileId).first` --
+      // a Drift query `Stream`'s `.first` is a documented hang risk in
+      // this suite (see e.g. `db.select(db.savingsGoals).get()` in
+      // `recurring_migration_test.dart` / `savings_goals_migration_test.dart`
+      // for the established one-shot alternative): it waits for the
+      // stream's *next* qualifying emission rather than reading the
+      // current row set, which is what this assertion actually needs.
+      final List<SavingsGoalRow> goals = await (db.select(db.savingsGoals)
+            ..where((tbl) => tbl.profileId.equals(profileId) & tbl.deletedAt.isNull()))
+          .get();
+      expect(goals, hasLength(1)); // not 2
+      expect(goals.single.name, 'Emergency Fund');
+    },
+  );
 
   // ---------------------------------------------------------------------
   // Visual System Convergence Checkpoint 7.4: locks in the goal tile's new

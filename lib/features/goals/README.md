@@ -1,16 +1,24 @@
-# goals — reserved for Beta 1
+# goals — Beta 1 Task 3, hardened in Checkpoint S
 
-Not implemented yet — see `docs/19_PRIVATE_BETA_BUILD_PLAN.md`, Beta 1
-("Daily Use"): savings goals, goal contributions, milestones.
+Implemented. Savings goals, goal contributions, milestones, and the
+Home dashboard's priority-goal card are all live -- see
+`docs/14_DECISION_LOG.md` ADR-022 (the original schema/pace/milestones/
+Home-selection design) and ADR-042 (Checkpoint S's audit-and-harden
+pass: the double-submit fix and the additional regression coverage it
+added; the architecture itself was already correct and needed no
+redesign).
 
-This is also why the Beta 0 navigation shell
-(`lib/shared/widgets/app_shell.dart`) has no Goals tab — Decision 12 /
-ADR-015 add it as a primary destination only once this feature exists,
-rather than shipping a placeholder tab that goes nowhere.
+`goals` and `goal_contributions` from `docs/03_DATABASE_SCHEMA.md`
+became `savings_goals`/`savings_goal_contributions` at schema version 3
+(ADR-022) -- `savings_streaks`/`savings_milestones` were deliberately
+NOT added as separate tables; milestone attainment is derived fresh
+from `saved`/`target` on every read (`domain/savings_goal_milestones.dart`)
+rather than persisted, and there is no streak feature in Beta 1's scope.
 
-`goals`, `goal_contributions`, `savings_streaks`, and
-`savings_milestones` from `docs/03_DATABASE_SCHEMA.md` are not part of
-the Beta 0 schema. A goal's target currency must stay stable regardless
-of FX movement (ADR-013) — implement that rule here when this feature is
-built, following the same `data/ domain/ presentation/` structure as
-`features/transactions/`.
+A goal's target currency stays anchored at creation and is never
+FX-converted (ADR-013/ADR-022) -- `SavingsGoalRepository.updateGoal`
+rejects any attempt to change it. Follows the same
+`data/ domain/ presentation/`-shaped structure as `features/transactions/`,
+adapted to this feature's actual repository/domain split
+(`core/database/repositories/savings_goal*.dart` +
+`features/goals/domain/` + `features/goals/presentation/`).
