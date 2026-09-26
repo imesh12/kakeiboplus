@@ -295,6 +295,20 @@
   "categoryFieldLabel": "カテゴリ",
   "chooseCategoryMessage": "カテゴリを選択してください。",
   "categoryBudgetAmountLabel": "カテゴリ予算額",
+  "previousMonthTooltip": "前の月",
+  "nextMonthTooltip": "次の月",
+  "monthSummarySectionTitle": "月の概要",
+  "totalBudgetLabel": "予算総額",
+  "spentLabel": "支出済み",
+  "noCategoryBudgetsForMonthMessage": "この月のカテゴリ予算はありません。",
+  "overBudgetByAmountLabel": "{amount} 予算超過",
+  "@overBudgetByAmountLabel": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "editTooltip": "編集",
   "removeTooltip": "削除",
   "couldNotLoadGoals": "目標を読み込めませんでした: {error}",

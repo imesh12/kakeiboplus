@@ -9,6 +9,7 @@ import '../../onboarding/presentation/profile_providers.dart';
 import '../../transactions/presentation/transaction_providers.dart';
 import '../domain/budget_calculation.dart';
 import '../domain/budget_month.dart';
+import '../domain/budget_month_summary.dart';
 
 /// The calendar month "now" belongs to, in UTC -- the same convention
 /// every other month-boundary calculation in the app uses (see
@@ -114,4 +115,165 @@ final Provider<AsyncValue<BudgetCalculation?>> livingCurrencyOverallBudgetProvid
     spent: spent,
   );
   return AsyncValue<BudgetCalculation?>.data(calculation);
+});
+
+/// Checkpoint Q (Monthly Budget Progress & Month Navigation): the
+/// Budgets screen's single, user-navigable selected month -- distinct
+/// from [currentBudgetMonthProvider], which always tracks the real
+/// calendar "now" and continues to back the Home dashboard's budget
+/// card unchanged (see that provider's own doc comment). Navigating the
+/// Budgets screen must never move the dashboard's month, and the
+/// dashboard's own passage of time must never move the Budgets screen
+/// out from under a user who has navigated away from the current month
+/// -- two genuinely different concepts that happen to share the same
+/// starting value.
+///
+/// A [StateProvider] rather than a plain [Provider]: unlike
+/// [currentBudgetMonthProvider] (recomputed from the clock on every
+/// rebuild), this value must persist exactly as the user last set it
+/// until they navigate again -- there is nothing to "recompute" here at
+/// all. Initialized once, at first read, to the calendar month
+/// containing `DateTime.now().toUtc()` -- the same convention every
+/// other month-boundary provider in this app uses.
+///
+/// The Budgets screen (`budgets_screen.dart`) is the only reader of
+/// this provider and everything derived from it below; nothing outside
+/// the budgets feature depends on it.
+final StateProvider<BudgetMonth> selectedBudgetMonthProvider = StateProvider<BudgetMonth>((ref) {
+  return BudgetMonth.fromUtc(DateTime.now().toUtc());
+});
+
+/// All active budgets (overall + category, every currency) for
+/// [selectedBudgetMonthProvider]'s month -- the navigable counterpart of
+/// [currentMonthBudgetsProvider], which the Budgets screen now reads
+/// instead. [currentMonthBudgetsProvider] itself is left completely
+/// unchanged and unused by the screen from this checkpoint forward, so
+/// nothing else that might depend on "the real current month's budgets"
+/// (there is no other reader today, but none is invented here either)
+/// is affected.
+final StreamProvider<List<BudgetRow>> budgetsForSelectedMonthProvider =
+    StreamProvider<List<BudgetRow>>((ref) async* {
+  final ProfileRow? profile = await ref.watch(activeProfileProvider.future);
+  if (profile == null) {
+    yield const <BudgetRow>[];
+    return;
+  }
+  final BudgetMonth month = ref.watch(selectedBudgetMonthProvider);
+  yield* ref
+      .watch(budgetRepositoryProvider)
+      .watchActiveForMonth(profileId: profile.id, month: month);
+});
+
+/// One [BudgetMonthSummary] per currency that has at least one active
+/// category budget for [selectedBudgetMonthProvider]'s month --
+/// Checkpoint Q's Month Summary / Category Budget Progress data source.
+/// Deliberately excludes the overall budget entirely (see
+/// [BudgetMonthSummary]'s own doc and `docs/14_DECISION_LOG.md`
+/// ADR-021 point 6/13 plus the new ADR this checkpoint adds) -- summing
+/// it in would double-count capacity that was never meant to stack with
+/// category budgets.
+///
+/// Follows the exact same "watch profile + ledger, branch on
+/// loading/error, compute once both are ready" shape
+/// [livingCurrencyOverallBudgetProvider] already established -- the only
+/// difference is this evaluates every active category budget for the
+/// month (grouped by currency) instead of a single living-currency
+/// overall budget.
+final Provider<AsyncValue<List<BudgetMonthSummary>>> budgetMonthSummariesProvider =
+    Provider<AsyncValue<List<BudgetMonthSummary>>>((ref) {
+  final AsyncValue<ProfileRow?> profileAsync = ref.watch(activeProfileProvider);
+  final AsyncValue<List<LedgerTransaction>> ledgerAsync = ref.watch(ledgerProvider);
+  final AsyncValue<List<BudgetRow>> budgetsAsync = ref.watch(budgetsForSelectedMonthProvider);
+  final BudgetMonth month = ref.watch(selectedBudgetMonthProvider);
+
+  if (profileAsync.isLoading || ledgerAsync.isLoading || budgetsAsync.isLoading) {
+    return const AsyncValue<List<BudgetMonthSummary>>.loading();
+  }
+  if (profileAsync.hasError) {
+    return AsyncValue<List<BudgetMonthSummary>>.error(
+      profileAsync.error!,
+      profileAsync.stackTrace!,
+    );
+  }
+  if (ledgerAsync.hasError) {
+    return AsyncValue<List<BudgetMonthSummary>>.error(ledgerAsync.error!, ledgerAsync.stackTrace!);
+  }
+  if (budgetsAsync.hasError) {
+    return AsyncValue<List<BudgetMonthSummary>>.error(
+      budgetsAsync.error!,
+      budgetsAsync.stackTrace!,
+    );
+  }
+
+  final ProfileRow? profile = profileAsync.requireValue;
+  if (profile == null) {
+    return const AsyncValue<List<BudgetMonthSummary>>.loading(); // pre-onboarding; router keeps this off-screen
+  }
+
+  final List<LedgerTransaction> ledger = ledgerAsync.requireValue;
+
+  // Exact-category matching only, per budget row -- no subcategory
+  // rollup (ADR-021 point 5, unchanged). Grouped by currency so amounts
+  // are never summed across currencies (Section O / ADR-021 point 13).
+  final Map<String, List<BudgetRow>> categoryBudgetsByCurrency = <String, List<BudgetRow>>{};
+  for (final BudgetRow row in budgetsAsync.requireValue) {
+    if (row.categoryId == null) continue; // the separate overall budget -- never included here
+    categoryBudgetsByCurrency.putIfAbsent(row.currencyCode, () => <BudgetRow>[]).add(row);
+  }
+
+  final DateTime todayUtc = DateTime.now().toUtc();
+  final List<BudgetMonthSummary> summaries = <BudgetMonthSummary>[];
+  for (final MapEntry<String, List<BudgetRow>> entry in categoryBudgetsByCurrency.entries) {
+    final String currencyCode = entry.key;
+    Money totalBudget = Money.zero(currencyCode);
+    Money totalSpent = Money.zero(currencyCode);
+    final List<CategoryBudgetProgress> categoryProgress = <CategoryBudgetProgress>[];
+
+    for (final BudgetRow row in entry.value) {
+      final Money budgeted = Money.fromMinorUnits(row.amountMinorUnits, currencyCode);
+      // The half-open [month.startUtc, next month) interval is expressed
+      // as `[startUtc, endUtcInclusive]` here because `_relevant` (this
+      // primitive's internal filter) compares with `isBefore`/`isAfter`,
+      // i.e. an INCLUSIVE bound -- `endUtcInclusive` is exactly one
+      // microsecond before the next month starts, so this is the same
+      // boundary either way expressed as inclusive rather than exclusive.
+      // See `budget_month.dart`'s own doc comment and
+      // `dashboard_providers.dart`'s established precedent.
+      final Money categorySpent = FinanceEngine.categoryExpenseTotal(
+        ledger,
+        currencyCode: currencyCode,
+        categoryId: row.categoryId!,
+        fromUtc: month.startUtc,
+        toUtc: month.endUtcInclusive,
+      );
+      final BudgetCalculation calculation = BudgetCalculator.evaluate(
+        month: month,
+        todayUtc: todayUtc,
+        budgeted: budgeted,
+        spent: categorySpent,
+      );
+      categoryProgress.add(
+        CategoryBudgetProgress(
+          budgetId: row.id,
+          categoryId: row.categoryId!,
+          calculation: calculation,
+        ),
+      );
+      totalBudget = totalBudget + budgeted;
+      totalSpent = totalSpent + categorySpent;
+    }
+
+    summaries.add(
+      BudgetMonthSummary(
+        month: month,
+        currencyCode: currencyCode,
+        totalBudget: totalBudget,
+        spent: totalSpent,
+        remaining: totalBudget - totalSpent,
+        categoryProgress: categoryProgress,
+      ),
+    );
+  }
+  summaries.sort((BudgetMonthSummary a, BudgetMonthSummary b) => a.currencyCode.compareTo(b.currencyCode));
+  return AsyncValue<List<BudgetMonthSummary>>.data(summaries);
 });

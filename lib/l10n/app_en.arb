@@ -295,6 +295,20 @@
   "categoryFieldLabel": "Category",
   "chooseCategoryMessage": "Choose a category.",
   "categoryBudgetAmountLabel": "Category budget amount",
+  "previousMonthTooltip": "Previous month",
+  "nextMonthTooltip": "Next month",
+  "monthSummarySectionTitle": "Month summary",
+  "totalBudgetLabel": "Total budget",
+  "spentLabel": "Spent",
+  "noCategoryBudgetsForMonthMessage": "No category budgets for this month.",
+  "overBudgetByAmountLabel": "{amount} over budget",
+  "@overBudgetByAmountLabel": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "editTooltip": "Edit",
   "removeTooltip": "Remove",
   "couldNotLoadGoals": "Could not load goals: {error}",

@@ -515,6 +515,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get categoryBudgetAmountLabel => 'Category budget amount';
 
   @override
+  String get previousMonthTooltip => 'Previous month';
+
+  @override
+  String get nextMonthTooltip => 'Next month';
+
+  @override
+  String get monthSummarySectionTitle => 'Month summary';
+
+  @override
+  String get totalBudgetLabel => 'Total budget';
+
+  @override
+  String get spentLabel => 'Spent';
+
+  @override
+  String get noCategoryBudgetsForMonthMessage =>
+      'No category budgets for this month.';
+
+  @override
+  String overBudgetByAmountLabel(String amount) {
+    return '$amount over budget';
+  }
+
+  @override
   String get editTooltip => 'Edit';
 
   @override

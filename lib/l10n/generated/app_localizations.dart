@@ -992,6 +992,48 @@ abstract class AppLocalizations {
   /// **'Category budget amount'**
   String get categoryBudgetAmountLabel;
 
+  /// No description provided for @previousMonthTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous month'**
+  String get previousMonthTooltip;
+
+  /// No description provided for @nextMonthTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Next month'**
+  String get nextMonthTooltip;
+
+  /// No description provided for @monthSummarySectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Month summary'**
+  String get monthSummarySectionTitle;
+
+  /// No description provided for @totalBudgetLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total budget'**
+  String get totalBudgetLabel;
+
+  /// No description provided for @spentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Spent'**
+  String get spentLabel;
+
+  /// No description provided for @noCategoryBudgetsForMonthMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No category budgets for this month.'**
+  String get noCategoryBudgetsForMonthMessage;
+
+  /// No description provided for @overBudgetByAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} over budget'**
+  String overBudgetByAmountLabel(String amount);
+
   /// No description provided for @editTooltip.
   ///
   /// In en, this message translates to:

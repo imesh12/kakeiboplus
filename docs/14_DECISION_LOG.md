@@ -2296,3 +2296,113 @@ correct, not changed. See `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §
 full implementation record, including every file changed, test coverage, and the complete list
 of legitimate deferrals.
 Nothing was staged or committed by this checkpoint.
+
+## ADR-040 — Checkpoint Q: Monthly Budget Progress & Month Navigation is a navigable-month state plus a per-currency summary over already-built primitives
+
+Decision: Checkpoint Q turns the Budgets screen from a current-month-only list into a
+navigable, month-oriented dashboard (total/spent/remaining/percentage per currency, plus
+per-category progress) by composing primitives ADR-021 had already built, rather than
+introducing new financial arithmetic. No schema change (still schema v13). No `FinanceEngine`
+change. No change to the Home dashboard's own budget card.
+
+1. **A second, independent month provider — never a replacement for the first one.**
+   `currentBudgetMonthProvider` (always the real calendar "now", read by
+   `livingCurrencyOverallBudgetProvider` for the Home dashboard's budget card) is completely
+   untouched. A new `selectedBudgetMonthProvider` (a `StateProvider<BudgetMonth>`, initialized
+   once to the real current month) is the Budgets screen's own single source of truth for
+   which month it is showing — both the budget rows listed (`budgetsForSelectedMonthProvider`,
+   the navigable counterpart of the now-screen-unused `currentMonthBudgetsProvider`) and the
+   spend calculated against them (`budgetMonthSummariesProvider`) watch this one provider.
+   Navigating the Budgets screen can never move the dashboard's month, and the dashboard's own
+   passage of time can never move the Budgets screen out from under a user who has navigated
+   away from the current month — verified by dedicated provider tests
+   (`budget_providers_test.dart`, "Checkpoint Q -- selectedBudgetMonthProvider").
+
+2. **`BudgetMonth.previous`/`.next` already were year-boundary-safe and day-of-month-independent
+   (see the type's own doc comment, unchanged since ADR-021) — the month-navigation header
+   (`_MonthNavigator` on `budgets_screen.dart`) is a thin UI layer over them, writing
+   `selectedBudgetMonthProvider`'s state; no new month arithmetic was written.**
+
+3. **Half-open month boundaries reuse the existing inclusive-endpoint convention, not a new
+   time convention.** `FinanceEngine._relevant`'s `[fromUtc, toUtc]` filter is inclusive at
+   both ends; `BudgetMonth.startUtc`/`.endUtcInclusive` (the last microsecond of the month) are
+   already the exact inclusive expression of `[start, nextMonthStart)` that
+   `dashboard_providers.dart` established. `budgetMonthSummariesProvider` passes these two
+   values unchanged into `FinanceEngine.categoryExpenseTotal` — the same call shape
+   `livingCurrencyOverallBudgetProvider` already used for the overall budget's spend. Verified
+   for the first/last instant of a month, the following month's first instant, a leap-year
+   February, and the December→January boundary
+   (`budget_month_summary_test.dart`, "FinanceEngine.categoryExpenseTotal -- half-open month
+   boundary").
+
+4. **Category "spent" reuses `FinanceEngine.categoryExpenseTotal` — a primitive ADR-021 already
+   built and unit-tested (`finance_engine_test.dart`) but that had no production caller until
+   this checkpoint.** It already implements every Section I/J rule this checkpoint needed:
+   expense-only (never income, never a transfer), soft-deleted transactions excluded, exact
+   category-id matching with no subcategory rollup (`Categories.parentId` remains unpopulated
+   and unenforced — ADR-021 point 5, unchanged; a category rename never affects attribution
+   because matching is by id). Nothing new was written for this; only a new caller.
+
+5. **One `BudgetMonthSummary` per currency, built only from category budgets — the overall
+   budget is deliberately never folded in.** `docs/14_DECISION_LOG.md`'s own ADR-021 (point 13)
+   already treats "the overall budget" and "the set of category budgets" as two independent,
+   non-overlapping ways to budget the same money, never a hierarchy; summing both into one
+   total would double-count capacity that was never meant to stack. A currency with no category
+   budget for the selected month simply has no summary — rendered as an explicit, localized
+   empty state (`noCategoryBudgetsForMonthMessage`), never a fabricated ¥0 card. Multiple
+   currencies never mix into one total (Section O) — verified directly
+   (`budget_month_summary_test.dart`, `budget_providers_test.dart`).
+
+6. **`CategoryBudgetProgress` wraps an existing `BudgetCalculation` rather than re-deriving
+   budgeted/spent/remaining.** `BudgetCalculator.evaluate` was already generic over "one budget,
+   overall or category" — only its inputs differ (`categoryExpenseTotal` instead of
+   `incomeExpenseTotals(...).expense`). `usedRatio`/`isOverBudget` are presentation-only
+   derived getters on top of it (never persisted, never fed back into any calculation),
+   matching `_ConfiguredBudget`'s existing dashboard formula exactly (`spent.minorUnits /
+   budgeted.minorUnits`, uncapped).
+
+7. **Percentage text is always the true, uncapped ratio; only a progress bar's fill fraction
+   clamps to 1.0.** This was already ADR-021's point 11 for the overall budget — Checkpoint Q
+   applies the identical rule to category budgets and the new per-currency month summary,
+   reusing the shared `AppProgressBar` primitive (`value: ratio.clamp(0.0, 1.0)`) rather than a
+   new hand-rolled bar. A configured budget amount can never be zero (`BudgetRepository`
+   rejects it before any write), so this never divides by zero; a `BudgetMonthSummary` is only
+   ever constructed for a currency with at least one category budget, so its own `totalBudget`
+   can never be zero either.
+
+8. **Overspending is represented in words, never a misleadingly positive "remaining."** When
+   `spent > budgeted`/`totalBudget`, the UI shows `l10n.overBudgetByAmountLabel` (e.g. "¥2,500
+   over budget") instead of the ordinary remaining-amount label — both the Month Summary card
+   and each category's progress details. This is new copy (`overBudgetByAmountLabel`,
+   `totalBudgetLabel`, `spentLabel`, `monthSummarySectionTitle`,
+   `noCategoryBudgetsForMonthMessage`, `previousMonthTooltip`, `nextMonthTooltip`), added to
+   both `app_en.arb`/`app_ja.arb` and hand-synced into the generated localization files (this
+   sandbox has no `flutter gen-l10n` toolchain — see the checkpoint's own final report for the
+   full validation-gap list). `remainingLabel`/`percentUsedLabel`/`ofAmount` are reused
+   unchanged from the existing catalog rather than duplicated.
+
+9. **Add/Edit Budget now read `selectedBudgetMonthProvider`, not `currentBudgetMonthProvider`,
+   at submit time — the one genuine behavior change this checkpoint made to existing code.**
+   Before this checkpoint, the Budgets screen had no navigation at all, so this distinction was
+   invisible; introducing navigation without this fix would have silently created/updated a
+   budget for the real current month while the screen displayed a different (historical)
+   month's list — exactly the Section K hazard the checkpoint brief called out by name. Fixed
+   in both `_OverallBudgetDialogState._submit` and `_CategoryBudgetDialogState._submit`;
+   verified directly (`budgets_screen_test.dart`, "Checkpoint Q -- Add/Edit Budget respect the
+   selected historical month").
+
+10. **Month navigation is arrow buttons only — no `PageView`/swipe.** The codebase has no
+    existing swipe-driven navigation pattern to extend, and the checkpoint brief explicitly
+    treats a fragile infinite `PageView` merely to satisfy "slide" as out of scope, ranking
+    correct prev/next arithmetic above the gesture. This is a legitimate, documented deferral,
+    not an oversight.
+
+**Scope of this decision.** This ADR covers the selected-month provider, the half-open month
+interval, the category/month spend and percentage semantics, the currency-scoped summary, the
+Add/Edit historical-month fix, and the new localization keys. It does not touch
+`FinanceEngine`, the `budgets` table schema, `BudgetCalculator`/`BudgetStatus` (the existing
+pace-based status these already compute remains a separate, still-unused-by-this-screen
+concept from the raw percentage-of-budget-used this checkpoint displays), the Home dashboard's
+budget card, or any other checkpoint's regression boundary (Savings, Deposit, Credit Card,
+cheques, Net Worth, KakeiboPlus branding) — all confirmed unaffected by inspection, since none
+of those areas' files were touched.

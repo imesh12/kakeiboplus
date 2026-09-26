@@ -502,6 +502,29 @@ class AppLocalizationsJa extends AppLocalizations {
   String get categoryBudgetAmountLabel => 'カテゴリ予算額';
 
   @override
+  String get previousMonthTooltip => '前の月';
+
+  @override
+  String get nextMonthTooltip => '次の月';
+
+  @override
+  String get monthSummarySectionTitle => '月の概要';
+
+  @override
+  String get totalBudgetLabel => '予算総額';
+
+  @override
+  String get spentLabel => '支出済み';
+
+  @override
+  String get noCategoryBudgetsForMonthMessage => 'この月のカテゴリ予算はありません。';
+
+  @override
+  String overBudgetByAmountLabel(String amount) {
+    return '$amount 予算超過';
+  }
+
+  @override
   String get editTooltip => '編集';
 
   @override
