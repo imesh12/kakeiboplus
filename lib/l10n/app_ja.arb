@@ -727,5 +727,9 @@
   "deleteChequeConfirmationMessage": "この小切手を削除しますか?この操作は元に戻せません。",
   "viewPostedTransactionButton": "記帳された取引を表示",
   "chequeDetailTitle": "小切手",
-  "chequeNoLongerAvailableMessage": "この小切手は利用できません。"
+  "chequeNoLongerAvailableMessage": "この小切手は利用できません。"  ,
+  "creditFacilityDetailsSectionTitle": "クレジットカードの詳細",
+  "availableCreditLabel": "利用可能額",
+  "creditUtilizationLabel": "利用率",
+  "editCreditLimitFieldLabel": "利用限度額"
 }

@@ -1381,4 +1381,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chequeNoLongerAvailableMessage => 'この小切手は利用できません。';
+
+  @override
+  String get creditFacilityDetailsSectionTitle => 'クレジットカードの詳細';
+
+  @override
+  String get availableCreditLabel => '利用可能額';
+
+  @override
+  String get creditUtilizationLabel => '利用率';
+
+  @override
+  String get editCreditLimitFieldLabel => '利用限度額';
 }

@@ -2643,6 +2643,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This cheque is no longer available.'**
   String get chequeNoLongerAvailableMessage;
+
+  /// Checkpoint O: title of the credit-card-specific details card on Account Detail, shown only for creditCard-subtype accounts when a credit facility exists.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit details'**
+  String get creditFacilityDetailsSectionTitle;
+
+  /// Checkpoint O: max(0, creditLimit - amountOwed) -- a presentation-only figure, never persisted. Shown as 'Not set' when no meaningful credit limit is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Available credit'**
+  String get availableCreditLabel;
+
+  /// Checkpoint O: amountOwed / creditLimit * 100, formatted as a percentage. May exceed 100% for an over-limit balance -- never clamped or hidden. Shown as 'Not set' when no meaningful credit limit is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit utilization'**
+  String get creditUtilizationLabel;
+
+  /// Checkpoint O: Edit Account's credit-limit input, shown only for a creditCard-subtype account. Deliberately the same wording as addAccountCreditLimitLabel -- same concept, same field, just editable after creation too now.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit limit'**
+  String get editCreditLimitFieldLabel;
 }
 
 class _AppLocalizationsDelegate

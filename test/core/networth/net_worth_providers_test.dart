@@ -1,6 +1,7 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/credit_facility_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/deposit_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/finance/balance_class.dart';
@@ -196,6 +197,42 @@ void main() {
       // owed" magnitude, per `FinanceEngine.accountBalance`'s
       // convention -- never itself negative.
       expect(line.balance, Money.fromMinorUnits(30000, 'JPY'));
+    });
+
+    test(
+        'Checkpoint O item U -- changing a credit card\'s credit limit does not change net '
+        'worth (credit capacity has zero ledger weight)', () async {
+      final String profileId = await seedProfile(living: 'JPY', home: 'USD');
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Credit Card',
+        type: 'creditCard',
+        balanceClass: BalanceClass.liability,
+        subtype: FinancialAccountSubtype.creditCard,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(30000, 'JPY'),
+      );
+      final CreditFacilityRepository facilityRepo = CreditFacilityRepository(db, accountRepo);
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(500000, 'JPY'),
+      );
+
+      final NetWorthCurrencySummary before = (await readSummaries()).single;
+      expect(before.netWorth, Money.fromMinorUnits(-30000, 'JPY'));
+
+      await facilityRepo.updateCreditLimit(
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(2000000, 'JPY'),
+      );
+
+      final NetWorthCurrencySummary after = (await readSummaries()).single;
+      // Identical to `before` -- only the amount owed moves net worth,
+      // never the limit.
+      expect(after.totalAssets, before.totalAssets);
+      expect(after.totalLiabilities, before.totalLiabilities);
+      expect(after.netWorth, before.netWorth);
     });
 
     test(

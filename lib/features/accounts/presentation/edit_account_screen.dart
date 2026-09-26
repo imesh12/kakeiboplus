@@ -4,7 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/database/repositories/account_repository.dart';
+import '../../../core/database/repositories/credit_facility_repository.dart'
+    show CreditFacilityDetailsRowX;
+import '../../../core/finance/financial_account_subtype.dart';
+import '../../../core/money/money.dart';
 import '../../../l10n/generated/app_localizations.dart';
+import '../../../shared/widgets/money_text_field.dart';
 import 'account_form_fields.dart';
 import 'account_providers.dart';
 import 'account_type_presentation.dart';
@@ -58,12 +63,37 @@ class EditAccountScreen extends ConsumerWidget {
             ),
           );
         }
-        // Keyed on the account's id so a save (which doesn't itself
-        // navigate away -- see `_EditAccountBody._save`) rebuilds this
-        // whole subtree with a fresh `TextEditingController` reflecting
-        // the just-saved name/type, rather than keeping the pre-edit
-        // text alive in stale controller state.
-        return _EditAccountBody(key: ValueKey<String>(account.id), account: account);
+        // Checkpoint O: for a credit-card account, also resolve its
+        // credit facility here, synchronously alongside the account --
+        // the same "resolve before constructing the body" shape
+        // `account` itself already uses, so `_EditAccountBody`'s
+        // credit-limit field can seed its `initialValue` once, in
+        // `initState`, from an already-known value -- the same
+        // precedent `goal_detail_screen.dart`'s own edit-target-amount
+        // field establishes -- rather than depending on a stream that
+        // may not have delivered by the time that field's `initState`
+        // runs.
+        //
+        // Keyed on the account's id AND (for a credit card) whether the
+        // facility has actually arrived yet: `creditFacilityForAccountProvider`
+        // collapses its own brief loading gap to `null` (see that
+        // provider's doc) -- appending that state to the key means this
+        // widget is torn down and rebuilt ONE additional time, the
+        // moment the real facility value arrives, rather than ever
+        // being stuck with a stale `null` seed. In practice (a local
+        // Drift query) that gap is at most one frame, before the user
+        // could have typed anything, so the rebuild is unobservable --
+        // matching every other `disposeInOrder`/stream-seeding precedent
+        // in this app's own doc comments that already accepts this
+        // same "instantly-resolving" tradeoff.
+        final bool isCreditCard = account.subtypeValue == FinancialAccountSubtype.creditCard;
+        final CreditFacilityDetailsRow? creditFacility =
+            isCreditCard ? ref.watch(creditFacilityForAccountProvider(account.id)) : null;
+        return _EditAccountBody(
+          key: ValueKey<String>('${account.id}_${creditFacility?.id ?? "pending"}'),
+          account: account,
+          initialCreditFacility: creditFacility,
+        );
       },
     );
   }
@@ -74,8 +104,23 @@ class EditAccountScreen extends ConsumerWidget {
 /// detail/edit pair in this app, and so there's room for the read-only
 /// currency explanation below the shared name/type fields.
 class _EditAccountBody extends ConsumerStatefulWidget {
-  const _EditAccountBody({required this.account, super.key});
+  const _EditAccountBody({
+    required this.account,
+    required this.initialCreditFacility,
+    super.key,
+  });
   final AccountRow account;
+
+  /// Checkpoint O: the account's credit facility at the moment this
+  /// widget was constructed -- `null` for every non-credit-card
+  /// account, and (very briefly, see `EditAccountScreen`'s own doc)
+  /// possibly still `null` for a credit-card account whose facility
+  /// hadn't arrived yet on the very first build. Read only once, in
+  /// [_EditAccountBodyState.initState] -- this widget is torn down and
+  /// rebuilt (see this widget's `key`) the moment a real value arrives,
+  /// so [_EditAccountBodyState] never needs to react to this changing
+  /// on an already-mounted instance.
+  final CreditFacilityDetailsRow? initialCreditFacility;
 
   @override
   ConsumerState<_EditAccountBody> createState() => _EditAccountBodyState();
@@ -87,11 +132,26 @@ class _EditAccountBodyState extends ConsumerState<_EditAccountBody> {
   late String _type;
   bool _isSaving = false;
 
+  /// Checkpoint O: the credit-limit field's current parsed value --
+  /// `null` for every non-credit-card account (never read by [_save]
+  /// in that case). Seeded once, below, from [_EditAccountBody
+  /// .initialCreditFacility] -- the same synchronous-seed-in-initState
+  /// shape `goal_detail_screen.dart`'s own edit-target-amount field
+  /// already establishes -- then kept current by the field's own
+  /// [MoneyTextField.onParsed] as the user edits it.
+  Money? _creditLimit;
+
+  bool get _isCreditCard => widget.account.subtypeValue == FinancialAccountSubtype.creditCard;
+
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.account.name);
     _type = widget.account.type;
+    final CreditFacilityDetailsRow? facility = widget.initialCreditFacility;
+    if (facility != null) {
+      _creditLimit = facility.creditLimitAs(widget.account.currencyCode);
+    }
   }
 
   @override
@@ -111,6 +171,14 @@ class _EditAccountBodyState extends ConsumerState<_EditAccountBody> {
   /// ever persisted.
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    // Checkpoint O: a credit-card account without a resolved credit
+    // limit yet (the brief `initialCreditFacility == null` gap --
+    // see this widget's own doc) has no valid value to persist. This
+    // should be unreachable in practice (the gap is at most one frame,
+    // long before a user could tap Save), but Save simply does nothing
+    // rather than writing a fabricated limit or crashing on a null
+    // check.
+    if (_isCreditCard && _creditLimit == null) return;
     setState(() => _isSaving = true);
     try {
       await ref.read(accountRepositoryProvider).updateAccount(
@@ -118,6 +186,23 @@ class _EditAccountBodyState extends ConsumerState<_EditAccountBody> {
             name: _nameController.text.trim(),
             type: _type,
           );
+      // Checkpoint O: editing the credit limit is a SEPARATE write,
+      // through `CreditFacilityRepository.updateCreditLimit` -- never
+      // folded into `updateAccount` (which has no `creditLimit`
+      // parameter and never will; the limit lives on
+      // `CreditFacilityDetails`, not `Accounts` -- see that
+      // repository's own doc). Deliberately two awaited calls, not one
+      // wrapped transaction: `updateAccount`'s own existing
+      // `deletedAt.isNull()` guard already makes the first call a
+      // no-op-or-throw for a closed account (unreachable here anyway --
+      // the Edit icon is never shown for one), and neither write can
+      // partially corrupt the other's target row.
+      if (_isCreditCard) {
+        await ref.read(creditFacilityRepositoryProvider).updateCreditLimit(
+              accountId: widget.account.id,
+              creditLimit: _creditLimit!,
+            );
+      }
       if (mounted) Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -166,6 +251,25 @@ class _EditAccountBodyState extends ConsumerState<_EditAccountBody> {
                     helperMaxLines: 3,
                   ),
                 ),
+                // Checkpoint O: the one field this screen adds --
+                // shown only for a credit-card account, and only once
+                // its facility has actually resolved (see this state
+                // class's own doc; `initialCreditFacility` may briefly
+                // be `null` on a credit card's very first build, in
+                // which case this widget is about to be torn down and
+                // rebuilt anyway once the real value arrives).
+                if (_isCreditCard && widget.initialCreditFacility != null) ...<Widget>[
+                  const SizedBox(height: 16),
+                  MoneyTextField(
+                    key: const Key('editCreditLimitField'),
+                    currencyCode: widget.account.currencyCode,
+                    label: l10n.editCreditLimitFieldLabel,
+                    initialValue: widget.initialCreditFacility!
+                        .creditLimitAs(widget.account.currencyCode)
+                        .toMajorUnitsString(),
+                    onParsed: (Money? v) => setState(() => _creditLimit = v),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: _isSaving ? null : _save,

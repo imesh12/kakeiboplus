@@ -2181,4 +2181,59 @@ ADR does not modify `FinanceEngine`, any existing repository's behavior, the das
 calculation, or the Home screen. See
 `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.16 for the full implementation record,
 including every file changed, test coverage, and the complete list of legitimate deferrals.
+
+## ADR-038 — Checkpoint O: Credit Card is a presentation layer over the existing liability/credit-facility architecture, not a new accounting engine
+
+**Context.** Credit Card (`FinancialAccountSubtype.creditCard`, `BalanceClass.liability`) and its
+`CreditFacilityDetails` metadata table have existed since Checkpoint E. The question this
+checkpoint answers: does the user actually understand their credit card — what they owe, their
+limit, their available credit, their utilization, and that credit capacity is debt capacity, not
+cash — and if any of that is missing, does filling the gap require new accounting engine work or
+only presentation and one small write-path addition.
+
+**Decision.** No new accounting engine. The audit (docs/20 §13.17) found `FinanceEngine`'s
+liability effect table, the dashboard/net-worth providers, and cheque eligibility already
+correct and already fully excluding credit limit/available credit from every ledger
+calculation — none of them reads `CreditFacilityDetails` at all, so credit capacity has zero
+ledger weight by construction, not by new filtering logic. Add Account already supported
+entering a credit limit at creation. The only two real gaps were: no way to *edit* an existing
+card's limit, and no UI anywhere that *showed* credit limit, available credit, or utilization.
+
+Both gaps were closed with the smallest coherent addition: `CreditFacilityRepository
+.updateCreditLimit` (writes only `creditLimitMinorUnits`/`updatedAt`, never touches `Accounts`,
+never posts a `Transactions` row), and `CreditFacilityPresentation` — a pure, unpersisted class
+computing `availableCredit = max(0, limit - owed)` (display-clamped so an over-limit balance
+never shows negative "spending capacity") and `utilizationPercent = owed / limit * 100`
+(deliberately unclamped, so an over-limit balance shows e.g. 110% rather than being hidden).
+Both values are derived on every read, never persisted, never added as a schema column.
+
+**Why not a schema migration.** `creditLimitMinorUnits` already existed and already
+round-tripped through Add Account. Available credit and utilization are pure functions of two
+`Money` values every screen already resolves — persisting either would create a second source
+of truth that could drift from the limit/balance it was computed from, with zero benefit.
+`schemaVersion` is unchanged by this checkpoint.
+
+**Why not a `FinanceEngine` change.** Presentation calculations (available credit, utilization)
+do not belong in the deterministic ledger engine merely because they involve money — they are
+never authoritative financial totals, never feed a balance/budget/net-worth calculation, and
+the engine's existing liability effect table (expense increases owed; a transfer-in payment
+decreases it; overpayment throws rather than inventing a "credit balance" concept) was already
+correct and needed no change.
+
+**Accounting invariants reconfirmed by this checkpoint's audit and tests, not altered by it:**
+credit limit and available credit are metadata with zero ledger weight; only the amount owed
+drives Net Worth and is excluded from available/liquid money exactly as before; spending and
+payments still flow through the completely unmodified `TransactionRepository`/`FinanceEngine`
+paths; editing a card's limit never creates a `Transactions` row and never changes the account's
+balance; a credit card remains categorically cheque-ineligible (excluded by both `isAsset` and
+its subtype, independently); close/reactivate already preserved `CreditFacilityDetails`
+correctly and still does.
+
+**Scope of this decision: Credit Card presentation and the limit-edit write path only.** This
+ADR does not modify `FinanceEngine`, any existing repository's ledger behavior, the
+dashboard/net-worth calculation, cheque eligibility, or account lifecycle. See
+`docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.17 for the full implementation record,
+including every file changed, test coverage, and the complete list of legitimate deferrals
+(statement accounting, APR, billing cycles, minimum payments, and the rest of the explicitly
+deferred feature set).
 Nothing was staged or committed by this checkpoint.

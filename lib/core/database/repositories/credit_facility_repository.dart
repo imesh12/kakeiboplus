@@ -175,6 +175,50 @@ class CreditFacilityRepository {
     return id;
   }
 
+  /// Checkpoint O: updates the credit limit on [accountId]'s existing
+  /// facility -- the one edit path `createFacility` never provided
+  /// (it is create-only; there was no way to change a limit after
+  /// account creation before this checkpoint). Deliberately as narrow
+  /// as [AccountRepository.updateAccount]'s own precedent: this writes
+  /// ONLY [CreditFacilityDetailsRow.creditLimitMinorUnits] (and
+  /// [CreditFacilityDetailsRow.updatedAt]) -- it never touches
+  /// `Accounts.balanceClass`/`subtype`/`openingBalanceMinorUnits`
+  /// (this method has no way to), never posts a `Transaction`, and
+  /// therefore can never change a derived balance or Net Worth. Reuses
+  /// [requireActiveForAccount] for existence, and the same currency-
+  /// match/non-negative validation [createFacility] already
+  /// establishes (zero remains a valid limit here too, for the exact
+  /// same reason -- see that method's own doc).
+  ///
+  /// Throws [CreditFacilityNotFoundException] if [accountId] has no
+  /// active facility, [CurrencyMismatchException] if [creditLimit] is
+  /// denominated in a different currency than the linked account, and
+  /// [ArgumentError] if it is negative.
+  Future<void> updateCreditLimit({
+    required String accountId,
+    required Money creditLimit,
+  }) async {
+    final CreditFacilityDetailsRow facility = await requireActiveForAccount(accountId);
+    final AccountRow account = await _accountRepository.requireById(accountId);
+    if (creditLimit.currencyCode != account.currencyCode) {
+      throw CurrencyMismatchException(account.currencyCode, creditLimit.currencyCode);
+    }
+    if (creditLimit.isNegative) {
+      throw ArgumentError.value(
+        creditLimit.minorUnits,
+        'creditLimit',
+        'must not be negative (zero is allowed).',
+      );
+    }
+    await (_db.update(_db.creditFacilityDetails)..where((tbl) => tbl.id.equals(facility.id)))
+        .write(
+      CreditFacilityDetailsCompanion(
+        creditLimitMinorUnits: Value<int>(creditLimit.minorUnits),
+        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+      ),
+    );
+  }
+
   static void _validateDayOfMonth(int? day, String argumentName) {
     if (day == null) return;
     if (day < 1 || day > 31) {

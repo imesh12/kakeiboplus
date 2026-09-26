@@ -7,6 +7,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/database/repositories/account_repository.dart' show AccountRowX;
 import '../../../core/database/repositories/deposit_repository.dart' show DepositDetailsRowX;
+import '../../../core/database/repositories/credit_facility_repository.dart' show CreditFacilityDetailsRowX;
 import '../../../core/database/services/account_lifecycle_service.dart';
 import '../../../core/finance/deposit_status.dart';
 import '../../../core/finance/deposit_term_unit.dart';
@@ -23,6 +24,7 @@ import '../../../shared/widgets/app_icon_tile.dart';
 import '../../../shared/widgets/app_money_text.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../../categories/presentation/category_providers.dart';
+import 'credit_facility_presentation.dart';
 import '../../categories/domain/category_icon.dart';
 import '../../transactions/presentation/transaction_providers.dart';
 import 'account_providers.dart';
@@ -417,6 +419,29 @@ class _AccountDetailBody extends ConsumerWidget {
           _DepositDetailsSection(accountId: account.id),
           const SizedBox(height: 24),
         ],
+        // Checkpoint O: a credit-card-only card of exactly the fields
+        // the persisted `CreditFacilityDetails` model actually
+        // supports, plus the two presentation-derived figures this
+        // checkpoint adds (available credit, utilization) -- see
+        // `_CreditFacilityDetailsSection`'s own doc. Renders nothing
+        // for every other account subtype. Needs the account's
+        // resolved balance (the "amount owed" magnitude), so -- unlike
+        // the deposit section above, which needs no ledger figure at
+        // all -- this only renders once `balanceAsync` has actually
+        // resolved, matching the hero balance's own `balanceAsync
+        // .when(...)` gating immediately above rather than opening a
+        // second, redundant balance computation.
+        if (account.subtypeValue == FinancialAccountSubtype.creditCard) ...<Widget>[
+          balanceAsync.when(
+            data: (Money amountOwed) => _CreditFacilityDetailsSection(
+              accountId: account.id,
+              amountOwed: amountOwed,
+            ),
+            loading: () => const SizedBox.shrink(),
+            error: (Object e, StackTrace st) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 24),
+        ],
         // [Recent activity] -- account-scoped, only if it can be shown
         // without any new accounting rule (it can: see
         // `accountRecentActivityProvider`'s doc comment).
@@ -533,6 +558,110 @@ class _DepositDetailsSection extends ConsumerWidget {
           _DetailRow(
             label: l10n.depositTermLabel,
             value: '${details.termNumber} $termUnitWord',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Checkpoint O (docs/20 §12.1/§12.3/this checkpoint's own brief):
+/// exposes the persisted `CreditFacilityDetails` model, plus the two
+/// presentation-derived figures `CreditFacilityPresentation` computes
+/// -- available credit and utilization -- on Account Detail. Renders
+/// nothing at all if [accountId] somehow has no facility yet
+/// (unreachable through today's Add Account UX, which always composes
+/// a facility atomically with the account -- see
+/// `AccountCreationService.createCreditCardAccount` -- but this stays
+/// defensive rather than assuming it, exactly `_DepositDetailsSection`'s
+/// own "render nothing if the details row is somehow absent"
+/// precedent).
+///
+/// **Never duplicates the hero.** "Amount you currently owe" remains
+/// the primary debt figure shown above by the existing, generic hero
+/// balance (unchanged by this checkpoint) -- this card shows Credit
+/// limit / Available credit / Credit utilization only.
+///
+/// **Missing/unset limit:** when `CreditFacilityPresentation
+/// .hasConfiguredLimit` is `false` (the facility's `creditLimitMinorUnits`
+/// is not yet a meaningful, configured value -- `createFacility`'s own
+/// doc: "zero is a valid limit... a facility legitimately can start at
+/// zero before its real limit is assigned"), all three rows show the
+/// localized "Not set" placeholder rather than fabricating a limit,
+/// misleadingly showing 0% utilization, or claiming the whole balance
+/// as available credit -- this checkpoint's explicit "Missing limit"
+/// rule. This is deliberately a single, deterministic, always-three-
+/// rows shape rather than conditionally hiding individual rows -- the
+/// simplest presentation that cannot mislead.
+class _CreditFacilityDetailsSection extends ConsumerWidget {
+  const _CreditFacilityDetailsSection({required this.accountId, required this.amountOwed});
+  final String accountId;
+
+  /// Already the correct non-negative "amount owed" magnitude --
+  /// `FinanceEngine.accountBalance`'s existing liability convention,
+  /// resolved by the caller (see this class's own call site) rather
+  /// than re-derived here.
+  final Money amountOwed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final CreditFacilityDetailsRow? facility = ref.watch(
+      creditFacilityForAccountProvider(accountId),
+    );
+    if (facility == null) {
+      return const SizedBox.shrink();
+    }
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final Money creditLimit = facility.creditLimitAs(amountOwed.currencyCode);
+    final CreditFacilityPresentation presentation = CreditFacilityPresentation(
+      creditLimit: creditLimit,
+      amountOwed: amountOwed,
+    );
+
+    final String creditLimitValue =
+        presentation.hasConfiguredLimit ? _formatter.format(creditLimit) : l10n.homeQuickGlanceNotSet;
+    final String availableCreditValue = presentation.hasConfiguredLimit
+        ? _formatter.format(presentation.availableCredit)
+        : l10n.homeQuickGlanceNotSet;
+    // 2 decimal places, matching `_DepositDetailsSection`'s own
+    // basis-points-to-percent convention immediately above (the only
+    // existing percent-formatting precedent in this app) -- e.g.
+    // 16.5 -> "16.50%", 110.0 -> "110.00%".
+    final String utilizationValue = presentation.hasConfiguredLimit
+        ? '${presentation.utilizationPercent.toStringAsFixed(2)}%'
+        : l10n.homeQuickGlanceNotSet;
+
+    return AppCard(
+      key: const Key('creditFacilityDetailsCard'),
+      bordered: true,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              l10n.creditFacilityDetailsSectionTitle,
+              style: context.appTypography.secondaryBody,
+            ),
+          ),
+          const Divider(height: 1),
+          _DetailRow(
+            key: const Key('creditLimitRow'),
+            label: l10n.addAccountCreditLimitLabel,
+            value: creditLimitValue,
+          ),
+          const Divider(height: 1),
+          _DetailRow(
+            key: const Key('availableCreditRow'),
+            label: l10n.availableCreditLabel,
+            value: availableCreditValue,
+          ),
+          const Divider(height: 1),
+          _DetailRow(
+            key: const Key('creditUtilizationRow'),
+            label: l10n.creditUtilizationLabel,
+            value: utilizationValue,
           ),
         ],
       ),

@@ -584,6 +584,97 @@ void main() {
     },
   );
 
+  group('Checkpoint O -- Edit Credit Card limit round trip', () {
+    testWidgets(
+      'create -> set limit -> save -> reopen Edit -> same limit appears -> change limit -> '
+      'save -> Account Detail reflects the new limit (item D)',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final AccountCreationService service = buildCreationService(db, accountRepo);
+        final CreditCardCreationResult created = await service.createCreditCardAccount(
+          profileId: profileId,
+          name: 'Everyday card',
+          currencyCode: 'JPY',
+          owedAmount: Money.fromMinorUnits(80000, 'JPY'),
+          creditLimit: Money.fromMinorUnits(500000, 'JPY'),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, created.accountId));
+        await openEdit(tester);
+        expect(tester.takeException(), isNull);
+
+        // The limit set at creation (¥500,000) is pre-filled -- proves
+        // `EditAccountScreen` seeds `_creditLimit` from the resolved
+        // `CreditFacilityDetails` row rather than leaving the field blank.
+        final Finder limitField = find.byKey(const Key('editCreditLimitField'));
+        expect(limitField, findsOneWidget);
+        final Finder limitTextField =
+            find.descendant(of: limitField, matching: find.byType(TextFormField));
+        expect(tester.widget<TextFormField>(limitTextField).controller!.text, '500000');
+
+        // Change the limit and save.
+        await tester.enterText(limitTextField, '750000');
+        await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Back on Account Detail: the new limit is reflected, and the
+        // derived available-credit/utilization rows recompute from it
+        // (owed is still ¥80,000 -- unchanged by editing the limit).
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('creditLimitRow')),
+            matching: find.text('¥750,000'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('availableCreditRow')),
+            matching: find.text('¥670,000'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('creditUtilizationRow')),
+            matching: find.text('10.67%'),
+          ),
+          findsOneWidget,
+        );
+
+        // Reopen Edit again -- the newly-saved limit round-trips too, not
+        // just the in-memory value from the same session.
+        await tester.tap(find.byKey(const Key('editAccount')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final Finder reopenedLimitTextField = find.descendant(
+          of: find.byKey(const Key('editCreditLimitField')),
+          matching: find.byType(TextFormField),
+        );
+        expect(tester.widget<TextFormField>(reopenedLimitTextField).controller!.text, '750000');
+
+        // Editing the limit alone never touched the account's balance/
+        // liability class/currency, and never posted a Transaction.
+        final AccountRow account = await accountRepo.requireById(created.accountId);
+        expect(account.balanceClassValue, BalanceClass.liability);
+        expect(account.subtypeValue, FinancialAccountSubtype.creditCard);
+        expect(account.currencyCode, 'JPY');
+        expect((await db.select(db.transactions).get()), isEmpty);
+
+        final CreditFacilityRepository facilityRepo = CreditFacilityRepository(db, accountRepo);
+        final CreditFacilityDetailsRow facility =
+            await facilityRepo.requireActiveForAccount(created.accountId);
+        expect(facility.creditLimitMinorUnits, 750000);
+      },
+    );
+  });
+
   group("Checkpoint G Android regression repair: legacy/pre-G accounts keep today's behavior", () {
     testWidgets(
       "a legacy type: 'card' account (subtype legacyCardNeedsReview) keeps its existing "

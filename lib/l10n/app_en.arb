@@ -762,5 +762,21 @@
   "deleteChequeConfirmationMessage": "Delete this cheque? This cannot be undone.",
   "viewPostedTransactionButton": "View posted transaction",
   "chequeDetailTitle": "Cheque",
-  "chequeNoLongerAvailableMessage": "This cheque is no longer available."
+  "chequeNoLongerAvailableMessage": "This cheque is no longer available.",
+  "creditFacilityDetailsSectionTitle": "Credit details",
+  "@creditFacilityDetailsSectionTitle": {
+    "description": "Checkpoint O: title of the credit-card-specific details card on Account Detail, shown only for creditCard-subtype accounts when a credit facility exists."
+  },
+  "availableCreditLabel": "Available credit",
+  "@availableCreditLabel": {
+    "description": "Checkpoint O: max(0, creditLimit - amountOwed) -- a presentation-only figure, never persisted. Shown as 'Not set' when no meaningful credit limit is configured."
+  },
+  "creditUtilizationLabel": "Credit utilization",
+  "@creditUtilizationLabel": {
+    "description": "Checkpoint O: amountOwed / creditLimit * 100, formatted as a percentage. May exceed 100% for an over-limit balance -- never clamped or hidden. Shown as 'Not set' when no meaningful credit limit is configured."
+  },
+  "editCreditLimitFieldLabel": "Credit limit",
+  "@editCreditLimitFieldLabel": {
+    "description": "Checkpoint O: Edit Account's credit-limit input, shown only for a creditCard-subtype account. Deliberately the same wording as addAccountCreditLimitLabel -- same concept, same field, just editable after creation too now."
+  }
 }

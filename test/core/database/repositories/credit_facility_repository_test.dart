@@ -378,4 +378,124 @@ void main() {
       );
     });
   });
+  group('updateCreditLimit -- Checkpoint O', () {
+    test('B/C. persists and round-trips: create, then read back the same value', () async {
+      final String accountId = await seedCreditCardAccount();
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(500000, 'USD'),
+      );
+      final CreditFacilityDetailsRow before = await facilityRepo.requireActiveForAccount(accountId);
+      expect(before.creditLimitMinorUnits, 500000);
+
+      await facilityRepo.updateCreditLimit(
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(750000, 'USD'),
+      );
+
+      final CreditFacilityDetailsRow after = await facilityRepo.requireActiveForAccount(accountId);
+      expect(after.creditLimitMinorUnits, 750000);
+      // D. Same facility row, not a second one -- id unchanged.
+      expect(after.id, before.id);
+    });
+
+    test('E. editing the limit does not change the account\'s derived balance (amount owed)',
+        () async {
+      final String accountId = await seedCreditCardAccount(openingBalanceMinorUnits: 15000);
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(500000, 'USD'),
+      );
+      final AccountRow before = await accountRepo.requireById(accountId);
+      expect(before.openingBalanceMinorUnits, 15000);
+
+      await facilityRepo.updateCreditLimit(
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(200000, 'USD'),
+      );
+
+      final AccountRow after = await accountRepo.requireById(accountId);
+      expect(after.openingBalanceMinorUnits, 15000);
+      expect(after.updatedAt, before.updatedAt); // Accounts row untouched at all.
+    });
+
+    test('F. editing the limit creates no Transaction row', () async {
+      final String accountId = await seedCreditCardAccount();
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(500000, 'USD'),
+      );
+      await facilityRepo.updateCreditLimit(
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(600000, 'USD'),
+      );
+      final List<Transaction> transactions = await (db.select(db.transactions)
+            ..where((tbl) => tbl.accountId.equals(accountId)))
+          .get();
+      expect(transactions, isEmpty);
+    });
+
+    test('throws CreditFacilityNotFoundException when no facility exists yet', () async {
+      final String accountId = await seedCreditCardAccount();
+      expect(
+        () => facilityRepo.updateCreditLimit(
+          accountId: accountId,
+          creditLimit: Money.fromMinorUnits(500000, 'USD'),
+        ),
+        throwsA(isA<CreditFacilityNotFoundException>()),
+      );
+    });
+
+    test('a negative new limit is rejected -- ArgumentError, existing limit unchanged', () async {
+      final String accountId = await seedCreditCardAccount();
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(500000, 'USD'),
+      );
+      expect(
+        () => facilityRepo.updateCreditLimit(
+          accountId: accountId,
+          creditLimit: Money.fromMinorUnits(-100, 'USD'),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      final CreditFacilityDetailsRow row = await facilityRepo.requireActiveForAccount(accountId);
+      expect(row.creditLimitMinorUnits, 500000);
+    });
+
+    test('a zero new limit is accepted -- not the same as invalid', () async {
+      final String accountId = await seedCreditCardAccount();
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(500000, 'USD'),
+      );
+      await facilityRepo.updateCreditLimit(
+        accountId: accountId,
+        creditLimit: Money.zero('USD'),
+      );
+      final CreditFacilityDetailsRow row = await facilityRepo.requireActiveForAccount(accountId);
+      expect(row.creditLimitMinorUnits, 0);
+    });
+
+    test('a new limit in a different currency than the account is rejected', () async {
+      final String accountId = await seedCreditCardAccount(currencyCode: 'USD');
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(500000, 'USD'),
+      );
+      expect(
+        () => facilityRepo.updateCreditLimit(
+          accountId: accountId,
+          creditLimit: Money.fromMinorUnits(50000, 'JPY'),
+        ),
+        throwsA(isA<CurrencyMismatchException>()),
+      );
+    });
+  });
 }

@@ -2,6 +2,7 @@ import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/deposit_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/credit_facility_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/financial_institution_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
@@ -1466,6 +1467,272 @@ void main() {
         );
       }
       expect(find.byKey(const Key('depositDetailsCard')), findsOneWidget);
+    });
+  });
+
+  group('Checkpoint O -- Credit facility details', () {
+    Future<String> seedCreditCard(
+      AppDatabase db,
+      String profileId, {
+      required int owedMinorUnits,
+      required int creditLimitMinorUnits,
+      String currencyCode = 'JPY',
+    }) async {
+      final AccountRepository accountRepo = AccountRepository(db);
+      final CreditFacilityRepository facilityRepo = CreditFacilityRepository(db, accountRepo);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Test Card',
+        type: 'creditCard',
+        balanceClass: BalanceClass.liability,
+        subtype: FinancialAccountSubtype.creditCard,
+        currencyCode: currencyCode,
+        openingBalance: Money.fromMinorUnits(owedMinorUnits, currencyCode),
+      );
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(creditLimitMinorUnits, currencyCode),
+      );
+      return accountId;
+    }
+
+    testWidgets(
+        'H/I/M. normal case: shows Credit limit / Available credit / Credit utilization rows',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String accountId = await seedCreditCard(
+        db,
+        profileId,
+        owedMinorUnits: 80000,
+        creditLimitMinorUnits: 500000,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('creditFacilityDetailsCard')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('creditLimitRow')),
+          matching: find.text('¥500,000'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('availableCreditRow')),
+          matching: find.text('¥420,000'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('creditUtilizationRow')),
+          matching: find.text('16.00%'),
+        ),
+        findsOneWidget,
+      );
+      // Never duplicates the hero -- "Amount you currently owe" remains
+      // the one primary debt figure.
+      expect(balanceLabelText('Amount you currently owe'), findsOneWidget);
+      expect(currentBalanceText('¥80,000'), findsOneWidget);
+    });
+
+    testWidgets('L/N. over-limit: available credit clamped to zero, utilization shown past 100%',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String accountId = await seedCreditCard(
+        db,
+        profileId,
+        owedMinorUnits: 550000,
+        creditLimitMinorUnits: 500000,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('availableCreditRow')),
+          matching: find.text('¥0'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('creditUtilizationRow')),
+          matching: find.text('110.00%'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'O. missing limit: a zero (never-assigned) credit limit shows "Not set" for all three '
+        'rows rather than a fabricated 0%/full-available-credit figure', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String accountId = await seedCreditCard(
+        db,
+        profileId,
+        owedMinorUnits: 12000,
+        creditLimitMinorUnits: 0,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('creditLimitRow')),
+          matching: find.text('Not set'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('availableCreditRow')),
+          matching: find.text('Not set'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('creditUtilizationRow')),
+          matching: find.text('Not set'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('never leaks onto a non-credit-card account', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Everyday Bank',
+        type: 'bank',
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(find.byKey(const Key('creditFacilityDetailsCard')), findsNothing);
+    });
+
+    testWidgets('AC. no Net Worth figure/label leaks onto Account Detail for a credit card',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String accountId = await seedCreditCard(
+        db,
+        profileId,
+        owedMinorUnits: 80000,
+        creditLimitMinorUnits: 500000,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(find.text('Net Worth'), findsNothing);
+      expect(find.text('Net worth'), findsNothing);
+    });
+
+    testWidgets('AA. Japanese localization: Credit details section and its three rows',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String accountId = await seedCreditCard(
+        db,
+        profileId,
+        owedMinorUnits: 80000,
+        creditLimitMinorUnits: 500000,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithRouter(container, accountId, locale: const Locale('ja')),
+      );
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('クレジットカードの詳細'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('creditLimitRow')),
+          matching: find.text('利用限度額'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('availableCreditRow')),
+          matching: find.text('利用可能額'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('creditUtilizationRow')),
+          matching: find.text('利用率'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'AB. the credit facility details card survives a narrow 320px width at a 1.6x text scale',
+        (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String accountId = await seedCreditCard(
+        db,
+        profileId,
+        owedMinorUnits: 8000000,
+        creditLimitMinorUnits: 50000000,
+        currencyCode: 'JPY',
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      final Object? overflowException = tester.takeException();
+      if (overflowException != null) {
+        fail(
+          'Narrow-screen (320px) + 1.6x text scale credit facility details card threw an '
+          'exception:\n\n$overflowException',
+        );
+      }
+      expect(find.byKey(const Key('creditFacilityDetailsCard')), findsOneWidget);
     });
   });
 }

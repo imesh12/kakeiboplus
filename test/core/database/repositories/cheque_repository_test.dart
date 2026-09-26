@@ -102,6 +102,24 @@ void main() {
     );
   }
 
+  /// A liability, `creditCard`-subtype account -- Checkpoint O:
+  /// eligible for neither a chequebook nor a received-cheque deposit
+  /// target. Credit card is already double-excluded by
+  /// `chequeEligibleAccountSubtypes` (not in the set) AND by the
+  /// `account.isAsset` check both call sites apply -- this fixture lets
+  /// the tests below prove that in practice, not just by reading the
+  /// set literal.
+  Future<String> seedCreditCardAccount({String currencyCode = 'USD'}) {
+    return accountRepo.createClassifiedAccount(
+      profileId: profileId,
+      name: 'Credit Card',
+      type: 'creditCard',
+      balanceClass: BalanceClass.liability,
+      subtype: FinancialAccountSubtype.creditCard,
+      currencyCode: currencyCode,
+    );
+  }
+
   Future<List<LedgerTransaction>> ledgerFor(String forProfileId) =>
       transactionRepo.watchLedgerForProfile(forProfileId).first;
 
@@ -133,6 +151,20 @@ void main() {
 
     test('3. rejects an ineligible (cash) account subtype', () async {
       final String accountId = await seedCashAccount();
+      expect(
+        () => chequeBookRepo.createChequeBook(
+          profileId: profileId,
+          accountId: accountId,
+          label: 'Should not be allowed',
+        ),
+        throwsA(isA<ChequeValidationException>()),
+      );
+    });
+
+    test(
+        'Checkpoint O item Y -- rejects a credit-card (liability) account; credit card must '
+        'never become cheque-eligible', () async {
+      final String accountId = await seedCreditCardAccount();
       expect(
         () => chequeBookRepo.createChequeBook(
           profileId: profileId,
@@ -325,6 +357,30 @@ void main() {
           accountId: cashAccountId,
           chequeBookId: bookId,
           chequeNumber: '000500',
+          amount: Money.fromMinorUnits(100, 'USD'),
+          payeeName: 'A',
+          issueDateUtc: DateTime.utc(2026, 9, 1),
+        ),
+        throwsA(isA<ChequeValidationException>()),
+      );
+    });
+
+    test(
+        'Checkpoint O item Y -- rejects issuing a cheque against a credit-card (liability) '
+        'account', () async {
+      final String bankAccountId = await seedBankAccount();
+      final String bookId = await chequeBookRepo.createChequeBook(
+        profileId: profileId,
+        accountId: bankAccountId,
+        label: 'Book',
+      );
+      final String creditCardAccountId = await seedCreditCardAccount();
+      expect(
+        () => chequeRepo.recordIssued(
+          profileId: profileId,
+          accountId: creditCardAccountId,
+          chequeBookId: bookId,
+          chequeNumber: '000501',
           amount: Money.fromMinorUnits(100, 'USD'),
           payeeName: 'A',
           issueDateUtc: DateTime.utc(2026, 9, 1),

@@ -1,6 +1,7 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/credit_facility_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/finance/balance_class.dart';
@@ -462,6 +463,46 @@ void main() {
       // Not doubled to 14000 -- the same single balance, now counted by
       // both totals again.
       expect(jpy.netWorth, Money.fromMinorUnits(7000, 'JPY'));
+    });
+
+    test(
+        'J. Checkpoint O -- a credit card\'s credit limit (and the available credit it '
+        'implies) are never counted in either dashboard total; only the amount owed drives '
+        'both, exactly as items R/S require', () async {
+      final String profileId = await seedProfile(living: 'JPY', home: 'USD');
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Credit Card',
+        type: 'creditCard',
+        balanceClass: BalanceClass.liability,
+        subtype: FinancialAccountSubtype.creditCard,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(30000, 'JPY'), // amount owed
+      );
+      final CreditFacilityRepository facilityRepo = CreditFacilityRepository(db, accountRepo);
+      await facilityRepo.createFacility(
+        profileId: profileId,
+        accountId: accountId,
+        // A very large limit -- if it ever leaked into either total, it
+        // would swamp the numbers below and the test would fail loudly.
+        creditLimit: Money.fromMinorUnits(5000000, 'JPY'),
+      );
+
+      final CurrencyDashboardSummary jpy = (await readSummaries()).single;
+      // Identical to F2's limit-less case: only the ¥30,000 owed matters.
+      expect(jpy.availableBalance, Money.zero('JPY'));
+      expect(jpy.netWorth, Money.fromMinorUnits(-30000, 'JPY'));
+
+      // Raising the limit further must not move either total -- credit
+      // capacity has zero ledger weight, by construction (the dashboard
+      // providers never read CreditFacilityDetails at all).
+      await facilityRepo.updateCreditLimit(
+        accountId: accountId,
+        creditLimit: Money.fromMinorUnits(9000000, 'JPY'),
+      );
+      final CurrencyDashboardSummary jpyAfter = (await readSummaries()).single;
+      expect(jpyAfter.availableBalance, Money.zero('JPY'));
+      expect(jpyAfter.netWorth, Money.fromMinorUnits(-30000, 'JPY'));
     });
   });
 }

@@ -135,6 +135,32 @@ final AutoDisposeStreamProviderFamily<DepositDetailsRow?, String> _depositDetail
   return ref.watch(depositRepositoryProvider).watchForAccount(accountId);
 });
 
+/// Checkpoint O: the active `CreditFacilityDetails` row for one
+/// credit-card account, reactively -- `null` once none exists (not a
+/// creditCard-subtype account, or, defensively, one somehow created
+/// without a facility -- unreachable through today's Add Account UX,
+/// which always composes both atomically) or while still loading/
+/// erroring is collapsed to `null` too, exactly
+/// [depositDetailsForAccountProvider]'s own established convention and
+/// rationale (a momentary loading flicker for what is, in practice, an
+/// instantly-resolving local Drift query). Autodispose + family, same
+/// reason: only `AccountDetailScreen`'s credit-facility-specific
+/// section and `EditAccountScreen`'s credit-limit field watch this, for
+/// one specific account, so neither stream needs to outlive its own
+/// screen.
+final AutoDisposeProviderFamily<CreditFacilityDetailsRow?, String> creditFacilityForAccountProvider =
+    Provider.autoDispose.family<CreditFacilityDetailsRow?, String>((ref, accountId) {
+  final AsyncValue<CreditFacilityDetailsRow?> facilityAsync = ref.watch(
+    _creditFacilityStreamProvider(accountId),
+  );
+  return facilityAsync.valueOrNull;
+});
+
+final AutoDisposeStreamProviderFamily<CreditFacilityDetailsRow?, String> _creditFacilityStreamProvider =
+    StreamProvider.autoDispose.family<CreditFacilityDetailsRow?, String>((ref, accountId) {
+  return ref.watch(creditFacilityRepositoryProvider).watchForAccount(accountId);
+});
+
 /// Every active financial institution for the current profile --
 /// Checkpoint L. `FinancialInstitutionRepository` has no
 /// single-institution `watchById` (it was only ever built to list a

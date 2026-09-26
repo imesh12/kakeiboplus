@@ -1425,4 +1425,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chequeNoLongerAvailableMessage =>
       'This cheque is no longer available.';
+
+  @override
+  String get creditFacilityDetailsSectionTitle => 'Credit details';
+
+  @override
+  String get availableCreditLabel => 'Available credit';
+
+  @override
+  String get creditUtilizationLabel => 'Credit utilization';
+
+  @override
+  String get editCreditLimitFieldLabel => 'Credit limit';
 }
