@@ -2113,3 +2113,72 @@ modify the Drift schema, `FinanceEngine`, any repository, provider, account/
 transaction/budget/goal/dashboard/net-worth calculation, or the Home screen.
 `docs/design/*` reference files were not touched. Nothing was staged or
 committed by this checkpoint.
+
+## ADR-037 — Checkpoint N: Cheque/Check Management persistence and accounting model
+
+**Context.** Cheques/checks (issued and received) needed first-class tracking with a real
+lifecycle (pending/cleared/bounced/stopped/cancelled), never as a transaction memo, a widget
+boolean, or parsed text. The core question this ADR resolves: what persists a cheque, and how
+does its accounting effect reach the existing deterministic ledger without teaching
+`FinanceEngine` anything new.
+
+**Decision.** Two new, purely additive Drift tables at schema v13:
+
+- `ChequeBooks` — one-to-many per eligible asset account (`bank`/`savings` subtype only),
+  the same shape `PaymentInstruments` already established for "reusable metadata attached to
+  an account, zero ledger balance of its own, soft-deleted/archived rather than hard-deleted."
+- `Cheques` — one row per physical cheque (issued or received), carrying its own amount,
+  currency, counterparty, dates, status, and an optional `transactionId` link — the same
+  "pending thing lives in its own table; a `Transactions` row is created only once it
+  actually posts, and the link is a stable id, never a memo/description parse" pattern
+  `RecurringOccurrences` already established for scheduled-but-not-yet-posted money.
+
+Clearing a cheque calls the completely unmodified `TransactionRepository.recordExpense`
+(issued) / `recordIncome` (received) inside the same `AppDatabase.transaction` that updates
+the `Cheques` row — `ChequeRepository.markCleared` re-checks "is this still pending?" **inside**
+that transaction (the exact idempotency pattern `RecurringOccurrenceRepository.postOccurrence`
+already uses), so calling it twice always throws on the second call rather than posting twice.
+
+**Why not model a cheque as a `PaymentInstrument`, a `Transactions` row, or a widget-only
+concept.** A `PaymentInstrument` is reusable "how you pay" metadata with no per-instance
+amount/date/lifecycle — a chequebook fits that shape, but an individual cheque does not. A
+`Transactions` row IS a posted ledger entry from the moment it exists (`FinanceEngine` folds
+every non-deleted row unconditionally) — there is no "pending transaction" concept anywhere in
+this schema, and inventing one inside `Transactions`/`FinanceEngine` would be exactly the kind
+of core-engine change this checkpoint's brief said to avoid unless demonstrated necessary. It
+was not necessary: keeping the pending cheque in its own table, with zero rows in `Transactions`
+until it clears, is both simpler and already proven by the `RecurringOccurrences` precedent. A
+widget-only/memo-text representation would have made "did this cheque already post" and "has
+this cheque's number been used before" unanswerable without re-parsing free text — explicitly
+forbidden by this checkpoint's brief.
+
+**Accounting consequence (the part that matters for user trust).** A pending cheque — issued or
+received — posts zero `Transactions` rows and is therefore invisible to `FinanceEngine` and
+every dashboard/net-worth provider by construction: a pending issued cheque never reduces the
+drawing account's cleared balance, and a pending received cheque is never counted as
+available/liquid money. `FinanceEngine`, `dashboard_providers.dart`, and
+`net_worth_providers.dart` needed zero source changes — none of them was ever touched by this
+checkpoint.
+
+**Lifecycle freeze.** `pending` is the only status every other status is reachable from —
+`cleared`/`bounced`/`stopped` (issued only)/`cancelled` (either direction) are each a dead end in
+V1. There is no bounce-after-clear reversal and no clear-after-bounce recovery; both are
+explicit, recorded deferrals (see the full report), not oversights — building either safely
+would require an explicit compensating-transaction mechanism this checkpoint does not attempt.
+
+**Cheque-number scope.** Uniqueness is an application-layer invariant (matching
+`RecurringOccurrences`/`BudgetRepository`'s own precedent, never a database constraint),
+scoped to `(chequeBookId, chequeNumber)` for an issued cheque, and deliberately unconstrained
+for a received cheque — an external payer's numbering is never the user's to control.
+
+**Account eligibility.** `balanceClass: asset` and `subtype` in `{bank, savings}` — derived from
+the existing `FinancialAccountSubtype`/`BalanceClass` architecture (§12.1-§12.3 of
+`docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md`), never a name heuristic, matching
+`CreditFacilityRepository`/`DepositRepository`'s own eligibility checks exactly.
+
+**Scope of this decision: cheque persistence, lifecycle, and accounting semantics only.** This
+ADR does not modify `FinanceEngine`, any existing repository's behavior, the dashboard/net-worth
+calculation, or the Home screen. See
+`docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.16 for the full implementation record,
+including every file changed, test coverage, and the complete list of legitimate deferrals.
+Nothing was staged or committed by this checkpoint.

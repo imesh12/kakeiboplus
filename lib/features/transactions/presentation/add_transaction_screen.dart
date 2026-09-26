@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/database/repositories/transaction_repository.dart';
+import '../../../core/database/repositories/transaction_linked_to_cheque_exception.dart';
 import '../../../core/database/repositories/transaction_not_found_exception.dart';
 import '../../../core/money/currency_mismatch_exception.dart';
 import '../../../core/money/money.dart';
@@ -727,6 +728,15 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     } on TransactionNotFoundException {
       setState(() {
         _errorMessage = l10n.transactionNoLongerAvailable;
+      });
+    } on TransactionLinkedToChequeException {
+      // Checkpoint N: this transaction is a cleared cheque's own
+      // posting -- see `TransactionRepository._requireNotChequeLinked`'s
+      // own doc. Surfaced the same way `TransactionNotFoundException`
+      // already is above: a clear, localized inline message rather
+      // than an uncaught exception.
+      setState(() {
+        _errorMessage = l10n.transactionLinkedToChequeError;
       });
     } catch (e) {
       setState(() => _errorMessage = l10n.couldNotSaveTransaction(e.toString()));

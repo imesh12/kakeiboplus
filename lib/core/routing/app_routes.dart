@@ -135,4 +135,18 @@ abstract class AppRoutes {
   /// nav-destination pattern as [themeCustomization]/[currencyConverter]/
   /// [cloudAccount] above.
   static const String netWorth = '/net-worth';
+
+  /// The Cheques/Checks list -- Checkpoint N (docs/20 §13.16). Reached
+  /// ONLY via a deliberate tap on More's new "Cheques" row (see
+  /// `MoreScreen`) -- never from Home, and never bolted onto Add
+  /// Transaction. Same no-new-bottom-nav-destination pattern as
+  /// [netWorth]/[currencyConverter]/[cloudAccount] above.
+  static const String cheques = '/cheques';
+
+  /// Path template for [GoRoute] registration -- see [chequeDetail] for
+  /// building an actual navigable path for a specific cheque id.
+  static const String chequeDetailPath = '/cheques/:id';
+
+  /// The path for one cheque's detail screen.
+  static String chequeDetail(String id) => '/cheques/$id';
 }

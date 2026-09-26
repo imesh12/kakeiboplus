@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../finance/cheque_status.dart';
 import '../../finance/ledger_models.dart';
 import '../../finance/transaction_type.dart';
 import '../../money/currency_mismatch_exception.dart';
@@ -9,6 +10,7 @@ import '../app_database.dart';
 import '../../finance/payment_instrument_type.dart';
 import 'account_repository.dart';
 import 'invalid_payment_instrument_attribution_exception.dart';
+import 'transaction_linked_to_cheque_exception.dart';
 import 'transaction_not_found_exception.dart';
 
 /// The repository behind the entire Beta 0 transaction ledger: recording
@@ -171,13 +173,22 @@ class TransactionRepository {
     );
   }
 
+  /// Checkpoint N: throws [TransactionLinkedToChequeException] rather
+  /// than soft-deleting [id] if a cleared cheque's `transactionId`
+  /// names it -- see [_requireNotChequeLinked]'s own doc. The guard
+  /// check and the write happen inside the same
+  /// `AppDatabase.transaction` block so a concurrent clear/soft-delete
+  /// cannot race between them.
   Future<void> softDelete(String id) {
-    return (_db.update(_db.transactions)..where((tbl) => tbl.id.equals(id))).write(
-      TransactionsCompanion(
-        deletedAt: Value<DateTime?>(DateTime.now().toUtc()),
-        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
-      ),
-    );
+    return _db.transaction(() async {
+      await _requireNotChequeLinked(id);
+      await (_db.update(_db.transactions)..where((tbl) => tbl.id.equals(id))).write(
+        TransactionsCompanion(
+          deletedAt: Value<DateTime?>(DateTime.now().toUtc()),
+          updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+        ),
+      );
+    });
   }
 
   /// One transaction by id, reactively -- `null` once it's soft-deleted
@@ -254,52 +265,60 @@ class TransactionRepository {
     String? categoryId,
     String? note,
     required DateTime occurredAtUtc,
-  }) async {
-    final Transaction existing = await _requireEditableById(id);
-    if (existing.type != type.name) {
-      throw ArgumentError(
-        'Transaction $id is currently a ${existing.type}, not ${type.name} -- '
-        'transaction type cannot change on edit.',
+  }) {
+    // Checkpoint N: the existence/type check, the cheque-link guard,
+    // and the write all happen inside one `AppDatabase.transaction`
+    // block -- see [_requireNotChequeLinked]'s own doc -- so nothing
+    // can clear a cheque against this same row in the gap between the
+    // guard check and the write.
+    return _db.transaction(() async {
+      final Transaction existing = await _requireEditableById(id);
+      if (existing.type != type.name) {
+        throw ArgumentError(
+          'Transaction $id is currently a ${existing.type}, not ${type.name} -- '
+          'transaction type cannot change on edit.',
+        );
+      }
+      await _requireNotChequeLinked(id);
+      if (!amount.isPositive) {
+        throw ArgumentError.value(amount, 'amount', 'Transaction amount must be positive.');
+      }
+
+      // Correction (ADR-025): the selected account's currency is
+      // authoritative for what gets PERSISTED, but money is never
+      // relabeled -- amount must already be in that currency, or this is
+      // rejected. There is no FX conversion in this task.
+      final AccountRow account = await _accountRepository.requireById(accountId);
+      if (amount.currencyCode != account.currencyCode) {
+        throw CurrencyMismatchException(account.currencyCode, amount.currencyCode);
+      }
+
+      // Race safety: the WHERE clause re-asserts the row is still active
+      // and still the expected type at the moment of the write itself,
+      // not just at the earlier read above -- see `_requireEditableById`
+      // and ADR-025. A rowsAffected of anything other than 1 means the
+      // row was deleted (or, unreachably in this app's single-writer
+      // model, changed type) between the read and this write; either way
+      // this must fail loudly rather than report success.
+      final int rowsAffected = await (_db.update(_db.transactions)
+            ..where(
+              (tbl) => tbl.id.equals(id) & tbl.deletedAt.isNull() & tbl.type.equals(type.name),
+            ))
+          .write(
+        TransactionsCompanion(
+          accountId: Value<String>(accountId),
+          amountMinorUnits: Value<int>(amount.minorUnits),
+          currencyCode: Value<String>(account.currencyCode),
+          categoryId: Value<String?>(categoryId),
+          note: Value<String?>(note),
+          occurredAt: Value<DateTime>(occurredAtUtc),
+          updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+        ),
       );
-    }
-    if (!amount.isPositive) {
-      throw ArgumentError.value(amount, 'amount', 'Transaction amount must be positive.');
-    }
-
-    // Correction (ADR-025): the selected account's currency is
-    // authoritative for what gets PERSISTED, but money is never
-    // relabeled -- amount must already be in that currency, or this is
-    // rejected. There is no FX conversion in this task.
-    final AccountRow account = await _accountRepository.requireById(accountId);
-    if (amount.currencyCode != account.currencyCode) {
-      throw CurrencyMismatchException(account.currencyCode, amount.currencyCode);
-    }
-
-    // Race safety: the WHERE clause re-asserts the row is still active
-    // and still the expected type at the moment of the write itself,
-    // not just at the earlier read above -- see `_requireEditableById`
-    // and ADR-025. A rowsAffected of anything other than 1 means the
-    // row was deleted (or, unreachably in this app's single-writer
-    // model, changed type) between the read and this write; either way
-    // this must fail loudly rather than report success.
-    final int rowsAffected = await (_db.update(_db.transactions)
-          ..where(
-            (tbl) => tbl.id.equals(id) & tbl.deletedAt.isNull() & tbl.type.equals(type.name),
-          ))
-        .write(
-      TransactionsCompanion(
-        accountId: Value<String>(accountId),
-        amountMinorUnits: Value<int>(amount.minorUnits),
-        currencyCode: Value<String>(account.currencyCode),
-        categoryId: Value<String?>(categoryId),
-        note: Value<String?>(note),
-        occurredAt: Value<DateTime>(occurredAtUtc),
-        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
-      ),
-    );
-    if (rowsAffected != 1) {
-      throw TransactionNotFoundException(id);
-    }
+      if (rowsAffected != 1) {
+        throw TransactionNotFoundException(id);
+      }
+    });
   }
 
   /// Updates an existing transfer's editable fields. **Never changes
@@ -320,51 +339,61 @@ class TransactionRepository {
     required Money amount,
     String? note,
     required DateTime occurredAtUtc,
-  }) async {
-    final Transaction existing = await _requireEditableById(id);
-    if (existing.type != TransactionType.transfer.name) {
-      throw ArgumentError(
-        'Transaction $id is currently a ${existing.type}, not transfer -- '
-        'transaction type cannot change on edit.',
-      );
-    }
-    if (!amount.isPositive) {
-      throw ArgumentError.value(amount, 'amount', 'Transaction amount must be positive.');
-    }
-    if (sourceAccountId == destinationAccountId) {
-      throw ArgumentError('Source and destination accounts must be different.');
-    }
-    final AccountRow source = await _accountRepository.requireById(sourceAccountId);
-    final AccountRow destination = await _accountRepository.requireById(destinationAccountId);
-    if (source.currencyCode != destination.currencyCode) {
-      throw CurrencyMismatchException(source.currencyCode, destination.currencyCode);
-    }
-    if (amount.currencyCode != source.currencyCode) {
-      throw CurrencyMismatchException(source.currencyCode, amount.currencyCode);
-    }
+  }) {
+    // Checkpoint N: see [_updateExpenseOrIncome]'s own doc for why the
+    // existence/type check, the cheque-link guard, and the write all
+    // run inside one `AppDatabase.transaction` block here too -- a
+    // cheque-generated transaction should never normally be a
+    // transfer (`ChequeRepository.markCleared` only ever calls
+    // `recordExpense`/`recordIncome`), but this path is guarded
+    // identically rather than relying on that never happening.
+    return _db.transaction(() async {
+      final Transaction existing = await _requireEditableById(id);
+      if (existing.type != TransactionType.transfer.name) {
+        throw ArgumentError(
+          'Transaction $id is currently a ${existing.type}, not transfer -- '
+          'transaction type cannot change on edit.',
+        );
+      }
+      await _requireNotChequeLinked(id);
+      if (!amount.isPositive) {
+        throw ArgumentError.value(amount, 'amount', 'Transaction amount must be positive.');
+      }
+      if (sourceAccountId == destinationAccountId) {
+        throw ArgumentError('Source and destination accounts must be different.');
+      }
+      final AccountRow source = await _accountRepository.requireById(sourceAccountId);
+      final AccountRow destination = await _accountRepository.requireById(destinationAccountId);
+      if (source.currencyCode != destination.currencyCode) {
+        throw CurrencyMismatchException(source.currencyCode, destination.currencyCode);
+      }
+      if (amount.currencyCode != source.currencyCode) {
+        throw CurrencyMismatchException(source.currencyCode, amount.currencyCode);
+      }
 
-    final int rowsAffected = await (_db.update(_db.transactions)
-          ..where(
-            (tbl) =>
-                tbl.id.equals(id) &
-                tbl.deletedAt.isNull() &
-                tbl.type.equals(TransactionType.transfer.name),
-          ))
-        .write(
-      TransactionsCompanion(
-        accountId: Value<String>(sourceAccountId),
-        destinationAccountId: Value<String?>(destinationAccountId),
-        amountMinorUnits: Value<int>(amount.minorUnits),
-        currencyCode: Value<String>(source.currencyCode),
-        categoryId: const Value<String?>(null), // transfers are never categorized
-        note: Value<String?>(note),
-        occurredAt: Value<DateTime>(occurredAtUtc),
-        updatedAt: Value<DateTime>(DateTime.now().toUtc()),
-      ),
-    );
-    if (rowsAffected != 1) {
-      throw TransactionNotFoundException(id);
-    }
+      final int rowsAffected = await (_db.update(_db.transactions)
+            ..where(
+              (tbl) =>
+                  tbl.id.equals(id) &
+                  tbl.deletedAt.isNull() &
+                  tbl.type.equals(TransactionType.transfer.name),
+            ))
+          .write(
+        TransactionsCompanion(
+          accountId: Value<String>(sourceAccountId),
+          destinationAccountId: Value<String?>(destinationAccountId),
+          amountMinorUnits: Value<int>(amount.minorUnits),
+          currencyCode: Value<String>(source.currencyCode),
+          categoryId: const Value<String?>(null), // transfers are never categorized
+          note: Value<String?>(note),
+          occurredAt: Value<DateTime>(occurredAtUtc),
+          updatedAt: Value<DateTime>(DateTime.now().toUtc()),
+        ),
+      );
+      if (rowsAffected != 1) {
+        throw TransactionNotFoundException(id);
+      }
+    });
   }
 
   Future<Transaction> _requireEditableById(String id) async {
@@ -374,6 +403,50 @@ class TransactionRepository {
       throw TransactionNotFoundException(id);
     }
     return row;
+  }
+
+  /// Checkpoint N integrity repair: throws
+  /// [TransactionLinkedToChequeException] if [id] is the
+  /// `Transactions` row a CLEARED cheque's `transactionId` names --
+  /// see `Cheques.transactionId`'s own doc. Called from every
+  /// existing mutation path that can materially alter or remove an
+  /// existing row (`softDelete`, `_updateExpenseOrIncome`,
+  /// `updateTransfer`), always from INSIDE the same
+  /// `AppDatabase.transaction` block that then performs the write, so
+  /// nothing can clear a cheque against [id] in the gap between this
+  /// check and that write.
+  ///
+  /// Queries `cheques` directly rather than depending on a
+  /// `ChequeRepository` instance -- see this file's own
+  /// `_validatePaymentInstrumentAttribution` precedent for
+  /// `payment_instruments`, and
+  /// [TransactionLinkedToChequeException]'s own doc for why a real
+  /// constructor dependency here would additionally be circular
+  /// (`ChequeRepository` depends on `TransactionRepository`, not the
+  /// other way around).
+  ///
+  /// Deliberately does **not** filter on `Cheques.deletedAt`: V1's
+  /// `ChequeRepository.deletePending` can only ever soft-delete a
+  /// still-[ChequeStatus.pending] cheque (one with no linked
+  /// `transactionId` to begin with -- see that method's own doc), so a
+  /// cleared cheque is never itself soft-deleted in practice today.
+  /// Even so, this check keys off [ChequeStatus.cleared] alone rather
+  /// than additionally requiring `deletedAt IS NULL`, so that if a
+  /// cleared-and-linked cheque row were ever soft-deleted by some
+  /// future change, its linked transaction would still remain
+  /// protected rather than silently losing that protection --
+  /// preserving historical accounting integrity takes priority over
+  /// a soft-deleted cheque row's own visibility.
+  Future<void> _requireNotChequeLinked(String id) async {
+    final ChequeRow? linkedCheque = await (_db.select(_db.cheques)
+          ..where(
+            (tbl) =>
+                tbl.transactionId.equals(id) & tbl.status.equals(ChequeStatus.cleared.name),
+          ))
+        .getSingleOrNull();
+    if (linkedCheque != null) {
+      throw TransactionLinkedToChequeException(transactionId: id, chequeId: linkedCheque.id);
+    }
   }
 
   Future<String> _insert({

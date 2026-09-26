@@ -10,6 +10,8 @@ import '../../features/accounts/presentation/edit_account_screen.dart';
 import '../../features/budgets/presentation/budgets_screen.dart';
 import '../../features/cloud_account/presentation/cloud_account_screen.dart';
 import '../../features/categories/presentation/categories_screen.dart';
+import '../../features/cheques/presentation/cheque_detail_screen.dart';
+import '../../features/cheques/presentation/cheques_screen.dart';
 import '../../features/settings/presentation/currency_converter_screen.dart';
 import '../../features/dashboard/presentation/home_screen.dart';
 import '../../features/goals/presentation/goal_detail_screen.dart';
@@ -181,6 +183,11 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.netWorth,
         builder: (context, state) => const NetWorthScreen(),
+      ),
+      GoRoute(path: AppRoutes.cheques, builder: (context, state) => const ChequesScreen()),
+      GoRoute(
+        path: AppRoutes.chequeDetailPath,
+        builder: (context, state) => ChequeDetailScreen(chequeId: state.pathParameters['id']!),
       ),
     ],
   );

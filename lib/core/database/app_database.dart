@@ -72,6 +72,8 @@ part 'app_database.g.dart';
     RecurringOccurrences,
     ReferenceExchangeRates,
     CloudAccountLinks,
+    ChequeBooks,
+    Cheques,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -82,7 +84,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   /// v1 -> v2 (Beta 1 Task 2): adds the `budgets` table. No existing
   /// table changes shape and no historical data is touched -- see
@@ -209,6 +211,27 @@ class AppDatabase extends _$AppDatabase {
   /// account, exactly as Checkpoint E discovered for a liability
   /// `creditCard` account -- neither method has ever branched on
   /// `subtype` at all.
+  /// Schema version 13 (Checkpoint N, Cheque/Check Management) adds the
+  /// new `cheque_books` and `cheques` tables only -- see `tables.dart`'s
+  /// `ChequeBooks`/`Cheques` doc comments for the full rationale and
+  /// `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.16 for the
+  /// accounting-semantics audit this checkpoint performed before
+  /// choosing this shape. Purely additive, in exactly the same shape as
+  /// Checkpoint E's/F's own v10 -> v11 / v11 -> v12 steps: no existing
+  /// table changes shape, no existing row in any table is read,
+  /// rewritten, or deleted, and zero `cheque_books`/`cheques` rows are
+  /// fabricated for any pre-existing account. `FinanceEngine` and every
+  /// dashboard/net-worth provider are not touched by this migration OR
+  /// by any source-code change in this checkpoint at all -- a cleared
+  /// cheque's accounting effect is exactly one ordinary `Transactions`
+  /// row (an expense for an issued cheque, an income for a received
+  /// one), created through the completely unmodified
+  /// `TransactionRepository.recordExpense`/`recordIncome`, exactly the
+  /// same "no FinanceEngine change needed" discovery Checkpoint E/F
+  /// already made for `creditCard`/`deposit` accounts. A pending cheque
+  /// never creates a `Transactions` row at all, so it is invisible to
+  /// every balance/available-money/net-worth calculation by
+  /// construction, not by any new filtering logic.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -321,6 +344,22 @@ class AppDatabase extends _$AppDatabase {
             // read, rewritten, or deleted, and zero `deposit_details`
             // rows are fabricated for any pre-existing account.
             await m.createTable(depositDetails);
+          }
+          if (from < 13) {
+            // Checkpoint N -- see the doc comment above `schemaVersion`
+            // for the full rationale. Additive-only: two brand-new,
+            // empty tables -- the identical shape as the v10 -> v11 /
+            // v11 -> v12 steps immediately above, and for the identical
+            // reason neither can fail against any historical fixture: a
+            // pure `CREATE TABLE` only needs its FK targets
+            // (`accounts`/`profiles`/`transactions`), which every
+            // fixture already has. `cheques` is created after
+            // `chequeBooks` since it references it. No existing row
+            // anywhere is read, rewritten, or deleted, and zero
+            // `cheque_books`/`cheques` rows are fabricated for any
+            // pre-existing account.
+            await m.createTable(chequeBooks);
+            await m.createTable(cheques);
           }
         },
       );

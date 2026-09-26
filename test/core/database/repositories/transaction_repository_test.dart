@@ -1,9 +1,13 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/cheque_book_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/cheque_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/invalid_payment_instrument_attribution_exception.dart';
 import 'package:ai_financial_coach/core/database/repositories/payment_instrument_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/transaction_linked_to_cheque_exception.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
+import 'package:ai_financial_coach/core/finance/cheque_status.dart';
 import 'package:ai_financial_coach/core/finance/finance_engine.dart';
 import 'package:ai_financial_coach/core/finance/ledger_models.dart';
 import 'package:ai_financial_coach/core/finance/liability_overpayment_exception.dart';
@@ -1353,5 +1357,317 @@ void main() {
       final MoneyTotals totals = FinanceEngine.incomeExpenseTotals(ledger, currencyCode: 'JPY');
       expect(totals.income, Money.fromMinorUnits(2750, 'JPY'));
     });
+  });
+
+  /// Checkpoint N integrity repair -- see
+  /// `TransactionRepository._requireNotChequeLinked`'s own doc.
+  /// `ChequeRepository.markCleared` posts exactly one ordinary
+  /// [Transaction] row and stores its id on the cleared [ChequeRow];
+  /// every test below proves the reverse direction is blocked: none of
+  /// `updateExpense`/`updateIncome`/`updateTransfer`/`softDelete` may
+  /// silently change or remove that row while the cheque still claims
+  /// [ChequeStatus.cleared]. An ordinary, never-cheque-linked
+  /// transaction is proven to retain completely normal edit/delete
+  /// behavior throughout.
+  group('Checkpoint N: cheque-linked transaction protection', () {
+    late ChequeBookRepository chequeBookRepo;
+    late ChequeRepository chequeRepo;
+
+    setUp(() {
+      chequeBookRepo = ChequeBookRepository(db, accountRepo);
+      chequeRepo = ChequeRepository(db, accountRepo, chequeBookRepo, transactionRepo);
+    });
+
+    /// A `bank`-subtype asset account -- eligible for a chequebook, the
+    /// same `type: 'bank'` legacy-inference convention
+    /// `cheque_repository_test.dart`'s own `seedBankAccount` uses.
+    Future<String> seedBankAccount({Money? openingBalance}) {
+      return accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Everyday Chequing',
+        type: 'bank',
+        currencyCode: 'USD',
+        openingBalance: openingBalance,
+      );
+    }
+
+    /// The raw `Transactions` row, unfiltered by `deletedAt` -- unlike
+    /// `watchById`, this must still resolve a soft-deleted row so tests
+    /// can assert `deletedAt` stayed null after a rejected delete.
+    Future<Transaction> rawTransaction(String id) =>
+        (db.select(db.transactions)..where((tbl) => tbl.id.equals(id))).getSingle();
+
+    Future<Money> balanceOf(String accountId) async {
+      final AccountRow account = await accountRepo.requireById(accountId);
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      return FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+    }
+
+    /// Records, then clears, one issued cheque -- the shared fixture
+    /// for every "cleared issued cheque" test below.
+    Future<({String chequeId, String transactionId, String accountId})> clearedIssuedCheque({
+      int amountMinorUnits = 25000,
+      int openingBalanceMinorUnits = 100000,
+    }) async {
+      final String accountId = await seedBankAccount(
+        openingBalance: Money.fromMinorUnits(openingBalanceMinorUnits, 'USD'),
+      );
+      final String bookId = await chequeBookRepo.createChequeBook(
+        profileId: profileId,
+        accountId: accountId,
+        label: 'Book',
+      );
+      final String chequeId = await chequeRepo.recordIssued(
+        profileId: profileId,
+        accountId: accountId,
+        chequeBookId: bookId,
+        chequeNumber: '000900',
+        amount: Money.fromMinorUnits(amountMinorUnits, 'USD'),
+        payeeName: 'Landlord',
+        issueDateUtc: DateTime.utc(2026, 9, 1),
+      );
+      final String transactionId = await chequeRepo.markCleared(
+        chequeId: chequeId,
+        clearedDateUtc: DateTime.utc(2026, 9, 5),
+      );
+      return (chequeId: chequeId, transactionId: transactionId, accountId: accountId);
+    }
+
+    /// Records, then clears, one received cheque -- the shared fixture
+    /// for every "cleared received cheque" test below.
+    Future<({String chequeId, String transactionId, String accountId})> clearedReceivedCheque({
+      int amountMinorUnits = 30000,
+    }) async {
+      final String accountId = await seedBankAccount();
+      final String chequeId = await chequeRepo.recordReceived(
+        profileId: profileId,
+        accountId: accountId,
+        chequeNumber: '2002',
+        amount: Money.fromMinorUnits(amountMinorUnits, 'USD'),
+        payerName: 'Payer',
+        issueDateUtc: DateTime.utc(2026, 9, 1),
+        receivedDateUtc: DateTime.utc(2026, 9, 1),
+      );
+      final String transactionId = await chequeRepo.markCleared(
+        chequeId: chequeId,
+        clearedDateUtc: DateTime.utc(2026, 9, 6),
+      );
+      return (chequeId: chequeId, transactionId: transactionId, accountId: accountId);
+    }
+
+    test(
+      '1. editing a cleared ISSUED cheque\'s linked transaction throws '
+      'TransactionLinkedToChequeException, and neither the transaction nor the cheque changes',
+      () async {
+        final result = await clearedIssuedCheque();
+        final Transaction before = await rawTransaction(result.transactionId);
+
+        await expectLater(
+          transactionRepo.updateExpense(
+            id: result.transactionId,
+            accountId: result.accountId,
+            amount: Money.fromMinorUnits(99999, 'USD'),
+            occurredAtUtc: DateTime.utc(2026, 9, 10),
+          ),
+          throwsA(
+            isA<TransactionLinkedToChequeException>()
+                .having((e) => e.transactionId, 'transactionId', result.transactionId)
+                .having((e) => e.chequeId, 'chequeId', result.chequeId),
+          ),
+        );
+
+        final Transaction after = await rawTransaction(result.transactionId);
+        expect(after.amountMinorUnits, before.amountMinorUnits);
+        expect(after.occurredAt.isAtSameMomentAs(before.occurredAt), isTrue);
+        expect(after.updatedAt.isAtSameMomentAs(before.updatedAt), isTrue);
+        expect(after.deletedAt, isNull);
+
+        final ChequeRow cheque = await chequeRepo.requireById(result.chequeId);
+        expect(cheque.statusValue, ChequeStatus.cleared);
+        expect(cheque.transactionId, result.transactionId);
+      },
+    );
+
+    test(
+      '2. soft-deleting a cleared ISSUED cheque\'s linked transaction throws '
+      'TransactionLinkedToChequeException, and neither the transaction nor the cheque changes',
+      () async {
+        final result = await clearedIssuedCheque();
+
+        await expectLater(
+          transactionRepo.softDelete(result.transactionId),
+          throwsA(isA<TransactionLinkedToChequeException>()),
+        );
+
+        final Transaction after = await rawTransaction(result.transactionId);
+        expect(after.deletedAt, isNull);
+
+        final ChequeRow cheque = await chequeRepo.requireById(result.chequeId);
+        expect(cheque.statusValue, ChequeStatus.cleared);
+        expect(cheque.transactionId, result.transactionId);
+      },
+    );
+
+    test(
+      '3. editing a cleared RECEIVED cheque\'s linked transaction throws '
+      'TransactionLinkedToChequeException',
+      () async {
+        final result = await clearedReceivedCheque();
+
+        await expectLater(
+          transactionRepo.updateIncome(
+            id: result.transactionId,
+            accountId: result.accountId,
+            amount: Money.fromMinorUnits(1, 'USD'),
+            occurredAtUtc: DateTime.utc(2026, 9, 10),
+          ),
+          throwsA(isA<TransactionLinkedToChequeException>()),
+        );
+
+        final ChequeRow cheque = await chequeRepo.requireById(result.chequeId);
+        expect(cheque.statusValue, ChequeStatus.cleared);
+      },
+    );
+
+    test(
+      '4. soft-deleting a cleared RECEIVED cheque\'s linked transaction throws '
+      'TransactionLinkedToChequeException',
+      () async {
+        final result = await clearedReceivedCheque();
+
+        await expectLater(
+          transactionRepo.softDelete(result.transactionId),
+          throwsA(isA<TransactionLinkedToChequeException>()),
+        );
+
+        final Transaction after = await rawTransaction(result.transactionId);
+        expect(after.deletedAt, isNull);
+      },
+    );
+
+    test('5. an ordinary, unlinked expense remains fully editable', () async {
+      final String accountId = await seedBankAccount(
+        openingBalance: Money.fromMinorUnits(100000, 'USD'),
+      );
+      final String txId = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(5000, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 1),
+      );
+
+      await transactionRepo.updateExpense(
+        id: txId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(6000, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 2),
+      );
+
+      final Transaction after = await rawTransaction(txId);
+      expect(after.amountMinorUnits, 6000);
+    });
+
+    test('6. an ordinary, unlinked income remains fully editable', () async {
+      final String accountId = await seedBankAccount();
+      final String txId = await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(5000, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 1),
+      );
+
+      await transactionRepo.updateIncome(
+        id: txId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(7000, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 2),
+      );
+
+      final Transaction after = await rawTransaction(txId);
+      expect(after.amountMinorUnits, 7000);
+    });
+
+    test('7. an ordinary, unlinked transaction remains fully soft-deletable', () async {
+      final String accountId = await seedBankAccount();
+      final String txId = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(5000, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 1),
+      );
+
+      await transactionRepo.softDelete(txId);
+
+      final Transaction after = await rawTransaction(txId);
+      expect(after.deletedAt, isNotNull);
+    });
+
+    test(
+      '8. a rejected mutation attempt on a cheque-linked transaction leaves the account '
+      'balance completely unchanged',
+      () async {
+        final result = await clearedIssuedCheque(
+          amountMinorUnits: 25000,
+          openingBalanceMinorUnits: 100000,
+        );
+        final Money before = await balanceOf(result.accountId);
+
+        await expectLater(
+          transactionRepo.updateExpense(
+            id: result.transactionId,
+            accountId: result.accountId,
+            amount: Money.fromMinorUnits(1, 'USD'),
+            occurredAtUtc: DateTime.utc(2026, 9, 10),
+          ),
+          throwsA(isA<TransactionLinkedToChequeException>()),
+        );
+
+        expect(await balanceOf(result.accountId), before);
+      },
+    );
+
+    test(
+      '9. a rejected mutation attempt never changes the cheque\'s own status or transactionId',
+      () async {
+        final result = await clearedIssuedCheque();
+        final ChequeRow before = await chequeRepo.requireById(result.chequeId);
+
+        await expectLater(
+          transactionRepo.softDelete(result.transactionId),
+          throwsA(isA<TransactionLinkedToChequeException>()),
+        );
+
+        final ChequeRow after = await chequeRepo.requireById(result.chequeId);
+        expect(after.statusValue, before.statusValue);
+        expect(after.transactionId, before.transactionId);
+        expect(after.clearedDate, before.clearedDate);
+      },
+    );
+
+    test(
+      '10. updateTransfer cannot transform a cheque-linked transaction into a transfer either '
+      '-- rejected by the pre-existing type-immutability check (a cheque never posts a '
+      'transfer-type row in the first place, so this path never even reaches the new '
+      'cheque-link guard, but the outcome is identically "rejected, nothing changes")',
+      () async {
+        final String otherAccountId = await seedBankAccount();
+        final result = await clearedIssuedCheque();
+
+        await expectLater(
+          transactionRepo.updateTransfer(
+            id: result.transactionId,
+            sourceAccountId: result.accountId,
+            destinationAccountId: otherAccountId,
+            amount: Money.fromMinorUnits(25000, 'USD'),
+            occurredAtUtc: DateTime.utc(2026, 9, 10),
+          ),
+          throwsA(isA<ArgumentError>()),
+        );
+
+        final Transaction after = await rawTransaction(result.transactionId);
+        expect(after.type, 'expense');
+      },
+    );
   });
 }

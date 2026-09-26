@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
+import '../../../core/database/repositories/transaction_linked_to_cheque_exception.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/routing/app_routes.dart';
@@ -113,10 +114,25 @@ class TransactionDetailScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed == true) {
+    if (confirmed != true) return;
+    try {
       await ref.read(transactionRepositoryProvider).softDelete(transactionId);
       if (context.mounted) context.pop();
+    } on TransactionLinkedToChequeException {
+      // Checkpoint N: this transaction is a cleared cheque's own
+      // posting -- see `TransactionRepository._requireNotChequeLinked`'s
+      // own doc. Same "catch the domain exception, show it, leave the
+      // transaction exactly as it was" pattern
+      // `ChequeDetailScreen._confirmDelete` already uses for
+      // `ChequeLifecycleException`.
+      if (context.mounted) {
+        _showError(context, l10n.transactionLinkedToChequeError);
+      }
     }
+  }
+
+  void _showError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

@@ -209,6 +209,17 @@ class MoreScreen extends StatelessWidget {
               title: l10n.netWorthTitle,
               onTap: () => context.push(AppRoutes.netWorth),
             ),
+            // Checkpoint N: Cheque/Check Management. A deliberate extra
+            // tap from More, exactly like Net Worth/Currency Converter
+            // above -- never a Home shortcut and never bolted onto Add
+            // Transaction (see `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_
+            // ARCHITECTURE.md` §13.16).
+            navRow(
+              icon: Icons.receipt_long_outlined,
+              color: _MoreRowColors.cheques,
+              title: l10n.chequesTitle,
+              onTap: () => context.push(AppRoutes.cheques),
+            ),
           ]),
 
           // Organization: Categories.
@@ -296,4 +307,5 @@ class _MoreRowColors {
   static const Color cloudAccount = Color(0xFF64748B);
   static const Color currencyConverter = Color(0xFF0EA5E9);
   static const Color netWorth = Color(0xFF7C3AED);
+  static const Color cheques = Color(0xFF0D9488);
 }

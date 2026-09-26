@@ -368,6 +368,12 @@ abstract class AppLocalizations {
   /// **'This transaction is no longer available -- it may have been deleted elsewhere.'**
   String get transactionNoLongerAvailable;
 
+  /// No description provided for @transactionLinkedToChequeError.
+  ///
+  /// In en, this message translates to:
+  /// **'This transaction was created by a cleared cheque and can\'t be edited or deleted directly.'**
+  String get transactionLinkedToChequeError;
+
   /// No description provided for @addExpenseTitle.
   ///
   /// In en, this message translates to:
@@ -2391,6 +2397,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'years'**
   String get depositTermUnitYears;
+
+  /// Checkpoint N. Deliberately 'Cheque', never 'Check' -- this app's frozen vocabulary for the instrument. Translators: keep this consistent with every other chequeXxx/XxxxChequeXxx key below.
+  ///
+  /// In en, this message translates to:
+  /// **'Cheques'**
+  String get chequesTitle;
+
+  /// No description provided for @couldNotLoadCheques.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load cheques: {error}'**
+  String couldNotLoadCheques(String error);
+
+  /// No description provided for @noChequesYetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No cheques yet. Tap + to record one.'**
+  String get noChequesYetMessage;
+
+  /// No description provided for @recordIssuedChequeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record issued cheque'**
+  String get recordIssuedChequeTitle;
+
+  /// No description provided for @recordReceivedChequeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record received cheque'**
+  String get recordReceivedChequeTitle;
+
+  /// No description provided for @chequeStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get chequeStatusPending;
+
+  /// No description provided for @chequeStatusCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared'**
+  String get chequeStatusCleared;
+
+  /// No description provided for @chequeStatusBounced.
+  ///
+  /// In en, this message translates to:
+  /// **'Bounced'**
+  String get chequeStatusBounced;
+
+  /// No description provided for @chequeStatusStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get chequeStatusStopped;
+
+  /// No description provided for @chequeStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get chequeStatusCancelled;
+
+  /// No description provided for @unknownAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown account'**
+  String get unknownAccountLabel;
+
+  /// No description provided for @chequeNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'No.'**
+  String get chequeNumberLabel;
+
+  /// No description provided for @chequeNumberFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cheque number'**
+  String get chequeNumberFieldLabel;
+
+  /// No description provided for @chequeBookLabelField.
+  ///
+  /// In en, this message translates to:
+  /// **'Chequebook'**
+  String get chequeBookLabelField;
+
+  /// No description provided for @enterChequeBookLabelMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a label for this chequebook.'**
+  String get enterChequeBookLabelMessage;
+
+  /// No description provided for @startingChequeNumberOptionalField.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting cheque number (optional)'**
+  String get startingChequeNumberOptionalField;
+
+  /// No description provided for @newChequeBookDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New chequebook'**
+  String get newChequeBookDialogTitle;
+
+  /// No description provided for @selectAccountMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Select an account.'**
+  String get selectAccountMessage;
+
+  /// No description provided for @selectChequeBookMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a chequebook.'**
+  String get selectChequeBookMessage;
+
+  /// No description provided for @enterChequeNumberMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the cheque number.'**
+  String get enterChequeNumberMessage;
+
+  /// No description provided for @payeeFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payee'**
+  String get payeeFieldLabel;
+
+  /// No description provided for @payerFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Payer / From'**
+  String get payerFieldLabel;
+
+  /// No description provided for @enterPayeeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the payee\'s name.'**
+  String get enterPayeeMessage;
+
+  /// No description provided for @enterPayerMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the payer\'s name.'**
+  String get enterPayerMessage;
+
+  /// No description provided for @issueDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Issue date'**
+  String get issueDateLabel;
+
+  /// No description provided for @receivedDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Received date'**
+  String get receivedDateLabel;
+
+  /// No description provided for @clearedDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared date'**
+  String get clearedDateLabel;
+
+  /// No description provided for @bouncedDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Bounced date'**
+  String get bouncedDateLabel;
+
+  /// No description provided for @stoppedDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped date'**
+  String get stoppedDateLabel;
+
+  /// No description provided for @cancelledDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled date'**
+  String get cancelledDateLabel;
+
+  /// No description provided for @memoOptionalFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Memo (optional)'**
+  String get memoOptionalFieldLabel;
+
+  /// No description provided for @confirmButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get confirmButton;
+
+  /// No description provided for @markAsClearedButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as cleared'**
+  String get markAsClearedButton;
+
+  /// No description provided for @markAsBouncedButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as bounced'**
+  String get markAsBouncedButton;
+
+  /// No description provided for @stopChequeButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop cheque'**
+  String get stopChequeButton;
+
+  /// No description provided for @cancelChequeButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel cheque'**
+  String get cancelChequeButton;
+
+  /// No description provided for @deleteChequeButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete cheque'**
+  String get deleteChequeButton;
+
+  /// No description provided for @deleteChequeConfirmationMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this cheque? This cannot be undone.'**
+  String get deleteChequeConfirmationMessage;
+
+  /// No description provided for @viewPostedTransactionButton.
+  ///
+  /// In en, this message translates to:
+  /// **'View posted transaction'**
+  String get viewPostedTransactionButton;
+
+  /// No description provided for @chequeDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cheque'**
+  String get chequeDetailTitle;
+
+  /// No description provided for @chequeNoLongerAvailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This cheque is no longer available.'**
+  String get chequeNoLongerAvailableMessage;
 }
 
 class _AppLocalizationsDelegate

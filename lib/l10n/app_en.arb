@@ -86,6 +86,7 @@
     }
   },
   "transactionNoLongerAvailable": "This transaction is no longer available -- it may have been deleted elsewhere.",
+  "transactionLinkedToChequeError": "This transaction was created by a cleared cheque and can't be edited or deleted directly.",
   "addExpenseTitle": "Add expense",
   "addIncomeTitle": "Add income",
   "editExpenseTitle": "Edit expense",
@@ -710,5 +711,56 @@
   "depositTermUnitMonth": "month",
   "depositTermUnitMonths": "months",
   "depositTermUnitYear": "year",
-  "depositTermUnitYears": "years"
+  "depositTermUnitYears": "years",
+  "chequesTitle": "Cheques",
+  "@chequesTitle": {
+    "description": "Checkpoint N. Deliberately 'Cheque', never 'Check' -- this app's frozen vocabulary for the instrument. Translators: keep this consistent with every other chequeXxx/XxxxChequeXxx key below."
+  },
+  "couldNotLoadCheques": "Could not load cheques: {error}",
+  "@couldNotLoadCheques": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noChequesYetMessage": "No cheques yet. Tap + to record one.",
+  "recordIssuedChequeTitle": "Record issued cheque",
+  "recordReceivedChequeTitle": "Record received cheque",
+  "chequeStatusPending": "Pending",
+  "chequeStatusCleared": "Cleared",
+  "chequeStatusBounced": "Bounced",
+  "chequeStatusStopped": "Stopped",
+  "chequeStatusCancelled": "Cancelled",
+  "unknownAccountLabel": "Unknown account",
+  "chequeNumberLabel": "No.",
+  "chequeNumberFieldLabel": "Cheque number",
+  "chequeBookLabelField": "Chequebook",
+  "enterChequeBookLabelMessage": "Enter a label for this chequebook.",
+  "startingChequeNumberOptionalField": "Starting cheque number (optional)",
+  "newChequeBookDialogTitle": "New chequebook",
+  "selectAccountMessage": "Select an account.",
+  "selectChequeBookMessage": "Select a chequebook.",
+  "enterChequeNumberMessage": "Enter the cheque number.",
+  "payeeFieldLabel": "Payee",
+  "payerFieldLabel": "Payer / From",
+  "enterPayeeMessage": "Enter the payee's name.",
+  "enterPayerMessage": "Enter the payer's name.",
+  "issueDateLabel": "Issue date",
+  "receivedDateLabel": "Received date",
+  "clearedDateLabel": "Cleared date",
+  "bouncedDateLabel": "Bounced date",
+  "stoppedDateLabel": "Stopped date",
+  "cancelledDateLabel": "Cancelled date",
+  "memoOptionalFieldLabel": "Memo (optional)",
+  "confirmButton": "Confirm",
+  "markAsClearedButton": "Mark as cleared",
+  "markAsBouncedButton": "Mark as bounced",
+  "stopChequeButton": "Stop cheque",
+  "cancelChequeButton": "Cancel cheque",
+  "deleteChequeButton": "Delete cheque",
+  "deleteChequeConfirmationMessage": "Delete this cheque? This cannot be undone.",
+  "viewPostedTransactionButton": "View posted transaction",
+  "chequeDetailTitle": "Cheque",
+  "chequeNoLongerAvailableMessage": "This cheque is no longer available."
 }

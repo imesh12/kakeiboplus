@@ -578,6 +578,266 @@ class DepositDetails extends Table {
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
+/// Checkpoint N: a chequebook issued by a financial institution to the
+/// account holder, ONE chequebook belonging to exactly one eligible
+/// `FinancialAccount` (physically `accounts`), with an account able to
+/// have MANY chequebooks over its lifetime (a new book ordered when an
+/// old one runs out) -- the same "many metadata rows per one account"
+/// shape `PaymentInstruments` already established (see that table's own
+/// doc), not the "exactly one, `unique()`-enforced" shape
+/// `CreditFacilityDetails`/`DepositDetails` use. A `ChequeBook` is
+/// explicitly NOT itself balance-holding and contributes ZERO
+/// independently to any asset/liability/net-worth calculation --
+/// `FinanceEngine` never reads this table (see
+/// `lib/core/finance/finance_engine.dart`); a chequebook is purely "the
+/// physical means of issuing a cheque," exactly analogous to how a
+/// `PaymentInstrument` is purely "the means of paying with a card."
+///
+/// **Account eligibility (enforced by `ChequeBookRepository
+/// .createChequeBook`, not a DB constraint):** the linked account must
+/// be `balanceClass: asset` and `subtype` in {[FinancialAccountSubtype
+/// .bank], [FinancialAccountSubtype.savings]} -- see
+/// `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.16 for the
+/// full rationale (cash/wallet accounts do not carry chequebooks in
+/// practice; `deposit` accounts are locked-term, not transactional;
+/// `creditCard` is a liability, out of this checkpoint's scope; a
+/// `legacyCardNeedsReview`/`legacyUnknownNeedsReview` account is
+/// deliberately excluded from any new financial capability until a
+/// user reclassifies it, the same discipline `CreditFacilityDetails`/
+/// `DepositDetails` already established for their own eligible
+/// subtypes).
+///
+/// Soft delete/"closed" -- same convention as `PaymentInstruments`
+/// (see that table's own doc for why this must never be a hard
+/// delete): a chequebook referenced by historical `Cheques.chequeBookId`
+/// rows must never require hard deletion, and closing one (no more
+/// cheques may be issued from it) must never invalidate those
+/// historical rows.
+@DataClassName('ChequeBookRow')
+class ChequeBooks extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// The single eligible asset `FinancialAccount` this chequebook was
+  /// issued against. Immutable after creation -- a chequebook is never
+  /// relinked to a different account, matching
+  /// `PaymentInstruments.accountId`'s identical immutability
+  /// precedent.
+  TextColumn get accountId => text().references(Accounts, #id)();
+
+  /// User-chosen label, e.g. "MUFG Chequebook #1" -- required, same
+  /// convention as `PaymentInstruments.nickname`.
+  TextColumn get label => text()();
+
+  /// The cheque number printed on this book's first leaf, preserved as
+  /// TEXT (never a numeric column) so a leading-zero-padded number
+  /// (e.g. `'000101'`) round-trips exactly -- see `Cheques.chequeNumber`'s
+  /// own doc for the same rule. Purely informational in V1: nothing
+  /// validates that a `Cheques` row's own `chequeNumber` actually falls
+  /// inside this starting number's implied range -- see
+  /// `ChequeBookRepository.createChequeBook`'s doc for why V1
+  /// deliberately does not attempt that range arithmetic (leaves/ranges
+  /// vary by bank and are not itself declared anywhere on this row).
+  TextColumn get startingNumber => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete/"closed" -- see this table's own doc above. Set by
+  /// `ChequeBookRepository.closeChequeBook`; a closed chequebook can
+  /// never be chosen for a NEW issued cheque
+  /// (`ChequeRepository.recordIssued` requires an open book) but its
+  /// already-issued `Cheques` rows, and the row itself, remain fully
+  /// resolvable for history.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
+/// Checkpoint N: one physical cheque -- either [ChequeDirection.issued]
+/// (written by the user, drawn on one of their own `ChequeBooks`) or
+/// [ChequeDirection.received] (written by someone else, payable to the
+/// user, deposited into one of their own eligible accounts). See
+/// `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.16 for the
+/// full accounting-semantics rationale this table's shape implements.
+///
+/// **A `Cheques` row is an operational instrument, not itself a ledger
+/// entry.** Exactly like `RecurringOccurrences` (see that table's own
+/// doc: "a pending/due occurrence is never a row here... a row only
+/// ever exists once the user posted or explicitly skipped"), this row's
+/// existence and [status] never themselves move money -- only
+/// [transactionId], set if and only if [status] is
+/// [ChequeStatus.cleared], names the real `Transactions` row that does.
+/// `FinanceEngine`/every dashboard/net-worth provider consume that
+/// linked `Transactions` row exactly once, through the completely
+/// unmodified existing ledger path -- this table is never read by any
+/// of them.
+///
+/// **Lifecycle (`ChequeStatus`):** [ChequeStatus.pending] ->
+/// [ChequeStatus.cleared] (posts exactly one `Transactions` row --
+/// expense for [ChequeDirection.issued], income for
+/// [ChequeDirection.received]) | [ChequeStatus.bounced] (never posts
+/// anything) | [ChequeStatus.stopped] (issued-only; never posts
+/// anything) | [ChequeStatus.cancelled] (either direction; never posts
+/// anything). Every one of the four non-pending statuses is reachable
+/// ONLY from [ChequeStatus.pending] in V1 -- there is no
+/// bounce-after-clear reversal flow (a real-world but rare case
+/// requiring an explicit compensating-transaction mechanism this
+/// checkpoint deliberately defers -- see
+/// `ChequeRepository.markBounced`'s own doc) and no
+/// clear-after-bounce "recovery" flow (same deferral). All four
+/// transitions are enforced by `ChequeRepository`, re-checked INSIDE
+/// the same `AppDatabase.transaction` block that performs them --
+/// see that repository's doc for the idempotency guarantee this gives
+/// `markCleared` in particular.
+///
+/// **Cheque-number uniqueness** is an application-layer invariant
+/// (same "not a database-enforced" precedent
+/// `RecurringOccurrences`/`BudgetRepository` already established): for
+/// [ChequeDirection.issued], at most one non-deleted row may share both
+/// [chequeBookId] and [chequeNumber] -- scoped to the SAME chequebook,
+/// never globally, since a different chequebook (a different account,
+/// or a later book on the same account) may legitimately restart or
+/// overlap numbering. For [ChequeDirection.received], there is
+/// deliberately NO uniqueness constraint at all -- two different
+/// external payers' cheques can share a number by coincidence, and V1
+/// never rejects that.
+@DataClassName('ChequeRow')
+class Cheques extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text().references(Profiles, #id)();
+
+  /// For [ChequeDirection.issued]: the account the cheque is drawn on
+  /// (must equal [chequeBookId]'s own `accountId` -- validated by
+  /// `ChequeRepository.recordIssued`, not a DB constraint, matching
+  /// this schema's existing cross-column-consistency convention, e.g.
+  /// `TransactionRepository.recordTransfer`'s currency check). For
+  /// [ChequeDirection.received]: the account the cheque will be (or
+  /// was) deposited into once cleared. Immutable after creation -- see
+  /// `ChequeRepository`'s update-method doc for why changing this after
+  /// creation is not exposed (same "would corrupt currency/accounting
+  /// history" reasoning `PaymentInstruments.accountId`'s own doc gives).
+  TextColumn get accountId => text().references(Accounts, #id)();
+
+  /// `ChequeDirection.name` ('issued' | 'received') -- stored as plain
+  /// text and parsed via `.byName()`, the same convention
+  /// `Transactions.type`/`RecurringOccurrences.status` already use for
+  /// an enum this repository is the ONLY writer of (unlike
+  /// `Accounts.balanceClass`/`subtype`, which must additionally tolerate
+  /// values written by a historical migration from before their
+  /// defensive `fromStorageValue` existed -- no such legacy-data
+  /// problem exists for this brand-new table). Immutable after
+  /// creation -- see `ChequeRepository`'s own doc for why silently
+  /// changing direction after creation is never exposed.
+  TextColumn get direction => text()();
+
+  /// Set if and only if [direction] is [ChequeDirection.issued] -- the
+  /// `ChequeBooks` row this cheque was drawn from. Always `null` for
+  /// [ChequeDirection.received] (a received cheque was not drawn from
+  /// any of the user's own chequebooks).
+  TextColumn get chequeBookId => text().nullable().references(ChequeBooks, #id)();
+
+  /// The number printed on the physical cheque. TEXT, never a numeric
+  /// column, so a leading-zero-padded number (e.g. `'000452'`) is
+  /// preserved and displayed exactly as printed -- converting to an
+  /// integer would silently lose those leading zeros. Never
+  /// auto-incremented or silently renumbered by this repository at any
+  /// point in a cheque's lifecycle.
+  TextColumn get chequeNumber => text()();
+
+  /// Money, stored as integer minor units -- see ADR-017. Always a
+  /// positive magnitude, same convention as `Transactions
+  /// .amountMinorUnits`.
+  IntColumn get amountMinorUnits => integer()();
+
+  /// Must equal [accountId]'s own `currencyCode` -- validated by
+  /// `ChequeRepository` at creation (`CurrencyMismatchException` if
+  /// not), never a DB constraint. V1's frozen architecture has no FX
+  /// conversion step anywhere in the cheque lifecycle -- see this
+  /// checkpoint's own non-goals.
+  TextColumn get currencyCode => text().references(Currencies, #code)();
+
+  /// The other party's name -- the PAYEE for [ChequeDirection.issued],
+  /// the PAYER/"from" for [ChequeDirection.received]. One column
+  /// covers both directions rather than two mutually-exclusive nullable
+  /// columns (`payeeName`/`payerName`) -- the presentation layer alone
+  /// decides which localized label ("Payee" vs. "Payer/From") to show,
+  /// based on [direction], exactly the same "one column, direction
+  /// decides the label" economy `Transactions.accountId` already uses
+  /// for "source account" regardless of `type`.
+  TextColumn get counterpartyName => text()();
+
+  /// The calendar date written on the cheque by whoever wrote it --
+  /// meaningful for both directions (a received cheque was also dated
+  /// by its payer). Calendar-only, same normalization convention as
+  /// `RecurringRules.startDate`.
+  DateTimeColumn get issueDate => dateTime()();
+
+  /// Set if and only if [direction] is [ChequeDirection.received] --
+  /// the date the user actually took physical possession of the
+  /// cheque, distinct from [issueDate] (the date the PAYER wrote on
+  /// it). Always `null` for [ChequeDirection.issued] (the issuer's own
+  /// copy has no separate "received" event).
+  DateTimeColumn get receivedDate => dateTime().nullable()();
+
+  /// `ChequeStatus.name` ('pending' | 'cleared' | 'bounced' | 'stopped'
+  /// | 'cancelled') -- see this table's own doc for the full lifecycle
+  /// and `ChequeRepository` for transition enforcement.
+  TextColumn get status => text()();
+
+  /// Set if and only if [status] is [ChequeStatus.cleared]. The
+  /// calendar date the linked [transactionId] was posted on
+  /// (`Transactions.occurredAt` for that row).
+  DateTimeColumn get clearedDate => dateTime().nullable()();
+
+  /// Set if and only if [status] is [ChequeStatus.bounced].
+  DateTimeColumn get bouncedDate => dateTime().nullable()();
+
+  /// Set if and only if [status] is [ChequeStatus.stopped] or
+  /// [ChequeStatus.cancelled] -- one column covers both terminal,
+  /// never-posted outcomes (see `ChequeStatus`'s own doc for why V1
+  /// distinguishes the two statuses themselves but not their date
+  /// columns: both mean "this cheque will never post," just via a
+  /// different real-world mechanism).
+  DateTimeColumn get stoppedOrCancelledDate => dateTime().nullable()();
+
+  TextColumn get memo => text().nullable()();
+
+  /// Set if and only if [status] is [ChequeStatus.cleared] -- the real
+  /// `Transactions` row `ChequeRepository.markCleared` created for this
+  /// cheque. `FinanceEngine`/every dashboard/net-worth provider read
+  /// THIS `Transactions` row, never a `Cheques` row directly -- see
+  /// this table's own doc. Never identified by memo text or by parsing
+  /// a description -- this stable id is the only linkage
+  /// `ChequeRepository` ever uses to find "the transaction this cheque
+  /// already posted," exactly the same discipline
+  /// `RecurringOccurrences.transactionId` already established.
+  TextColumn get transactionId => text().nullable().references(Transactions, #id)();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Soft delete -- same universal convention as `Transactions`/
+  /// `Budgets`/etc. `ChequeRepository.deletePending` is the only
+  /// production path that ever sets this, and only for a
+  /// [ChequeStatus.pending] cheque (one with no linked [transactionId]
+  /// to begin with) -- see that method's own doc. A
+  /// cleared/bounced/stopped/cancelled cheque is never deleted in V1
+  /// (deliberate deferral, not an oversight -- see the Checkpoint N
+  /// report).
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  IntColumn get syncVersion => integer().withDefault(const Constant(0))();
+  TextColumn get syncStatus => text().withDefault(const Constant('localOnly'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+}
+
 class Transactions extends Table {
   /// Client-generated UUID (v4) — see `docs/03_DATABASE_SCHEMA.md`.
   TextColumn get id => text()();

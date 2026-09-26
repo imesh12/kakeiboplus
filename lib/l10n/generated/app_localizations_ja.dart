@@ -154,6 +154,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transactionNoLongerAvailable => 'この取引は利用できません。他の場所で削除された可能性があります。';
 
   @override
+  String get transactionLinkedToChequeError =>
+      'この取引は決済済みの小切手によって作成されたため、直接編集または削除できません。';
+
+  @override
   String get addExpenseTitle => '支出を追加';
 
   @override
@@ -1252,4 +1256,129 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get depositTermUnitYears => '年';
+
+  @override
+  String get chequesTitle => '小切手';
+
+  @override
+  String couldNotLoadCheques(String error) {
+    return '小切手を読み込めませんでした: $error';
+  }
+
+  @override
+  String get noChequesYetMessage => '小切手はまだありません。+をタップして記録してください。';
+
+  @override
+  String get recordIssuedChequeTitle => '振り出した小切手を記録';
+
+  @override
+  String get recordReceivedChequeTitle => '受け取った小切手を記録';
+
+  @override
+  String get chequeStatusPending => '保留中';
+
+  @override
+  String get chequeStatusCleared => '決済済み';
+
+  @override
+  String get chequeStatusBounced => '不渡り';
+
+  @override
+  String get chequeStatusStopped => '支払停止';
+
+  @override
+  String get chequeStatusCancelled => '取消済み';
+
+  @override
+  String get unknownAccountLabel => '不明なアカウント';
+
+  @override
+  String get chequeNumberLabel => '番号';
+
+  @override
+  String get chequeNumberFieldLabel => '小切手番号';
+
+  @override
+  String get chequeBookLabelField => '小切手帳';
+
+  @override
+  String get enterChequeBookLabelMessage => 'この小切手帳のラベルを入力してください。';
+
+  @override
+  String get startingChequeNumberOptionalField => '開始小切手番号(任意)';
+
+  @override
+  String get newChequeBookDialogTitle => '新しい小切手帳';
+
+  @override
+  String get selectAccountMessage => 'アカウントを選択してください。';
+
+  @override
+  String get selectChequeBookMessage => '小切手帳を選択してください。';
+
+  @override
+  String get enterChequeNumberMessage => '小切手番号を入力してください。';
+
+  @override
+  String get payeeFieldLabel => '受取人';
+
+  @override
+  String get payerFieldLabel => '支払人/差出人';
+
+  @override
+  String get enterPayeeMessage => '受取人名を入力してください。';
+
+  @override
+  String get enterPayerMessage => '支払人名を入力してください。';
+
+  @override
+  String get issueDateLabel => '発行日';
+
+  @override
+  String get receivedDateLabel => '受取日';
+
+  @override
+  String get clearedDateLabel => '決済日';
+
+  @override
+  String get bouncedDateLabel => '不渡り日';
+
+  @override
+  String get stoppedDateLabel => '支払停止日';
+
+  @override
+  String get cancelledDateLabel => '取消日';
+
+  @override
+  String get memoOptionalFieldLabel => 'メモ(任意)';
+
+  @override
+  String get confirmButton => '確認';
+
+  @override
+  String get markAsClearedButton => '決済済みにする';
+
+  @override
+  String get markAsBouncedButton => '不渡りにする';
+
+  @override
+  String get stopChequeButton => '小切手の支払いを停止';
+
+  @override
+  String get cancelChequeButton => '小切手を取り消す';
+
+  @override
+  String get deleteChequeButton => '小切手を削除';
+
+  @override
+  String get deleteChequeConfirmationMessage => 'この小切手を削除しますか?この操作は元に戻せません。';
+
+  @override
+  String get viewPostedTransactionButton => '記帳された取引を表示';
+
+  @override
+  String get chequeDetailTitle => '小切手';
+
+  @override
+  String get chequeNoLongerAvailableMessage => 'この小切手は利用できません。';
 }

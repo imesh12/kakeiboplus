@@ -5,6 +5,8 @@ import 'repositories/account_repository.dart';
 import 'repositories/budget_repository.dart';
 import 'repositories/cloud_account_link_repository.dart';
 import 'repositories/category_repository.dart';
+import 'repositories/cheque_book_repository.dart';
+import 'repositories/cheque_repository.dart';
 import 'repositories/credit_facility_repository.dart';
 import 'repositories/currency_repository.dart';
 import 'repositories/deposit_repository.dart';
@@ -133,6 +135,35 @@ final Provider<PaymentInstrumentRepository> paymentInstrumentRepositoryProvider 
   (ref) => PaymentInstrumentRepository(
     ref.watch(appDatabaseProvider),
     ref.watch(accountRepositoryProvider),
+  ),
+);
+
+/// Checkpoint N: the chequebook foundation -- see
+/// `ChequeBookRepository`'s own doc. Depends on (matching
+/// `CreditFacilityRepository`/`DepositRepository`/
+/// `PaymentInstrumentRepository`'s own existing constructors),
+/// [accountRepositoryProvider].
+final Provider<ChequeBookRepository> chequeBookRepositoryProvider =
+    Provider<ChequeBookRepository>(
+  (ref) => ChequeBookRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(accountRepositoryProvider),
+  ),
+);
+
+/// Checkpoint N: cheque creation and lifecycle -- see
+/// `ChequeRepository`'s own doc. Depends on [accountRepositoryProvider],
+/// [chequeBookRepositoryProvider], and [transactionRepositoryProvider]
+/// (the same, completely unmodified transaction-recording path every
+/// other money-moving feature in this app already uses -- see that
+/// repository's own doc for why `markCleared` needs no new posting
+/// logic of its own).
+final Provider<ChequeRepository> chequeRepositoryProvider = Provider<ChequeRepository>(
+  (ref) => ChequeRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(accountRepositoryProvider),
+    ref.watch(chequeBookRepositoryProvider),
+    ref.watch(transactionRepositoryProvider),
   ),
 );
 

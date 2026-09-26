@@ -156,6 +156,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This transaction is no longer available -- it may have been deleted elsewhere.';
 
   @override
+  String get transactionLinkedToChequeError =>
+      'This transaction was created by a cleared cheque and can\'t be edited or deleted directly.';
+
+  @override
   String get addExpenseTitle => 'Add expense';
 
   @override
@@ -1292,4 +1296,133 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get depositTermUnitYears => 'years';
+
+  @override
+  String get chequesTitle => 'Cheques';
+
+  @override
+  String couldNotLoadCheques(String error) {
+    return 'Could not load cheques: $error';
+  }
+
+  @override
+  String get noChequesYetMessage => 'No cheques yet. Tap + to record one.';
+
+  @override
+  String get recordIssuedChequeTitle => 'Record issued cheque';
+
+  @override
+  String get recordReceivedChequeTitle => 'Record received cheque';
+
+  @override
+  String get chequeStatusPending => 'Pending';
+
+  @override
+  String get chequeStatusCleared => 'Cleared';
+
+  @override
+  String get chequeStatusBounced => 'Bounced';
+
+  @override
+  String get chequeStatusStopped => 'Stopped';
+
+  @override
+  String get chequeStatusCancelled => 'Cancelled';
+
+  @override
+  String get unknownAccountLabel => 'Unknown account';
+
+  @override
+  String get chequeNumberLabel => 'No.';
+
+  @override
+  String get chequeNumberFieldLabel => 'Cheque number';
+
+  @override
+  String get chequeBookLabelField => 'Chequebook';
+
+  @override
+  String get enterChequeBookLabelMessage =>
+      'Enter a label for this chequebook.';
+
+  @override
+  String get startingChequeNumberOptionalField =>
+      'Starting cheque number (optional)';
+
+  @override
+  String get newChequeBookDialogTitle => 'New chequebook';
+
+  @override
+  String get selectAccountMessage => 'Select an account.';
+
+  @override
+  String get selectChequeBookMessage => 'Select a chequebook.';
+
+  @override
+  String get enterChequeNumberMessage => 'Enter the cheque number.';
+
+  @override
+  String get payeeFieldLabel => 'Payee';
+
+  @override
+  String get payerFieldLabel => 'Payer / From';
+
+  @override
+  String get enterPayeeMessage => 'Enter the payee\'s name.';
+
+  @override
+  String get enterPayerMessage => 'Enter the payer\'s name.';
+
+  @override
+  String get issueDateLabel => 'Issue date';
+
+  @override
+  String get receivedDateLabel => 'Received date';
+
+  @override
+  String get clearedDateLabel => 'Cleared date';
+
+  @override
+  String get bouncedDateLabel => 'Bounced date';
+
+  @override
+  String get stoppedDateLabel => 'Stopped date';
+
+  @override
+  String get cancelledDateLabel => 'Cancelled date';
+
+  @override
+  String get memoOptionalFieldLabel => 'Memo (optional)';
+
+  @override
+  String get confirmButton => 'Confirm';
+
+  @override
+  String get markAsClearedButton => 'Mark as cleared';
+
+  @override
+  String get markAsBouncedButton => 'Mark as bounced';
+
+  @override
+  String get stopChequeButton => 'Stop cheque';
+
+  @override
+  String get cancelChequeButton => 'Cancel cheque';
+
+  @override
+  String get deleteChequeButton => 'Delete cheque';
+
+  @override
+  String get deleteChequeConfirmationMessage =>
+      'Delete this cheque? This cannot be undone.';
+
+  @override
+  String get viewPostedTransactionButton => 'View posted transaction';
+
+  @override
+  String get chequeDetailTitle => 'Cheque';
+
+  @override
+  String get chequeNoLongerAvailableMessage =>
+      'This cheque is no longer available.';
 }
