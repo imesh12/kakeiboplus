@@ -39,4 +39,41 @@ void main() {
       expect(categoryIconFor(''), fallbackCategoryIcon);
     });
   });
+
+  group('Checkpoint U1: categoryIconKeys catalog', () {
+    test('has around 50 curated entries, not dozens of near-duplicates', () {
+      // Not pinned to exactly 50 -- a future checkpoint may add or
+      // remove a concept -- but bounded so an accidental mass-dump of
+      // every `Icons.*` constant would fail this loudly.
+      expect(categoryIconKeys.length, greaterThanOrEqualTo(40));
+      expect(categoryIconKeys.length, lessThanOrEqualTo(60));
+    });
+
+    test('has no duplicate keys', () {
+      expect(categoryIconKeys.toSet().length, categoryIconKeys.length);
+    });
+
+    test('every key resolves to a real, non-fallback IconData via categoryIconFor', () {
+      for (final String key in categoryIconKeys) {
+        expect(categoryIconFor(key), isNotNull, reason: key);
+      }
+    });
+
+    test('every one of the original 8 system-category seed icons is still present unchanged', () {
+      const Map<String, IconData> original = <String, IconData>{
+        'shopping_cart': Icons.shopping_cart,
+        'directions_bus': Icons.directions_bus,
+        'receipt_long': Icons.receipt_long,
+        'restaurant': Icons.restaurant,
+        'local_hospital': Icons.local_hospital,
+        'category': Icons.category,
+        'work': Icons.work,
+        'attach_money': Icons.attach_money,
+      };
+      for (final MapEntry<String, IconData> entry in original.entries) {
+        expect(categoryIconKeys, contains(entry.key));
+        expect(categoryIconFor(entry.key), entry.value, reason: entry.key);
+      }
+    });
+  });
 }

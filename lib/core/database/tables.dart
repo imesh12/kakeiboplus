@@ -83,6 +83,19 @@ class Categories extends Table {
   TextColumn get type => text()();
   TextColumn get name => text()();
   TextColumn get icon => text().nullable()();
+
+  /// One of `CategoryColorKey.storageValue`, or null --
+  /// `lib/features/categories/domain/category_color.dart`. Checkpoint U1
+  /// (Category, Service, Currency & Card Visual Identity Foundation).
+  /// Presentation metadata only, exactly like [icon] -- never read by
+  /// `FinanceEngine`/any balance, budget, or goal calculation. A `null`
+  /// value (every row that existed before this column was added, and
+  /// any category a user hasn't explicitly colored yet) is resolved to a
+  /// deterministic, stable-per-category fallback color by
+  /// `categoryColorFor` -- see that function's own doc for why this
+  /// column is safe to leave unbackfilled for every pre-existing
+  /// non-system row.
+  TextColumn get colorKey => text().nullable()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   BoolColumn get isSystem => boolean().withDefault(const Constant(false))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();

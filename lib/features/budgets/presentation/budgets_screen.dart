@@ -12,10 +12,12 @@ import '../../../core/money/money_formatter.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_icon_tile.dart';
 import '../../../shared/widgets/app_money_text.dart';
 import '../../../shared/widgets/app_progress_bar.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../../../shared/widgets/money_text_field.dart';
+import '../../categories/presentation/category_identity_icon.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../domain/budget_month.dart';
 import '../domain/budget_month_summary.dart';
@@ -479,7 +481,27 @@ class _CategoryBudgetTile extends ConsumerWidget {
           children: <Widget>[
             ListTile(
               key: Key('categoryBudgetTile_${row.categoryId}_${row.currencyCode}'),
-              leading: const Icon(Icons.category_outlined),
+              // Checkpoint U1: was a fixed generic
+              // `Icons.category_outlined` for every category budget
+              // regardless of which category it tracked -- now the same
+              // `CategoryIdentityIcon` every other category surface
+              // renders through, so a budget tile visually matches its
+              // category everywhere else it appears. Falls back to the
+              // same pre-existing generic icon while [categoryAsync] is
+              // still loading/has errored -- this tile's title text
+              // already has its own loading/error fallback right below,
+              // so the icon simply mirrors that rather than blocking on
+              // it.
+              leading: categoryAsync.when(
+                data: (CategoryRow c) => CategoryIdentityIcon(
+                  categoryId: c.id,
+                  iconKey: c.icon,
+                  colorKey: c.colorKey,
+                  size: AppIconTileSize.small,
+                ),
+                loading: () => const Icon(Icons.category_outlined),
+                error: (Object e, StackTrace st) => const Icon(Icons.category_outlined),
+              ),
               title: Text(
                 // `CategoryRow.name` is persisted content (a system category's
                 // seeded English name, or a profile's own custom category) --

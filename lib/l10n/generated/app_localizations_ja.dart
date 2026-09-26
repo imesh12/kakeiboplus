@@ -751,6 +751,221 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addCategoryButton => '追加';
 
   @override
+  String get categoryIconGroceries => '食料品';
+
+  @override
+  String get categoryIconPublicTransport => '公共交通機関';
+
+  @override
+  String get categoryIconBillsUtilities => '請求書・公共料金';
+
+  @override
+  String get categoryIconDiningOut => '外食';
+
+  @override
+  String get categoryIconHealth => '健康';
+
+  @override
+  String get categoryIconOther => 'その他';
+
+  @override
+  String get categoryIconSalary => '給与';
+
+  @override
+  String get categoryIconOtherIncome => 'その他の収入';
+
+  @override
+  String get categoryIconCoffeeCafe => 'カフェ';
+
+  @override
+  String get categoryIconBarsDrinks => 'バー・飲み物';
+
+  @override
+  String get categoryIconBakery => 'ベーカリー';
+
+  @override
+  String get categoryIconShopping => '買い物';
+
+  @override
+  String get categoryIconClothing => '衣類';
+
+  @override
+  String get categoryIconJewelryAccessories => 'ジュエリー・アクセサリー';
+
+  @override
+  String get categoryIconCarFuel => '車・ガソリン';
+
+  @override
+  String get categoryIconTaxiRideshare => 'タクシー・配車サービス';
+
+  @override
+  String get categoryIconBikeScooter => '自転車・スクーター';
+
+  @override
+  String get categoryIconFlights => '飛行機';
+
+  @override
+  String get categoryIconRentHousing => '住居費';
+
+  @override
+  String get categoryIconElectricity => '電気';
+
+  @override
+  String get categoryIconWater => '水道';
+
+  @override
+  String get categoryIconInternetPhone => 'インターネット・電話';
+
+  @override
+  String get categoryIconRepairsMaintenance => '修理・メンテナンス';
+
+  @override
+  String get categoryIconPharmacyMedicine => '薬局・医薬品';
+
+  @override
+  String get categoryIconFitness => 'フィットネス';
+
+  @override
+  String get categoryIconPersonalCare => '身の回りケア';
+
+  @override
+  String get categoryIconMoviesEntertainment => '映画・娯楽';
+
+  @override
+  String get categoryIconGames => 'ゲーム';
+
+  @override
+  String get categoryIconEventsTickets => 'イベント・チケット';
+
+  @override
+  String get categoryIconCelebrations => 'お祝い';
+
+  @override
+  String get categoryIconEducation => '教育';
+
+  @override
+  String get categoryIconBooksLearning => '書籍・学習';
+
+  @override
+  String get categoryIconKids => '子供';
+
+  @override
+  String get categoryIconPets => 'ペット';
+
+  @override
+  String get categoryIconTravel => '旅行';
+
+  @override
+  String get categoryIconHotelsLodging => 'ホテル・宿泊';
+
+  @override
+  String get categoryIconBankFees => '銀行・手数料';
+
+  @override
+  String get categoryIconInsurance => '保険';
+
+  @override
+  String get categoryIconSavingsInvestments => '貯蓄・投資';
+
+  @override
+  String get categoryIconCardFees => 'カード手数料';
+
+  @override
+  String get categoryIconTaxes => '税金';
+
+  @override
+  String get categoryIconGifts => 'ギフト';
+
+  @override
+  String get categoryIconDonationsCharity => '寄付・チャリティ';
+
+  @override
+  String get categoryIconSubscriptions => 'サブスクリプション';
+
+  @override
+  String get categoryIconCloudStorage => 'クラウド・ストレージ';
+
+  @override
+  String get categoryIconAiSoftware => 'AI・ソフトウェア';
+
+  @override
+  String get categoryIconInvestmentIncome => '投資収益';
+
+  @override
+  String get categoryIconBusinessIncome => '事業収入';
+
+  @override
+  String get categoryIconBonusReward => 'ボーナス・報酬';
+
+  @override
+  String get categoryIconMiscellaneous => '雑費';
+
+  @override
+  String get categoryColorSlate => 'スレート';
+
+  @override
+  String get categoryColorRed => 'レッド';
+
+  @override
+  String get categoryColorOrange => 'オレンジ';
+
+  @override
+  String get categoryColorAmber => 'アンバー';
+
+  @override
+  String get categoryColorYellow => 'イエロー';
+
+  @override
+  String get categoryColorLime => 'ライム';
+
+  @override
+  String get categoryColorGreen => 'グリーン';
+
+  @override
+  String get categoryColorTeal => 'ティール';
+
+  @override
+  String get categoryColorCyan => 'シアン';
+
+  @override
+  String get categoryColorBlue => 'ブルー';
+
+  @override
+  String get categoryColorIndigo => 'インディゴ';
+
+  @override
+  String get categoryColorPurple => 'パープル';
+
+  @override
+  String get categoryColorPink => 'ピンク';
+
+  @override
+  String get categoryColorBrown => 'ブラウン';
+
+  @override
+  String get editCategoryDialogTitle => 'カテゴリを編集';
+
+  @override
+  String get categoryIconFieldLabel => 'アイコン';
+
+  @override
+  String get categoryColorFieldLabel => 'カラー';
+
+  @override
+  String get editCategoryButton => '保存';
+
+  @override
+  String get editCategoryTooltip => 'カテゴリを編集';
+
+  @override
+  String get cardNetworkBadgeUnknownLabel => 'カード';
+
+  @override
+  String currencyBadgeSemanticLabel(Object code) {
+    return '通貨: $code';
+  }
+
+  @override
   String profileLocationSummary(String currentCountry, String livingCurrency,
       String homeCountry, String homeCurrency) {
     return '現在の国: $currentCountry（$livingCurrency）・母国: $homeCountry（$homeCurrency）';

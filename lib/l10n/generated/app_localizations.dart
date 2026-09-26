@@ -1461,6 +1461,432 @@ abstract class AppLocalizations {
   /// **'Add'**
   String get addCategoryButton;
 
+  /// No description provided for @categoryIconGroceries.
+  ///
+  /// In en, this message translates to:
+  /// **'Groceries'**
+  String get categoryIconGroceries;
+
+  /// No description provided for @categoryIconPublicTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'Public Transport'**
+  String get categoryIconPublicTransport;
+
+  /// No description provided for @categoryIconBillsUtilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Bills & Utilities'**
+  String get categoryIconBillsUtilities;
+
+  /// No description provided for @categoryIconDiningOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Dining Out'**
+  String get categoryIconDiningOut;
+
+  /// No description provided for @categoryIconHealth.
+  ///
+  /// In en, this message translates to:
+  /// **'Health'**
+  String get categoryIconHealth;
+
+  /// No description provided for @categoryIconOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get categoryIconOther;
+
+  /// No description provided for @categoryIconSalary.
+  ///
+  /// In en, this message translates to:
+  /// **'Salary'**
+  String get categoryIconSalary;
+
+  /// No description provided for @categoryIconOtherIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Other Income'**
+  String get categoryIconOtherIncome;
+
+  /// No description provided for @categoryIconCoffeeCafe.
+  ///
+  /// In en, this message translates to:
+  /// **'Coffee & Cafe'**
+  String get categoryIconCoffeeCafe;
+
+  /// No description provided for @categoryIconBarsDrinks.
+  ///
+  /// In en, this message translates to:
+  /// **'Bars & Drinks'**
+  String get categoryIconBarsDrinks;
+
+  /// No description provided for @categoryIconBakery.
+  ///
+  /// In en, this message translates to:
+  /// **'Bakery'**
+  String get categoryIconBakery;
+
+  /// No description provided for @categoryIconShopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Shopping'**
+  String get categoryIconShopping;
+
+  /// No description provided for @categoryIconClothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Clothing'**
+  String get categoryIconClothing;
+
+  /// No description provided for @categoryIconJewelryAccessories.
+  ///
+  /// In en, this message translates to:
+  /// **'Jewelry & Accessories'**
+  String get categoryIconJewelryAccessories;
+
+  /// No description provided for @categoryIconCarFuel.
+  ///
+  /// In en, this message translates to:
+  /// **'Car & Fuel'**
+  String get categoryIconCarFuel;
+
+  /// No description provided for @categoryIconTaxiRideshare.
+  ///
+  /// In en, this message translates to:
+  /// **'Taxi & Rideshare'**
+  String get categoryIconTaxiRideshare;
+
+  /// No description provided for @categoryIconBikeScooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Bike & Scooter'**
+  String get categoryIconBikeScooter;
+
+  /// No description provided for @categoryIconFlights.
+  ///
+  /// In en, this message translates to:
+  /// **'Flights'**
+  String get categoryIconFlights;
+
+  /// No description provided for @categoryIconRentHousing.
+  ///
+  /// In en, this message translates to:
+  /// **'Rent & Housing'**
+  String get categoryIconRentHousing;
+
+  /// No description provided for @categoryIconElectricity.
+  ///
+  /// In en, this message translates to:
+  /// **'Electricity'**
+  String get categoryIconElectricity;
+
+  /// No description provided for @categoryIconWater.
+  ///
+  /// In en, this message translates to:
+  /// **'Water'**
+  String get categoryIconWater;
+
+  /// No description provided for @categoryIconInternetPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Internet & Phone'**
+  String get categoryIconInternetPhone;
+
+  /// No description provided for @categoryIconRepairsMaintenance.
+  ///
+  /// In en, this message translates to:
+  /// **'Repairs & Maintenance'**
+  String get categoryIconRepairsMaintenance;
+
+  /// No description provided for @categoryIconPharmacyMedicine.
+  ///
+  /// In en, this message translates to:
+  /// **'Pharmacy & Medicine'**
+  String get categoryIconPharmacyMedicine;
+
+  /// No description provided for @categoryIconFitness.
+  ///
+  /// In en, this message translates to:
+  /// **'Fitness'**
+  String get categoryIconFitness;
+
+  /// No description provided for @categoryIconPersonalCare.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal Care'**
+  String get categoryIconPersonalCare;
+
+  /// No description provided for @categoryIconMoviesEntertainment.
+  ///
+  /// In en, this message translates to:
+  /// **'Movies & Entertainment'**
+  String get categoryIconMoviesEntertainment;
+
+  /// No description provided for @categoryIconGames.
+  ///
+  /// In en, this message translates to:
+  /// **'Games'**
+  String get categoryIconGames;
+
+  /// No description provided for @categoryIconEventsTickets.
+  ///
+  /// In en, this message translates to:
+  /// **'Events & Tickets'**
+  String get categoryIconEventsTickets;
+
+  /// No description provided for @categoryIconCelebrations.
+  ///
+  /// In en, this message translates to:
+  /// **'Celebrations'**
+  String get categoryIconCelebrations;
+
+  /// No description provided for @categoryIconEducation.
+  ///
+  /// In en, this message translates to:
+  /// **'Education'**
+  String get categoryIconEducation;
+
+  /// No description provided for @categoryIconBooksLearning.
+  ///
+  /// In en, this message translates to:
+  /// **'Books & Learning'**
+  String get categoryIconBooksLearning;
+
+  /// No description provided for @categoryIconKids.
+  ///
+  /// In en, this message translates to:
+  /// **'Kids'**
+  String get categoryIconKids;
+
+  /// No description provided for @categoryIconPets.
+  ///
+  /// In en, this message translates to:
+  /// **'Pets'**
+  String get categoryIconPets;
+
+  /// No description provided for @categoryIconTravel.
+  ///
+  /// In en, this message translates to:
+  /// **'Travel'**
+  String get categoryIconTravel;
+
+  /// No description provided for @categoryIconHotelsLodging.
+  ///
+  /// In en, this message translates to:
+  /// **'Hotels & Lodging'**
+  String get categoryIconHotelsLodging;
+
+  /// No description provided for @categoryIconBankFees.
+  ///
+  /// In en, this message translates to:
+  /// **'Bank & Financial Fees'**
+  String get categoryIconBankFees;
+
+  /// No description provided for @categoryIconInsurance.
+  ///
+  /// In en, this message translates to:
+  /// **'Insurance'**
+  String get categoryIconInsurance;
+
+  /// No description provided for @categoryIconSavingsInvestments.
+  ///
+  /// In en, this message translates to:
+  /// **'Savings & Investments'**
+  String get categoryIconSavingsInvestments;
+
+  /// No description provided for @categoryIconCardFees.
+  ///
+  /// In en, this message translates to:
+  /// **'Card Fees'**
+  String get categoryIconCardFees;
+
+  /// No description provided for @categoryIconTaxes.
+  ///
+  /// In en, this message translates to:
+  /// **'Taxes'**
+  String get categoryIconTaxes;
+
+  /// No description provided for @categoryIconGifts.
+  ///
+  /// In en, this message translates to:
+  /// **'Gifts'**
+  String get categoryIconGifts;
+
+  /// No description provided for @categoryIconDonationsCharity.
+  ///
+  /// In en, this message translates to:
+  /// **'Donations & Charity'**
+  String get categoryIconDonationsCharity;
+
+  /// No description provided for @categoryIconSubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions'**
+  String get categoryIconSubscriptions;
+
+  /// No description provided for @categoryIconCloudStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud & Storage'**
+  String get categoryIconCloudStorage;
+
+  /// No description provided for @categoryIconAiSoftware.
+  ///
+  /// In en, this message translates to:
+  /// **'AI & Software'**
+  String get categoryIconAiSoftware;
+
+  /// No description provided for @categoryIconInvestmentIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Investment Income'**
+  String get categoryIconInvestmentIncome;
+
+  /// No description provided for @categoryIconBusinessIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Business Income'**
+  String get categoryIconBusinessIncome;
+
+  /// No description provided for @categoryIconBonusReward.
+  ///
+  /// In en, this message translates to:
+  /// **'Bonus & Reward'**
+  String get categoryIconBonusReward;
+
+  /// No description provided for @categoryIconMiscellaneous.
+  ///
+  /// In en, this message translates to:
+  /// **'Miscellaneous'**
+  String get categoryIconMiscellaneous;
+
+  /// No description provided for @categoryColorSlate.
+  ///
+  /// In en, this message translates to:
+  /// **'Slate'**
+  String get categoryColorSlate;
+
+  /// No description provided for @categoryColorRed.
+  ///
+  /// In en, this message translates to:
+  /// **'Red'**
+  String get categoryColorRed;
+
+  /// No description provided for @categoryColorOrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Orange'**
+  String get categoryColorOrange;
+
+  /// No description provided for @categoryColorAmber.
+  ///
+  /// In en, this message translates to:
+  /// **'Amber'**
+  String get categoryColorAmber;
+
+  /// No description provided for @categoryColorYellow.
+  ///
+  /// In en, this message translates to:
+  /// **'Yellow'**
+  String get categoryColorYellow;
+
+  /// No description provided for @categoryColorLime.
+  ///
+  /// In en, this message translates to:
+  /// **'Lime'**
+  String get categoryColorLime;
+
+  /// No description provided for @categoryColorGreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Green'**
+  String get categoryColorGreen;
+
+  /// No description provided for @categoryColorTeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Teal'**
+  String get categoryColorTeal;
+
+  /// No description provided for @categoryColorCyan.
+  ///
+  /// In en, this message translates to:
+  /// **'Cyan'**
+  String get categoryColorCyan;
+
+  /// No description provided for @categoryColorBlue.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue'**
+  String get categoryColorBlue;
+
+  /// No description provided for @categoryColorIndigo.
+  ///
+  /// In en, this message translates to:
+  /// **'Indigo'**
+  String get categoryColorIndigo;
+
+  /// No description provided for @categoryColorPurple.
+  ///
+  /// In en, this message translates to:
+  /// **'Purple'**
+  String get categoryColorPurple;
+
+  /// No description provided for @categoryColorPink.
+  ///
+  /// In en, this message translates to:
+  /// **'Pink'**
+  String get categoryColorPink;
+
+  /// No description provided for @categoryColorBrown.
+  ///
+  /// In en, this message translates to:
+  /// **'Brown'**
+  String get categoryColorBrown;
+
+  /// No description provided for @editCategoryDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit category'**
+  String get editCategoryDialogTitle;
+
+  /// No description provided for @categoryIconFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon'**
+  String get categoryIconFieldLabel;
+
+  /// No description provided for @categoryColorFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Color'**
+  String get categoryColorFieldLabel;
+
+  /// No description provided for @editCategoryButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get editCategoryButton;
+
+  /// No description provided for @editCategoryTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit category'**
+  String get editCategoryTooltip;
+
+  /// No description provided for @cardNetworkBadgeUnknownLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Card'**
+  String get cardNetworkBadgeUnknownLabel;
+
+  /// Checkpoint U1: screen-reader label for CurrencyBadge -- announces the ISO 4217 code even where the badge itself renders only a symbol/region glyph.
+  ///
+  /// In en, this message translates to:
+  /// **'Currency: {code}'**
+  String currencyBadgeSemanticLabel(Object code);
+
   /// profileLocationSummary
   ///
   /// In en, this message translates to:

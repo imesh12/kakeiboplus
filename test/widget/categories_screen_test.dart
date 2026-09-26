@@ -499,4 +499,147 @@ void main() {
       expect(shape.side.color, tokens.colors.subtleBorder);
     });
   });
+
+  group('Checkpoint U1: category icon/color picker and edit flow', () {
+    testWidgets(
+        'creating a category with a chosen icon and color persists both, and the row renders '
+        'the chosen icon', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextFormField), 'Pet Supplies');
+      await tester.tap(find.byKey(const Key('categoryIconOption_pets')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('categoryColorOption_teal')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final CategoryRow created =
+          await (db.select(db.categories)..where((tbl) => tbl.name.equals('Pet Supplies'))).getSingle();
+      expect(created.icon, 'pets');
+      expect(created.colorKey, 'teal');
+    });
+
+    testWidgets(
+        'a category created without touching either picker still gets null icon/colorKey, matching '
+        'pre-U1 behavior', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'Untouched Pickers');
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      final CategoryRow created = await (db.select(db.categories)
+            ..where((tbl) => tbl.name.equals('Untouched Pickers')))
+          .getSingle();
+      expect(created.icon, isNull);
+      expect(created.colorKey, isNull);
+    });
+
+    testWidgets(
+        'editing a custom category changes its name, icon, and color', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final String categoryId = await CategoryRepository(db).createCategory(
+        profileId: profileId,
+        name: 'Old Name',
+        type: 'expense',
+        icon: 'shopping_bag',
+        colorKey: 'red',
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(Key('editCategory_$categoryId')));
+      await tester.pumpAndSettle();
+
+      // The name field is present (a non-system category) and pre-filled.
+      expect(find.widgetWithText(TextFormField, 'Old Name'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField), 'New Name');
+      await tester.tap(find.byKey(const Key('categoryIconOption_home')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('categoryColorOption_purple')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final CategoryRow updated =
+          await (db.select(db.categories)..where((tbl) => tbl.id.equals(categoryId))).getSingle();
+      expect(updated.name, 'New Name');
+      expect(updated.icon, 'home');
+      expect(updated.colorKey, 'purple');
+    });
+
+    testWidgets(
+        'editing a system category offers no name field, and its name never changes',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('editCategory_sys-groceries')));
+      await tester.pumpAndSettle();
+
+      // No name field at all for a system category -- its fixed name
+      // stays exactly as seeded.
+      expect(find.byType(TextFormField), findsNothing);
+      await tester.tap(find.byKey(const Key('categoryColorOption_blue')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final CategoryRow groceries = await (db.select(db.categories)
+            ..where((tbl) => tbl.id.equals('sys-groceries')))
+          .getSingle();
+      expect(groceries.name, 'Groceries');
+      expect(groceries.colorKey, 'blue');
+    });
+
+    testWidgets('each category row renders exactly one leading icon via CategoryIdentityIcon',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final Finder tile = find.ancestor(of: find.text('Dining Out'), matching: find.byType(ListTile));
+      expect(find.descendant(of: tile, matching: find.byType(Icon)), findsWidgets);
+    });
+  });
 }

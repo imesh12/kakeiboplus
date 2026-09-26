@@ -41,6 +41,24 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // directory -- drift's default (non-text) DateTime encoding as unix
 // seconds, and booleans as SQLite INTEGER 0/1 -- could not be
 // executed/verified in the sandbox that wrote this file.
+//
+// Checkpoint U1 repair: `categories` is included in the fixture below
+// even though this test neither reads nor writes it, for a reason
+// unrelated to the v7 -> v8 step this test targets -- opening this
+// fixture through the CURRENT `AppDatabase` also runs every LATER
+// `onUpgrade` branch up to today's schema version, including
+// Checkpoint U1's `from < 14` branch, which runs `ALTER TABLE
+// categories ADD COLUMN color_key ...`. That statement fails with "no
+// such table: categories" if the table isn't here, exactly like
+// `transactions.payment_instrument_id`'s `from < 10` branch already
+// required `transactions` to exist in every earlier fixture in this
+// directory. `categories`' shape below is its historically accurate
+// pre-v14 shape (id/profile_id/parent_id/type/name/icon/sort_order/
+// is_system/is_active -- every one of those columns has existed since
+// `onCreate`'s original schema, per `app_database.dart`'s own
+// migration history; only `color_key` was ever added later, by v14).
+// No row is ever inserted into this table; only its existence is
+// needed for the later `ALTER TABLE` to succeed.
 void main() {
   test(
     'v7 -> current (v8) upgrade creates cloud_account_links, leaves every existing v7 table '
@@ -82,6 +100,19 @@ void main() {
             theme_preference TEXT NOT NULL DEFAULT 'light',
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE categories (
+            id TEXT NOT NULL,
+            profile_id TEXT REFERENCES profiles (id),
+            parent_id TEXT,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            icon TEXT,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_system INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
             PRIMARY KEY (id)
           );
 
@@ -258,6 +289,17 @@ void main() {
       expect(refRateRows.length, 1);
       expect(refRateRows.single.baseCurrency, 'USD');
       expect(refRateRows.single.quoteCurrency, 'JPY');
+
+      // This v7 fixture also proves every LATER `onUpgrade` branch runs
+      // cleanly on top of the v7 -> v8 step this test targets -- in
+      // particular Checkpoint U1's v13 -> v14 `ALTER TABLE categories
+      // ADD COLUMN color_key`, which requires `categories` to already
+      // exist. A bare, empty-but-present `categories` table is enough
+      // for that `ALTER TABLE` to succeed; this fixture was never
+      // meant to exercise category behavior, so nothing more than its
+      // continued existence is asserted here.
+      final List<CategoryRow> categoryRows = await db.select(db.categories).get();
+      expect(categoryRows, isEmpty);
     },
   );
 

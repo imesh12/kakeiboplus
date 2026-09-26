@@ -84,7 +84,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   /// v1 -> v2 (Beta 1 Task 2): adds the `budgets` table. No existing
   /// table changes shape and no historical data is touched -- see
@@ -232,6 +232,34 @@ class AppDatabase extends _$AppDatabase {
   /// never creates a `Transactions` row at all, so it is invisible to
   /// every balance/available-money/net-worth calculation by
   /// construction, not by any new filtering logic.
+  ///
+  /// Schema version 14 (Checkpoint U1, Category, Service, Currency &
+  /// Card Visual Identity Foundation) adds one nullable `color_key`
+  /// column to `categories` only -- see `tables.dart`'s
+  /// `Categories.colorKey` doc comment for the full rationale. This is
+  /// the ONE genuine schema change U1 makes: the pre-checkpoint audit
+  /// found `categories.icon` and `payment_instruments.network` already
+  /// persisted (see `docs/14_DECISION_LOG.md` ADR-044), but no column
+  /// anywhere stores a category's color, and no other mechanism (a
+  /// second table, a derived value) does either. Purely additive: no
+  /// existing table changes shape, no existing row in any other table
+  /// is read, rewritten, or deleted. The 8 pre-existing seeded system
+  /// categories (`CategoryRepository._systemCategories`) are backfilled
+  /// to a fixed, deterministic color each -- matching this checkpoint's
+  /// own "system categories get deterministic, never random, visual
+  /// identity" requirement -- via literal `UPDATE ... WHERE id =
+  /// 'sys-...'` statements keyed by their fixed seed ids, exactly the
+  /// same "frozen literal, not computed from a live enum" discipline
+  /// Checkpoint B's v8 -> v9 step already established for
+  /// `accounts.subtype` (see that step's own comment below for why: a
+  /// shipped migration must keep working even if `CategoryColorKey` is
+  /// refactored later). Every OTHER pre-existing `categories` row
+  /// (every user-created category, on every profile) is deliberately
+  /// left with `color_key = null` -- `categoryColorFor` resolves `null`
+  /// to a deterministic-per-category-id fallback color at read time
+  /// (see that function's doc comment), so backfilling every user row
+  /// here would add migration complexity for a case the resolver
+  /// already handles safely and consistently.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -360,6 +388,33 @@ class AppDatabase extends _$AppDatabase {
             // pre-existing account.
             await m.createTable(chequeBooks);
             await m.createTable(cheques);
+          }
+          if (from < 14) {
+            // Checkpoint U1 -- see the doc comment above `migration`
+            // for the full rationale. Additive-only: one nullable
+            // `TextColumn` on `categories`. No existing table changes
+            // shape, no existing row in any OTHER table is read,
+            // rewritten, or deleted, and no `transactions`/`budgets`/
+            // `recurring_rules`/any financial table is touched at all.
+            //
+            // Every pre-existing `categories` row gets `color_key = null`
+            // via the column's own nullability (no backfill statement is
+            // needed for that default) EXCEPT the 8 fixed-id seeded
+            // system categories, which are backfilled below to a
+            // deterministic color each -- literal id/value pairs, not
+            // computed from `CategoryColorKey`, so this step keeps
+            // working even if that enum's declared order or entries
+            // change later. `category_color_migration_test.dart` asserts
+            // these literals resolve to a real `CategoryColorKey.storageValue`.
+            await m.addColumn(categories, categories.colorKey);
+            await customStatement("UPDATE categories SET color_key = 'green' WHERE id = 'sys-groceries'");
+            await customStatement("UPDATE categories SET color_key = 'blue' WHERE id = 'sys-transport'");
+            await customStatement("UPDATE categories SET color_key = 'amber' WHERE id = 'sys-bills'");
+            await customStatement("UPDATE categories SET color_key = 'orange' WHERE id = 'sys-dining'");
+            await customStatement("UPDATE categories SET color_key = 'red' WHERE id = 'sys-health'");
+            await customStatement("UPDATE categories SET color_key = 'slate' WHERE id = 'sys-other-expense'");
+            await customStatement("UPDATE categories SET color_key = 'teal' WHERE id = 'sys-salary'");
+            await customStatement("UPDATE categories SET color_key = 'lime' WHERE id = 'sys-other-income'");
           }
         },
       );

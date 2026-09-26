@@ -19,6 +19,8 @@ import '../../../core/money/currency_mismatch_exception.dart';
 import '../../../core/money/money.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
+import '../../../shared/widgets/card_network_badge.dart';
+import '../../../shared/widgets/currency_badge.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import 'account_creation_kind_presentation.dart';
 import 'account_providers.dart';
@@ -122,7 +124,16 @@ class _AddAccountFormScreenState extends ConsumerState<AddAccountFormScreen> {
                   decoration: InputDecoration(labelText: l10n.currencySection),
                   items: <DropdownMenuItem<String>>[
                     for (final currency in CurrencyRegistry.seed)
-                      DropdownMenuItem<String>(value: currency.code, child: Text(currency.code)),
+                      DropdownMenuItem<String>(
+                        value: currency.code,
+                        // Checkpoint U1: this account selector is one of
+                        // the surfaces the checkpoint brief names
+                        // explicitly for currency-identity adoption --
+                        // the shared `CurrencyBadge`, with its optional
+                        // secondary region monogram, in place of the
+                        // bare code `Text` this dropdown showed before.
+                        child: CurrencyBadge(currencyCode: currency.code, showRegionIndicator: true),
+                      ),
                   ],
                   onChanged: (v) => setState(() => _currencyCode = v ?? _currencyCode),
                 ),
@@ -201,6 +212,21 @@ class _AddAccountFormScreenState extends ConsumerState<AddAccountFormScreen> {
         ],
         onChanged: (v) => setState(() => _network = v),
       ),
+      // Checkpoint U1: a live preview of `CardNetworkBadge` -- the same
+      // shared badge this network resolves to everywhere else it's
+      // shown -- so the user sees immediately what their selection will
+      // look like. Only shown once a real network is chosen; "Not
+      // specified" already reads clearly as its own dropdown option, so
+      // a redundant "Card" fallback badge underneath it would add noise
+      // rather than information (see the class doc comment on
+      // `CardNetworkBadge` for why `null` still has a defined fallback
+      // label -- that fallback exists for surfaces that must always
+      // show a badge, which this preview is deliberately not).
+      if (_network != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Align(alignment: Alignment.centerLeft, child: CardNetworkBadge(network: _network)),
+        ),
       const SizedBox(height: 16),
       TextFormField(
         controller: _last4Controller,

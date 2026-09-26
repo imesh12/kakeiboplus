@@ -45,6 +45,14 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // -- deliberately excluding `payment_instrument_id`, which v10's own
 // migration is what adds it. No row is ever inserted into this table;
 // only its existence is needed for the later `ALTER TABLE` to succeed.
+//
+// Checkpoint U1 repair: `categories` is included below for the
+// identical reason -- Checkpoint U1's `from < 14` branch runs `ALTER
+// TABLE categories ADD COLUMN color_key ...`, which fails with "no
+// such table: categories" if the table isn't here. Its shape below is
+// its historically accurate pre-v14 shape (every column has existed
+// since `onCreate`'s original schema; only `color_key` was ever added
+// later, by v14). No row is ever inserted into it either.
 void main() {
   test(
     'v4 -> v5 upgrade adds recurring_rules.notifications_enabled, defaulting existing rows to false',
@@ -82,6 +90,19 @@ void main() {
             number_format TEXT NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE categories (
+            id TEXT NOT NULL,
+            profile_id TEXT REFERENCES profiles (id),
+            parent_id TEXT,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            icon TEXT,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_system INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
             PRIMARY KEY (id)
           );
 
@@ -257,6 +278,19 @@ void main() {
       final RecurringRuleRow newRule =
           allRules.singleWhere((RecurringRuleRow r) => r.id == 'rule-after-migration');
       expect(newRule.notificationsEnabled, isTrue);
+
+      // This v4 fixture also proves every LATER `onUpgrade` branch runs
+      // cleanly on top of the v4 -> v5 step this test targets -- in
+      // particular Checkpoint U1's v13 -> v14 `ALTER TABLE categories
+      // ADD COLUMN color_key`, which requires `categories` to already
+      // exist (same reasoning as this file's own `transactions` table,
+      // included above for an unrelated later `onUpgrade` branch). A
+      // bare, empty-but-present `categories` table is enough for that
+      // `ALTER TABLE` to succeed; this fixture was never meant to
+      // exercise category behavior, so nothing more than its continued
+      // existence is asserted here.
+      final List<CategoryRow> categoryRows = await db.select(db.categories).get();
+      expect(categoryRows, isEmpty);
     },
   );
 }

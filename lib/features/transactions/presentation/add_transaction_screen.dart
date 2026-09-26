@@ -11,8 +11,10 @@ import '../../../core/money/money.dart';
 import '../../../shared/theme/app_tokens.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_icon_tile.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
+import '../../categories/presentation/category_identity_icon.dart';
 import '../../categories/presentation/category_providers.dart';
 import 'transaction_icon_badge.dart';
 import '../../../l10n/generated/app_localizations.dart';
@@ -887,7 +889,27 @@ class _CategoryDropdown extends ConsumerWidget {
             for (final CategoryRow category in categories)
               DropdownMenuItem<String>(
                 value: category.id,
-                child: Text(category.name, overflow: TextOverflow.ellipsis),
+                // Checkpoint U1: the same `CategoryIdentityIcon` every
+                // other category surface renders through -- see that
+                // widget's own doc comment for why this guarantees the
+                // exact same icon+color a user sees on the Categories
+                // screen or a transaction row, not an independently
+                // reinterpreted one.
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    CategoryIdentityIcon(
+                      categoryId: category.id,
+                      iconKey: category.icon,
+                      colorKey: category.colorKey,
+                      size: AppIconTileSize.small,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(category.name, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
               ),
           ],
           onChanged: onChanged,

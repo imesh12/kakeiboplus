@@ -772,6 +772,221 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addCategoryButton => 'Add';
 
   @override
+  String get categoryIconGroceries => 'Groceries';
+
+  @override
+  String get categoryIconPublicTransport => 'Public Transport';
+
+  @override
+  String get categoryIconBillsUtilities => 'Bills & Utilities';
+
+  @override
+  String get categoryIconDiningOut => 'Dining Out';
+
+  @override
+  String get categoryIconHealth => 'Health';
+
+  @override
+  String get categoryIconOther => 'Other';
+
+  @override
+  String get categoryIconSalary => 'Salary';
+
+  @override
+  String get categoryIconOtherIncome => 'Other Income';
+
+  @override
+  String get categoryIconCoffeeCafe => 'Coffee & Cafe';
+
+  @override
+  String get categoryIconBarsDrinks => 'Bars & Drinks';
+
+  @override
+  String get categoryIconBakery => 'Bakery';
+
+  @override
+  String get categoryIconShopping => 'Shopping';
+
+  @override
+  String get categoryIconClothing => 'Clothing';
+
+  @override
+  String get categoryIconJewelryAccessories => 'Jewelry & Accessories';
+
+  @override
+  String get categoryIconCarFuel => 'Car & Fuel';
+
+  @override
+  String get categoryIconTaxiRideshare => 'Taxi & Rideshare';
+
+  @override
+  String get categoryIconBikeScooter => 'Bike & Scooter';
+
+  @override
+  String get categoryIconFlights => 'Flights';
+
+  @override
+  String get categoryIconRentHousing => 'Rent & Housing';
+
+  @override
+  String get categoryIconElectricity => 'Electricity';
+
+  @override
+  String get categoryIconWater => 'Water';
+
+  @override
+  String get categoryIconInternetPhone => 'Internet & Phone';
+
+  @override
+  String get categoryIconRepairsMaintenance => 'Repairs & Maintenance';
+
+  @override
+  String get categoryIconPharmacyMedicine => 'Pharmacy & Medicine';
+
+  @override
+  String get categoryIconFitness => 'Fitness';
+
+  @override
+  String get categoryIconPersonalCare => 'Personal Care';
+
+  @override
+  String get categoryIconMoviesEntertainment => 'Movies & Entertainment';
+
+  @override
+  String get categoryIconGames => 'Games';
+
+  @override
+  String get categoryIconEventsTickets => 'Events & Tickets';
+
+  @override
+  String get categoryIconCelebrations => 'Celebrations';
+
+  @override
+  String get categoryIconEducation => 'Education';
+
+  @override
+  String get categoryIconBooksLearning => 'Books & Learning';
+
+  @override
+  String get categoryIconKids => 'Kids';
+
+  @override
+  String get categoryIconPets => 'Pets';
+
+  @override
+  String get categoryIconTravel => 'Travel';
+
+  @override
+  String get categoryIconHotelsLodging => 'Hotels & Lodging';
+
+  @override
+  String get categoryIconBankFees => 'Bank & Financial Fees';
+
+  @override
+  String get categoryIconInsurance => 'Insurance';
+
+  @override
+  String get categoryIconSavingsInvestments => 'Savings & Investments';
+
+  @override
+  String get categoryIconCardFees => 'Card Fees';
+
+  @override
+  String get categoryIconTaxes => 'Taxes';
+
+  @override
+  String get categoryIconGifts => 'Gifts';
+
+  @override
+  String get categoryIconDonationsCharity => 'Donations & Charity';
+
+  @override
+  String get categoryIconSubscriptions => 'Subscriptions';
+
+  @override
+  String get categoryIconCloudStorage => 'Cloud & Storage';
+
+  @override
+  String get categoryIconAiSoftware => 'AI & Software';
+
+  @override
+  String get categoryIconInvestmentIncome => 'Investment Income';
+
+  @override
+  String get categoryIconBusinessIncome => 'Business Income';
+
+  @override
+  String get categoryIconBonusReward => 'Bonus & Reward';
+
+  @override
+  String get categoryIconMiscellaneous => 'Miscellaneous';
+
+  @override
+  String get categoryColorSlate => 'Slate';
+
+  @override
+  String get categoryColorRed => 'Red';
+
+  @override
+  String get categoryColorOrange => 'Orange';
+
+  @override
+  String get categoryColorAmber => 'Amber';
+
+  @override
+  String get categoryColorYellow => 'Yellow';
+
+  @override
+  String get categoryColorLime => 'Lime';
+
+  @override
+  String get categoryColorGreen => 'Green';
+
+  @override
+  String get categoryColorTeal => 'Teal';
+
+  @override
+  String get categoryColorCyan => 'Cyan';
+
+  @override
+  String get categoryColorBlue => 'Blue';
+
+  @override
+  String get categoryColorIndigo => 'Indigo';
+
+  @override
+  String get categoryColorPurple => 'Purple';
+
+  @override
+  String get categoryColorPink => 'Pink';
+
+  @override
+  String get categoryColorBrown => 'Brown';
+
+  @override
+  String get editCategoryDialogTitle => 'Edit category';
+
+  @override
+  String get categoryIconFieldLabel => 'Icon';
+
+  @override
+  String get categoryColorFieldLabel => 'Color';
+
+  @override
+  String get editCategoryButton => 'Save';
+
+  @override
+  String get editCategoryTooltip => 'Edit category';
+
+  @override
+  String get cardNetworkBadgeUnknownLabel => 'Card';
+
+  @override
+  String currencyBadgeSemanticLabel(Object code) {
+    return 'Currency: $code';
+  }
+
+  @override
   String profileLocationSummary(String currentCountry, String livingCurrency,
       String homeCountry, String homeCurrency) {
     return 'Living in $currentCountry ($livingCurrency) · Home: $homeCountry ($homeCurrency)';

@@ -2864,3 +2864,308 @@ generated-transaction edit/delete interaction tests);
 re-entrancy tests). No other production file changed; no
 migration; no localization change (no new user-visible string was
 introduced).
+
+## ADR-044 — Checkpoint U1: Category, Service, Currency & Card Visual Identity Foundation is built almost entirely on architecture that already existed; the ONE genuine gap was category color
+
+Decision: Checkpoint U1's own mandatory pre-implementation audit (its
+brief's section 3, 20 items) found that most of the "foundation" it
+asked for was already in place -- `categories.icon` already persisted
+and already had a resolver (`categoryIconFor`, ADR-025/026);
+`payment_instruments.network` already persisted a full `CardNetwork`
+enum with a create/edit dropdown and complete localization
+(`add_account_form_screen.dart`); a shared, size-tiered, theme-driven
+icon-tile primitive (`AppIconTile`) already existed (Checkpoint 10). No
+category COLOR mechanism existed anywhere, and no screen rendered a
+category's icon+color consistently (several independently re-resolved
+it, several didn't render it at all). This entry records what the audit
+found already correct, the one schema change it made, and every new
+architectural piece built on top.
+
+1. **Stable identifiers, never volatile ones -- audited, not just
+   asserted.** `categories.icon` (a `Categories.icon` semantic key
+   string) and `payment_instruments.network` (a `CardNetwork
+   .storageValue` string) already followed this checkpoint's own
+   non-negotiable principle before this checkpoint began. The new
+   `categories.color_key` column (below) and the new `CategoryColorKey`/
+   `ServiceIdentityKey` enums follow the exact same "named string, never
+   an index/codepoint/theme-derived value" convention.
+
+2. **The one genuine schema change: `categories.color_key`.** Schema
+   version 13 -> 14 adds one nullable `TextColumn` to `categories` --
+   see `app_database.dart`'s own migration-step doc comment for the
+   full `from < 14` rationale, and `tables.dart`'s `Categories.colorKey`
+   doc comment. The 8 fixed-id seeded system categories are backfilled
+   to a deterministic color each (both via the migration's frozen
+   literals, for an upgrading install, and via `CategoryRepository
+   ._systemCategories`' own new `colorKey` field, for a fresh install --
+   the two lists are kept in sync by hand, matching the "frozen literal,
+   not computed from a live enum" discipline every migration in this
+   codebase already follows). Every other pre-existing category is left
+   `color_key = null` -- deliberately not backfilled, because
+   `categoryColorFor` already resolves `null` to a deterministic,
+   stable-per-category-id fallback color at read time
+   (`lib/features/categories/domain/category_color.dart`), so a legacy
+   category never looks random or flickers between sessions without
+   needing a backfill statement for every row.
+
+3. **One authoritative resolver, reused everywhere, not duplicated per
+   screen.** `CategoryIdentityIcon`
+   (`lib/features/categories/presentation/category_identity_icon.dart`)
+   is the ONE widget that resolves a category's `icon`/`colorKey`
+   together into a rendered tile, built on the pre-existing `AppIconTile`
+   primitive rather than inventing a new container shape. It is now used
+   by: the Categories screen's own list (which previously rendered no
+   icon at all), the Add/Edit Transaction category dropdown, the
+   Recurring rule dialog's category dropdown, and the category-budget
+   tile on the Budgets screen (which previously showed a single fixed
+   generic icon regardless of category). `category_identity_icon_test
+   .dart` proves the specific property the brief asked for directly: the
+   same `(categoryId, iconKey, colorKey)` renders an identical `Icon`
+   (same `IconData`, same `Color`) inside two structurally different
+   surrounding widget trees.
+
+4. **Category icon catalog expanded from 8 to 50 curated concepts, one
+   map, never forked.** `category_icon.dart`'s `_categoryIconsByName`
+   is still the single source of truth `categoryIconFor` resolves
+   against; it grew from the original 8 system-category seed icons
+   (kept byte-for-byte unchanged) to 50 entries spanning Food & Dining,
+   Shopping, Transport, Housing & Bills, Health & Personal Care,
+   Entertainment, Education, Family & Pets, Travel, Finance/Fees/
+   Insurance, Gifts, Subscriptions/Digital Services, Income, and
+   Miscellaneous. `categoryIconKeys` (a new, ordered, read-only view
+   over that same map's keys) is what the new icon picker iterates --
+   there is no second, independently-maintained key list anywhere.
+   Localized picker labels for all 50 live in a deliberately separate
+   file, `category_icon_catalog.dart`, so `category_icon.dart` itself
+   keeps its pre-existing "pure, no `BuildContext`" contract.
+
+5. **A new curated, accessible, light+dark-safe category color palette
+   -- 14 named colors, independent of icon choice.** `CategoryColorKey`
+   (`category_color.dart`) is a small, explicit enum, each with its own
+   light-theme and dark-theme `Color`, chosen from the Material 3 tonal
+   palette family for comparable contrast/vibrancy in both themes at the
+   same 0.14-alpha tint `AppIconTile` already uses. `resolveCategoryColorKey`
+   /`categoryColorFor` never throw for `null` or an unrecognized stored
+   value -- see item 2 above for the deterministic-fallback rationale.
+
+6. **User-facing category customization: icon + color pickers, plus a
+   genuinely new edit flow.** The pre-checkpoint audit found
+   `CategoriesScreen`'s Add dialog only ever collected a name --
+   `CategoryRepository` had no `updateCategory` method at all, and no
+   screen offered to edit an existing category's icon/color (or, for a
+   non-system category, its name). This checkpoint added both: the Add
+   dialog now also offers `CategoryIconPicker`/`CategoryColorPicker` (a
+   bounded-height scrollable icon grid; a color swatch row), and a new
+   Edit dialog reachable from each row's new edit `IconButton`. Both
+   pickers mirror `theme_customization_screen.dart`'s pre-existing
+   `_ThemeSwatchCard` accessibility convention exactly -- selection is
+   communicated through a colored border, a check-mark badge, AND a
+   `Semantics.selected`/announced-suffix label, never color alone --
+   rather than inventing a new pattern. A system category's name field
+   is deliberately omitted from the Edit dialog (preserving this
+   codebase's pre-existing "Beta 0 has no UI to rename the system set"
+   boundary) while its icon/color remain fully editable, since both are
+   presentation metadata only and never affect `FinanceEngine`/any
+   balance, budget, or goal calculation. Per the brief's own V1 scope,
+   "custom icon" means choosing from this curated catalog -- no
+   arbitrary uploaded image/SVG icon support was added.
+
+7. **Card network identity: already a complete, working feature; this
+   checkpoint added only the shared display widget.** The audit found
+   `payment_instruments.network` (a nullable `CardNetwork.storageValue`
+   column), the `CardNetwork` enum itself (visa/mastercard/jcb/amex/
+   other), and a fully localized create/edit dropdown
+   (`add_account_form_screen.dart`) already shipped and working -- no
+   migration, no new persistence, nothing to fix. The one real gap was
+   a shared, reusable DISPLAY component: `CardNetworkBadge`
+   (`lib/shared/widgets/card_network_badge.dart`) renders the network's
+   plain localized NAME as a small pill (reusing `AppStatusChip`
+   directly, and reusing the exact same `addAccountCardNetwork*` ARB
+   strings the dropdown already used -- no second, divergent copy of
+   those four/five names), deliberately never a recreated brand logo --
+   see item 9 below for why that choice was made deliberately, not out
+   of laziness. Adopted as a live selection preview next to the
+   create/edit dropdown itself, since the audit also found there is
+   currently no dedicated "view a saved payment instrument" screen
+   anywhere in the app at all -- building one was out of scope for this
+   checkpoint (it is not a visual-identity gap; it is a pre-existing,
+   separate missing-screen gap), so the badge is proven in the one
+   existing screen that already handles card network.
+
+8. **Currency identity: code stays authoritative; region indicator is
+   new, optional, deliberately not one-currency-one-country.**
+   `CurrencyBadge` (`lib/shared/widgets/currency_badge.dart`) always
+   renders the ISO 4217 code verbatim; an opt-in `showRegionIndicator`
+   adds a small, secondary, muted two-letter monogram -- deliberately
+   NOT an emoji flag (the brief's own audit concern: inconsistent emoji
+   rendering across platforms/fonts, confirmed by this codebase having
+   zero pre-existing flag usage anywhere to build on) and never a
+   downloaded/remote image, so the badge is fully offline and renders
+   identically everywhere. EUR resolves to the neutral 'EU' monogram,
+   never an arbitrarily-chosen single Eurozone country -- the one
+   multi-region case the brief called out by name. A currency code with
+   no deliberate entry in the small, explicit glyph map (anything
+   outside this Beta's 13-currency `CurrencyRegistry` seed) simply shows
+   no glyph at all rather than guessing. Adopted at the two currency
+   *selector* dropdowns that existed before this checkpoint and
+   previously showed only a bare code `Text` -- the Add Account currency
+   picker and the Create Savings Goal target-currency picker -- per the
+   brief's own "avoid duplicating the same flag/code six times inside
+   one card" guidance, this checkpoint did not mechanically stamp the
+   badge onto every money-showing surface in the app.
+
+9. **Service/subscription identity: a real, separate architecture,
+   deliberately using generic family icons instead of brand logos.**
+   `ServiceIdentityKey`
+   (`lib/features/services/domain/service_identity.dart`) is a small,
+   explicit enum of service FAMILIES (streaming video, music, cloud
+   storage, AI/software, productivity, gaming, other) -- category
+   ("Entertainment") and service ("Netflix") are kept as two separate
+   catalogs, per the brief's own requirement, but this checkpoint has no
+   licensed brand-asset source available to it, and the brief itself
+   permits (and, without one, requires) falling back to "a neutral
+   service identity" rather than fabricating a trademark approximation,
+   recoloring a real logo, or depending on a remote logo URL. Each
+   family resolves to a generic, unbranded Material icon and reuses
+   `CategoryColorKey`'s existing palette (never a second color system).
+   `ServiceIdentityIcon` renders it through the same `AppIconTile`
+   primitive. Not wired into any screen: the audit found no existing
+   service/subscription selection UI or persisted field anywhere in
+   this codebase to attach it to, and adding one preemptively would
+   violate this checkpoint's own (and every prior checkpoint's) "audit
+   before adding persistence" discipline. A future checkpoint with an
+   actual service-selection UI, or a licensed brand-asset source, can
+   extend this enum/catalog without changing its call sites.
+
+10. **Never throws, anywhere in this system.** `categoryIconFor`
+    (pre-existing), `categoryColorFor`/`resolveCategoryColorKey`,
+    `categoryIconLabel`, `ServiceIdentityKey.fromStorageValue`/
+    `serviceIdentityIconFor`/`serviceIdentityColorFor`, and
+    `CardNetworkBadge`'s network-to-label mapping all resolve `null` or
+    any unrecognized value to a deterministic, real fallback rather than
+    throwing or rendering blank -- exercised directly by this
+    checkpoint's new unit tests for each function, not merely asserted
+    in a doc comment.
+
+11. **No financial calculation touched.** Every new/changed column,
+    resolver, and widget in this checkpoint is presentation metadata
+    only. `FinanceEngine`, every balance/budget/goal/recurring-posting
+    calculation, and every existing currency-arithmetic path are
+    completely untouched -- this checkpoint added a `SELECT`able
+    `color_key` column and read-only resolvers/widgets, nothing that any
+    financial calculation reads.
+
+12. **Deliberately deferred / out of scope, per the brief's own
+    non-goals and this audit's findings:** Dashboard/Home visual-
+    identity adoption (explicitly deferred to U2), Search/Filters/
+    History (V), arbitrary uploaded custom icons, a licensed/real
+    service-brand-logo catalog, automatic merchant-to-service matching,
+    card-number-based network detection, and any broad theme/navigation
+    change. `docs/design/*` and `assets/branding/*` were not touched;
+    no new asset files were introduced (every new icon uses an existing
+    Material Icons glyph already available through the Flutter SDK, and
+    every new badge is text-only).
+
+**Files changed:** `lib/core/database/tables.dart` (`Categories
+.colorKey`); `lib/core/database/app_database.dart` (schema v13 -> v14,
+one `addColumn` + 8 literal backfill `UPDATE`s); `lib/core/database
+/repositories/category_repository.dart` (seed `colorKey`, `createCategory`
+gains `colorKey`, new `updateCategory`); `lib/features/categories/domain
+/category_color.dart` (new); `lib/features/categories/domain
+/category_icon.dart` (catalog expanded 8 -> 50, plus `categoryIconKeys`);
+`lib/features/categories/domain/category_icon_catalog.dart` (new);
+`lib/features/categories/presentation/category_identity_icon.dart` (new);
+`lib/features/categories/presentation/category_icon_color_picker.dart`
+(new); `lib/features/categories/presentation/categories_screen.dart`
+(icon/color pickers on Add, new Edit dialog, list rows now show
+`CategoryIdentityIcon` and an edit action); `lib/features/transactions
+/presentation/add_transaction_screen.dart`, `lib/features/recurring
+/presentation/recurring_screen.dart`, `lib/features/budgets/presentation
+/budgets_screen.dart` (category dropdowns/tile now render
+`CategoryIdentityIcon`); `lib/shared/widgets/currency_badge.dart` (new);
+`lib/shared/widgets/card_network_badge.dart` (new); `lib/features
+/accounts/presentation/add_account_form_screen.dart` (currency dropdown
+now uses `CurrencyBadge`; a `CardNetworkBadge` selection preview added);
+`lib/features/goals/presentation/savings_goals_screen.dart` (target-
+currency dropdown now uses `CurrencyBadge`); `lib/features/services
+/domain/service_identity.dart`, `lib/features/services/presentation
+/service_identity_icon.dart` (new); `lib/l10n/app_en.arb`/`app_ja.arb`
+(new icon-label, color-label, and dialog strings; both files' key sets
+verified identical). New tests: `test/core/database
+/category_color_migration_test.dart`; `test/features/categories/domain
+/category_color_test.dart`; `test/features/categories/domain
+/category_icon_catalog_test.dart`; expanded `category_icon_test.dart`;
+`test/features/categories/presentation/category_identity_icon_test
+.dart`; expanded `test/widget/categories_screen_test.dart`; `test/shared
+/widgets/currency_badge_test.dart`; `test/shared/widgets
+/card_network_badge_test.dart`; `test/features/services/domain
+/service_identity_test.dart`; `test/features/services/presentation
+/service_identity_icon_test.dart`.
+
+### ADR-044 repair note — Checkpoint U1 validation failure (semantics-tree crash in the category icon/color pickers)
+
+The Windows validation run following ADR-044 reported 7 failing tests
+(`+1835 -7`), all of them in `test/widget/categories_screen_test.dart`,
+including a detailed report of a repeated `!semantics.parentDataDirty`
+framework assertion during `pumpAndSettle()` immediately after opening
+the new Edit-category dialog, plus a follow-on `flutter_test` matcher
+failure (`min != null && min! > 0`) at the very next assertion in that
+same test.
+
+**Root cause (production widget bug, not a test bug):**
+`CategoryIconPicker`/`CategoryColorPicker`
+(`lib/features/categories/presentation/category_icon_color_picker.dart`)
+built each selectable option as `Semantics(button:, selected:, label:)`
+wrapping a `Tooltip` wrapping a bare `InkWell` -- with no
+`ExcludeSemantics` and no `Material` ancestor for the `InkWell` -- and
+`CategoryIconPicker` additionally used a `GridView.builder` (its own
+nested `Scrollable`/`Viewport`) inside the dialog's own
+`SingleChildScrollView`. This deviates from this codebase's own already-
+proven selectable-swatch pattern, `_ThemeSwatchCard` in
+`lib/features/settings/presentation/theme_customization_screen.dart`,
+which uses a plain `Wrap` (no nested `Scrollable`), no `Tooltip`, and --
+the actually load-bearing piece -- explicitly suppresses the descendant
+interactive widget's own implicit semantics via
+`Semantics(...) > ExcludeSemantics(child: Material(...InkWell...))` so
+exactly one `SemanticsNode` exists per option. With ~50 icon options
+each contributing several unmerged/conflicting semantics annotations,
+built while the dialog's route-transition animation was still running,
+the framework's semantics-compilation pass hit a real
+`!semantics.parentDataDirty` assertion. The subsequent
+`find.byType(TextFormField), findsNothing` matcher failure at the next
+line was a cascading symptom of that same corrupted frame, not an
+independent bug in the finder/matcher itself -- `findsNothing` was the
+correct, valid assertion for "no name field on a system category" and
+was left unchanged.
+
+Within `categories_screen_test.dart`, every test that opens the Add or
+Edit category dialog renders these same picker widgets and was
+therefore a candidate for the identical crash: the 4 new Checkpoint U1
+tests that exercise the dialogs, plus the pre-existing
+"CP6.7 (D): creating an expense category and an income category both
+work end-to-end through the fully localized Japanese Add-category
+dialog" test (it opens the Add dialog twice). The 5th new U1 test
+("each category row renders exactly one leading icon via
+CategoryIdentityIcon") never opens a dialog and does not use these
+picker widgets, so it was not implicated.
+
+**Fix (production code only; no test files or generated files
+modified):** `category_icon_color_picker.dart` was rewritten so both
+pickers follow `_ThemeSwatchCard`'s exact, proven structure --
+`CategoryIconPicker` now lays its options out with `Wrap` instead of
+`GridView.builder`/`SizedBox(height: 220)`, and every option in both
+pickers is `Semantics(button:, selected:, label:) > ExcludeSemantics
+(child: Material(color: transparent, child: InkWell(...)))`, with
+`Tooltip` removed entirely from both. This is not an accessibility
+reduction: the descendant semantics `ExcludeSemantics` removes were
+genuinely redundant with (and, left unmerged, in conflict with) the
+explicit `label`/`selected`/`button` annotation already provided at the
+top of each option -- a screen reader still announces the identical
+label and selected state as before, from one authoritative node. The
+"never color alone" requirement is unchanged: each option still carries
+an explicit accessible label plus a border/check-mark selected
+indicator, never color alone.
+
+**Files changed by this repair:**
+`lib/features/categories/presentation/category_icon_color_picker.dart`
+only.

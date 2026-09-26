@@ -21,12 +21,14 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_finance_list_row.dart';
+import '../../../shared/widgets/app_icon_tile.dart';
 import '../../../shared/widgets/app_money_text.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../../../shared/widgets/app_segmented_control.dart';
 import '../../../shared/widgets/app_status_chip.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
+import '../../categories/presentation/category_identity_icon.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../domain/recurrence_frequency.dart';
 import '../domain/recurring_rule_kind.dart';
@@ -969,7 +971,27 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                       for (final CategoryRow category in categories)
                         DropdownMenuItem<String?>(
                           value: category.id,
-                          child: Text(category.name, overflow: TextOverflow.ellipsis),
+                          // Checkpoint U1: see `_CategoryDropdown`'s
+                          // identical comment in `add_transaction_screen
+                          // .dart` -- the same `CategoryIdentityIcon`
+                          // widget, so this rule dialog's category choice
+                          // renders identically to every other category
+                          // surface in the app.
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              CategoryIdentityIcon(
+                                categoryId: category.id,
+                                iconKey: category.icon,
+                                colorKey: category.colorKey,
+                                size: AppIconTileSize.small,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(category.name, overflow: TextOverflow.ellipsis),
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                     onChanged: (String? v) => setState(() => _categoryId = v),

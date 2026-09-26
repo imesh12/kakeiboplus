@@ -12,6 +12,7 @@ import '../../../core/routing/app_routes.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/currency_badge.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../domain/savings_goal_status.dart';
 import 'savings_goal_providers.dart';
@@ -204,8 +205,19 @@ class _CreateGoalDialogState extends ConsumerState<_CreateGoalDialog> {
               decoration: InputDecoration(labelText: l10n.currencySection),
               onChanged: (String? v) => setState(() => _currencyCode = v ?? _currencyCode),
               items: <DropdownMenuItem<String>>[
+                // Checkpoint U1: a savings goal's target currency is one
+                // of the surfaces the checkpoint brief names explicitly
+                // for currency-identity adoption -- the target currency
+                // is what the goal stays anchored to regardless of FX
+                // movement (see `docs/14_DECISION_LOG.md`'s savings-goal
+                // currency-anchoring decisions), so showing it clearly
+                // here, via the shared `CurrencyBadge`, matters more
+                // than in most dropdowns.
                 for (final currency in CurrencyRegistry.seed)
-                  DropdownMenuItem<String>(value: currency.code, child: Text(currency.code)),
+                  DropdownMenuItem<String>(
+                    value: currency.code,
+                    child: CurrencyBadge(currencyCode: currency.code, showRegionIndicator: true),
+                  ),
               ],
             ),
             MoneyTextField(
