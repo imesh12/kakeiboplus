@@ -227,6 +227,8 @@
   },
   "accountOpeningBalanceLabel": "Opening balance",
   "accountCreatedLabel": "Created",
+  "accountBalanceLabel": "Balance",
+  "accountInstitutionLabel": "Institution",
   "accountRecentActivityTitle": "Recent activity",
   "accountNoRecentActivityMessage": "No recent activity for this account.",
   "editAccountTitle": "Edit account",

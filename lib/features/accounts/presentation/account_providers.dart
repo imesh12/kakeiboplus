@@ -134,3 +134,22 @@ final AutoDisposeStreamProviderFamily<DepositDetailsRow?, String> _depositDetail
     StreamProvider.autoDispose.family<DepositDetailsRow?, String>((ref, accountId) {
   return ref.watch(depositRepositoryProvider).watchForAccount(accountId);
 });
+
+/// Every active financial institution for the current profile --
+/// Checkpoint L. `FinancialInstitutionRepository` has no
+/// single-institution `watchById` (it was only ever built to list a
+/// profile's institutions for Add Account's dedup, see that
+/// repository's own doc) -- `AccountDetailScreen`'s new Institution row
+/// resolves one account's `institutionId` against this list itself,
+/// mirroring `_RecentActivitySection`'s existing "watch the list, look
+/// up the id locally" pattern for account names rather than adding a
+/// new single-row repository method for one read-only display field.
+final StreamProvider<List<FinancialInstitutionRow>> activeInstitutionsProvider =
+    StreamProvider<List<FinancialInstitutionRow>>((ref) async* {
+  final ProfileRow? profile = await ref.watch(activeProfileProvider.future);
+  if (profile == null) {
+    yield const <FinancialInstitutionRow>[];
+    return;
+  }
+  yield* ref.watch(financialInstitutionRepositoryProvider).watchActiveForProfile(profile.id);
+});

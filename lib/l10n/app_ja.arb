@@ -227,6 +227,8 @@
   },
   "accountOpeningBalanceLabel": "開始時の残高",
   "accountCreatedLabel": "作成日",
+  "accountBalanceLabel": "残高",
+  "accountInstitutionLabel": "金融機関",
   "accountRecentActivityTitle": "最近の履歴",
   "accountNoRecentActivityMessage": "この口座の履歴はまだありません。",
   "editAccountTitle": "口座を編集",

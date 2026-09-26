@@ -388,6 +388,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountCreatedLabel => 'Created';
 
   @override
+  String get accountBalanceLabel => 'Balance';
+
+  @override
+  String get accountInstitutionLabel => 'Institution';
+
+  @override
   String get accountRecentActivityTitle => 'Recent activity';
 
   @override

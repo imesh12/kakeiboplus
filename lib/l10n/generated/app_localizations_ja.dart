@@ -377,6 +377,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accountCreatedLabel => '作成日';
 
   @override
+  String get accountBalanceLabel => '残高';
+
+  @override
+  String get accountInstitutionLabel => '金融機関';
+
+  @override
   String get accountRecentActivityTitle => '最近の履歴';
 
   @override

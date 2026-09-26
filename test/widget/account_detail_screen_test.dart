@@ -2,6 +2,7 @@ import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/deposit_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/financial_institution_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
@@ -126,6 +127,24 @@ void main() {
   Finder currentBalanceText(String formatted) => find.descendant(
         of: find.byKey(const Key('accountCurrentBalance')),
         matching: find.text(formatted),
+      );
+
+  /// Checkpoint L: `Key('accountBalanceLabel')` is attached directly to
+  /// the label `Text` widget itself (see `account_detail_screen.dart`),
+  /// not to a wrapping container the way `Key('accountInstitutionRow')`
+  /// wraps a `_DetailRow`. `find.descendant(of: find.byKey(...), ...)`
+  /// searches strictly *below* the keyed widget in the tree -- for a
+  /// leaf `Text` widget that is never where its own `data` lives, so
+  /// that pattern would always find zero matches here regardless of
+  /// what the label actually says. This finder instead matches the
+  /// keyed `Text` widget itself by predicate: still exactly as
+  /// structural/specific as `currentBalanceText` above, just correct
+  /// for a key that sits on a leaf rather than a composite.
+  Finder balanceLabelText(String expected) => find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is Text &&
+            widget.key == const Key('accountBalanceLabel') &&
+            widget.data == expected,
       );
 
   testWidgets(
@@ -512,6 +531,351 @@ void main() {
     expect(currentBalanceText('\$50.00'), findsOneWidget);
   });
 
+  // Checkpoint L: Account Detail becomes type-aware for balance wording
+  // (driven purely by the persisted `BalanceClass`, never by name/
+  // subtype text) and gains a read-only Institution row, shown only
+  // when one is actually persisted. `Key('accountBalanceLabel')` scopes
+  // the new label the same way `currentBalanceText` already scopes the
+  // hero number, since "Balance" can legitimately also appear as plain
+  // prose elsewhere on a future screen -- never asserted as a bare
+  // `find.text` here.
+  group('Checkpoint L -- type-aware balance label & institution', () {
+    testWidgets('an ordinary asset account (bank) shows the "Balance" label', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Checking',
+        type: 'bank',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(5000, 'USD'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(balanceLabelText('Balance'), findsOneWidget);
+      expect(currentBalanceText('\$50.00'), findsOneWidget);
+      // Never the liability wording for an asset.
+      expect(find.text('Amount you currently owe'), findsNothing);
+    });
+
+    testWidgets(
+        'a credit-card/liability account shows "Amount you currently owe", never the plain '
+        'asset "Balance" label, and its non-negative amount-owed magnitude is unchanged',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Credit Card',
+        type: 'creditCard',
+        balanceClass: BalanceClass.liability,
+        subtype: FinancialAccountSubtype.creditCard,
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(12000, 'USD'), // $120.00 owed
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(balanceLabelText('Amount you currently owe'), findsOneWidget);
+      expect(find.text('Balance'), findsNothing);
+      // Still the plain non-negative magnitude -- no sign flip, no
+      // "-\$120.00", exactly `FinanceEngine.accountBalance`'s existing
+      // liability convention, only now with a clarifying label above it.
+      expect(currentBalanceText('\$120.00'), findsOneWidget);
+      // No deposit-only section leaks onto a credit-card account.
+      expect(find.byKey(const Key('depositDetailsCard')), findsNothing);
+    });
+
+    testWidgets(
+        'a deposit account still shows the plain asset "Balance" label -- its hero number is '
+        'a ledger balance, not a specially labeled principal figure', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Fixed Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: accountId,
+        depositType: DepositType.fixed,
+        termNumber: 12,
+        termUnit: DepositTermUnit.months,
+        startDateUtc: DateTime.utc(2026, 1, 1),
+        interestRateBasisPoints: 250,
+        interestMethod: DepositInterestMethod.simple,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(balanceLabelText('Balance'), findsOneWidget);
+      expect(find.byKey(const Key('depositDetailsCard')), findsOneWidget);
+    });
+
+    testWidgets('a Savings account (its own persisted subtype since Checkpoint K) displays as '
+        'Savings, shows the "Balance" label, and no deposit/liability field leaks onto it',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Nest egg',
+        type: 'savings',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.savings,
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(5000, 'USD'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      // Displays as Savings, not Bank -- the exact identity this
+      // checkpoint's brief requires be preserved.
+      expect(find.text('Savings account · USD'), findsOneWidget);
+      expect(balanceLabelText('Balance'), findsOneWidget);
+      expect(find.byKey(const Key('depositDetailsCard')), findsNothing);
+
+      final AccountRow row = await accountRepo.requireById(accountId);
+      expect(row.subtypeValue, FinancialAccountSubtype.savings);
+    });
+
+    testWidgets(
+        'opening a Savings account in Edit and saving it unchanged preserves its persisted '
+        'savings subtype -- it is never silently converted to Bank', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Nest egg',
+        type: 'savings',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.savings,
+        currencyCode: 'USD',
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      await tester.tap(find.byKey(const Key('editAccount')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final AccountRow row = await accountRepo.requireById(accountId);
+      expect(row.subtypeValue, FinancialAccountSubtype.savings);
+      expect(row.balanceClassValue, BalanceClass.asset);
+      expect(row.type, 'savings');
+    });
+
+    testWidgets('a wallet account shows the "Balance" label and no deposit/liability fields',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'E-money',
+        type: 'wallet',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(3000, 'USD'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(balanceLabelText('Balance'), findsOneWidget);
+      expect(find.byKey(const Key('depositDetailsCard')), findsNothing);
+    });
+
+    testWidgets('a cash account shows the "Balance" label and no deposit/liability fields',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet cash',
+        type: 'cash',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(1000, 'USD'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(balanceLabelText('Balance'), findsOneWidget);
+      expect(find.byKey(const Key('depositDetailsCard')), findsNothing);
+      // No institution row -- this account never had one.
+      expect(find.byKey(const Key('accountInstitutionRow')), findsNothing);
+    });
+
+    testWidgets('shows the persisted institution name when the account actually has one',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final FinancialInstitutionRepository institutionRepo = FinancialInstitutionRepository(db);
+      final String institutionId =
+          await institutionRepo.findOrCreate(profileId: profileId, name: 'Chase');
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Checking',
+        type: 'bank',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.bank,
+        currencyCode: 'USD',
+        institutionId: institutionId,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.descendant(of: find.byKey(const Key('accountInstitutionRow')), matching: find.text('Chase')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('never fabricates an institution row for an account with no institutionId',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Checking',
+        type: 'bank',
+        currencyCode: 'USD',
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('accountInstitutionRow')), findsNothing);
+    });
+
+    testWidgets(
+        'Privacy: Account Detail never shows an aggregate Net Worth figure, even with a mixed '
+        'asset/liability portfolio', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Checking',
+        type: 'bank',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(5000, 'USD'),
+      );
+      await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Credit Card',
+        type: 'creditCard',
+        balanceClass: BalanceClass.liability,
+        subtype: FinancialAccountSubtype.creditCard,
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(2000, 'USD'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Net worth'), findsNothing);
+      expect(find.textContaining('Net Worth'), findsNothing);
+    });
+
+    testWidgets(
+        'a long institution name at a narrow 320px width and 1.6x text scale renders without '
+        'an overflow exception', (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final FinancialInstitutionRepository institutionRepo = FinancialInstitutionRepository(db);
+      final String institutionId = await institutionRepo.findOrCreate(
+        profileId: profileId,
+        name: 'The Really Very Long International Community Bank & Trust Co.',
+      );
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Credit Card',
+        type: 'creditCard',
+        balanceClass: BalanceClass.liability,
+        subtype: FinancialAccountSubtype.creditCard,
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(999999, 'USD'),
+        institutionId: institutionId,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      final Object? overflowException = tester.takeException();
+      if (overflowException != null) {
+        fail(
+          'Narrow-screen (320px) + 1.6x text scale Account Detail (balance label + '
+          'institution row) threw an exception:\n\n$overflowException',
+        );
+      }
+      expect(find.byKey(const Key('accountBalanceLabel')), findsOneWidget);
+      expect(find.byKey(const Key('accountInstitutionRow')), findsOneWidget);
+    });
+  });
+
   group('Japanese localization', () {
     testWidgets(
       'shows a localized type label, a localized Edit tooltip, and the untouched account name',
@@ -563,6 +927,73 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('口座'), findsOneWidget); // accountFallbackTitle
       expect(find.text('この口座は利用できません。'), findsOneWidget); // accountNoLongerAvailableMessage
+    });
+
+    testWidgets(
+        'Checkpoint L: shows the localized "Balance"/"Institution" labels for an ordinary '
+        'asset account with a persisted institution', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final FinancialInstitutionRepository institutionRepo = FinancialInstitutionRepository(db);
+      final String institutionId =
+          await institutionRepo.findOrCreate(profileId: profileId, name: 'Chase');
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Checking',
+        type: 'bank',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.bank,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(50000, 'JPY'),
+        institutionId: institutionId,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithRouter(container, accountId, locale: const Locale('ja')),
+      );
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(balanceLabelText('残高'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('accountInstitutionRow')), matching: find.text('金融機関')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byKey(const Key('accountInstitutionRow')), matching: find.text('Chase')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'Checkpoint L: a liability account shows the localized "amount you currently owe" '
+        'label in Japanese, never the plain asset balance label', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Credit Card',
+        type: 'creditCard',
+        balanceClass: BalanceClass.liability,
+        subtype: FinancialAccountSubtype.creditCard,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(12000, 'JPY'),
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithRouter(container, accountId, locale: const Locale('ja')),
+      );
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(balanceLabelText('現在の未払い残高'), findsOneWidget);
+      expect(balanceLabelText('残高'), findsNothing);
     });
   });
 
@@ -906,6 +1337,88 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+        'Checkpoint L: reactivating a closed, already-MATURED deposit does not reset its '
+        'maturity status back to Active -- lifecycle and deposit-maturity stay independent '
+        'through a full close+reactivate cycle, not just while closed',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Old Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      // A one-year term starting in 2020 has long since matured.
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: accountId,
+        depositType: DepositType.fixed,
+        termNumber: 1,
+        termUnit: DepositTermUnit.years,
+        startDateUtc: DateTime.utc(2020, 1, 1),
+        interestRateBasisPoints: 100,
+        interestMethod: DepositInterestMethod.simple,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      // Matured while still active, before touching lifecycle at all.
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('depositStatusBadge')),
+          matching: find.text('Matured'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('closeOrReactivateAccount')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmCloseAccount')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('accountClosedBadge')), findsOneWidget);
+      // Still Matured while closed -- closing never matures/unmatures a
+      // deposit (Checkpoint J's own rule, reconfirmed here).
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('depositStatusBadge')),
+          matching: find.text('Matured'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('closeOrReactivateAccount')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmReactivateAccount')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('accountClosedBadge')), findsNothing);
+      // The precise regression this test exists for: reactivating the
+      // account must not reset deposit maturity back to Active just
+      // because the account itself is active again -- maturity is
+      // derived purely from `DepositDetails.maturityDate`, never from
+      // `AccountRow.isActive`/`deletedAt`.
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('depositStatusBadge')),
+          matching: find.text('Matured'),
+        ),
+        findsOneWidget,
+      );
+    });
 
     testWidgets('the deposit details card survives a narrow 320px width at a 1.6x text scale',
         (tester) async {

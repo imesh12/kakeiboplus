@@ -236,6 +236,25 @@ class _AccountDetailBody extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final AsyncValue<Money> balanceAsync = ref.watch(accountBalanceProvider(account));
+    // Checkpoint L: resolve this account's institution name, if it has
+    // one -- see `activeInstitutionsProvider`'s own doc for why this is
+    // a local lookup against the watched list rather than a new
+    // single-row repository method. Collapses to `null` (never shown)
+    // while loading/erroring or if the id doesn't resolve -- this is a
+    // secondary metadata field, not the screen's primary content, so it
+    // never blocks or shows its own spinner/error state.
+    final AsyncValue<List<FinancialInstitutionRow>> institutionsAsync =
+        ref.watch(activeInstitutionsProvider);
+    String? institutionName;
+    if (account.institutionId != null) {
+      for (final FinancialInstitutionRow institution
+          in institutionsAsync.valueOrNull ?? const <FinancialInstitutionRow>[]) {
+        if (institution.id == account.institutionId) {
+          institutionName = institution.name;
+          break;
+        }
+      }
+    }
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -305,29 +324,76 @@ class _AccountDetailBody extends ConsumerWidget {
         // matching `AccountsScreen`'s own plain balance text, unlike
         // `TransactionDetailScreen`'s signed amount.
         Center(
-          child: balanceAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: CircularProgressIndicator(),
-            ),
-            error: (Object e, StackTrace st) => Icon(Icons.error_outline, color: colors.error),
-            data: (Money balance) => AppMoneyText(
-              _formatter.format(balance),
-              key: const Key('accountCurrentBalance'),
-              emphasis: AppMoneyEmphasis.hero,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // Checkpoint L: a small, type-aware label -- driven
+              // purely by [AccountRowX.isLiability] (the persisted,
+              // authoritative `balanceClass`), never by name/subtype
+              // text. "Amount you currently owe" for a liability (the
+              // exact same wording Add Account's own credit-card
+              // opening-balance field already uses -- reused, not
+              // duplicated); "Balance" for every asset (cash, bank,
+              // savings, wallet, deposit alike -- deposit's hero number
+              // is still a plain ledger balance, not a specially
+              // computed principal figure, so it gets no separate
+              // label). Makes the hero number underneath unambiguous
+              // for a liability without ever flipping its sign or
+              // changing the non-negative "amount owed" magnitude
+              // `FinanceEngine.accountBalance` already returns.
+              Text(
+                account.isLiability ? l10n.addAccountAmountOwedLabel : l10n.accountBalanceLabel,
+                key: const Key('accountBalanceLabel'),
+                textAlign: TextAlign.center,
+                style: context.appTypography.caption,
+              ),
+              const SizedBox(height: 4),
+              balanceAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: CircularProgressIndicator(),
+                ),
+                error: (Object e, StackTrace st) =>
+                    Icon(Icons.error_outline, color: colors.error),
+                data: (Money balance) => AppMoneyText(
+                  _formatter.format(balance),
+                  key: const Key('accountCurrentBalance'),
+                  emphasis: AppMoneyEmphasis.hero,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 24),
         // [optional useful metadata] -- only fields the model genuinely
         // stores; nothing fabricated (no card issuer/number, statement
         // dates, credit limit, bank connection, or sync state -- none of
-        // that exists on `Accounts` today).
+        // that exists on `Accounts` today). Checkpoint L adds the one
+        // exception that DOES already exist: institution name, shown
+        // only when `institutionId` is actually set (Cash never has
+        // one; every other kind may). `CreditFacilityDetails`'
+        // persisted `creditLimitMinorUnits`/`statementClosingDay`/
+        // `dueDay` are deliberately still NOT shown here -- genuinely
+        // stored, but not yet wired to any presentation anywhere in
+        // this app, and out of this checkpoint's explicit scope (see
+        // docs/20 §13.15's own note on this).
         AppCard(
           bordered: true,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Column(
             children: <Widget>[
+              // Checkpoint L: only ever shown when the account actually
+              // has a persisted institution -- never fabricated, and
+              // never shown as an empty/placeholder row otherwise (see
+              // `institutionName`'s own resolution above).
+              if (institutionName != null && institutionName.isNotEmpty) ...<Widget>[
+                _DetailRow(
+                  key: const Key('accountInstitutionRow'),
+                  label: l10n.accountInstitutionLabel,
+                  value: institutionName,
+                ),
+                const Divider(height: 1),
+              ],
               _DetailRow(
                 label: l10n.accountOpeningBalanceLabel,
                 value: _formatter.format(account.openingBalance),
@@ -475,7 +541,7 @@ class _DepositDetailsSection extends ConsumerWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+  const _DetailRow({required this.label, required this.value, super.key});
   final String label;
   final String value;
 

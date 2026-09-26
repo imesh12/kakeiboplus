@@ -770,6 +770,18 @@ abstract class AppLocalizations {
   /// **'Created'**
   String get accountCreatedLabel;
 
+  /// No description provided for @accountBalanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance'**
+  String get accountBalanceLabel;
+
+  /// No description provided for @accountInstitutionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Institution'**
+  String get accountInstitutionLabel;
+
   /// No description provided for @accountRecentActivityTitle.
   ///
   /// In en, this message translates to:
