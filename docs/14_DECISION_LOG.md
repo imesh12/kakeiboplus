@@ -2672,3 +2672,195 @@ deliberate deferral.
    `lib/features/goals/presentation/savings_goals_screen.dart` (the
    double-submit guard, both trivial one-line additions plus a comment),
    and `lib/features/goals/README.md` (documentation only).
+
+## ADR-043 — Checkpoint T: Recurring Transactions completion is an audit-and-harden pass over ADR-023/ADR-024's architecture, plus two genuine double-submit fixes
+
+Decision: Checkpoint T audited the existing recurring-transactions
+feature (schema version 13; `RecurringRules`/`RecurringOccurrences`
+introduced at ADR-023 in Beta 1 Task 4A, reminder notifications added at
+ADR-024, the Recurring + Subscriptions V1 estimate work at ADR-031)
+against a 70-item completion checklist and found the architecture
+itself already correct end to end, including durable duplicate-post
+protection. This entry records that audit's findings, the two genuine
+UI production defects it surfaced and fixed, and the regression
+coverage added to prove invariants the existing test suite asserted in
+doc comments but had not yet exercised with a genuine concurrency test.
+
+1. **Persistence model is unchanged; no migration.** `RecurringRules`
+   (schedule/template: kind, name, amount/currency, account/destination
+   account, category, note, frequency/interval/startDate/endDate,
+   `notificationsEnabled`, soft delete) and `RecurringOccurrences` (one
+   row per *handled* — posted or skipped — `(ruleId, scheduledDate)`
+   pair; a due-but-unhandled date is never persisted, only derived) were
+   introduced correctly at schema version 13 and the app is still at
+   schema version 13 today. No new column or table was required.
+
+2. **Supported transaction kinds and recurrence frequencies are wider
+   than this checkpoint's brief assumed.** Recurring rules already
+   support expense, income, AND same-currency transfer (`RecurringRuleKind`)
+   — a cross-currency recurring transfer is rejected the same way
+   `TransactionRepository.recordTransfer` rejects one manually (ADR-019).
+   Supported frequencies are daily/weekly/monthly/yearly, each with an
+   arbitrary `interval >= 1` (e.g. "every 3 weeks"). Both are already
+   fully implemented and tested; neither needed to be added.
+
+3. **Calendar/month-end semantics are already correct and shared with
+   one other feature.** `RecurringSchedule` (`recurring_schedule.dart`)
+   computes every occurrence directly from the rule's `startDate` anchor
+   — never by adding one period to the previous occurrence — specifically
+   so a schedule anchored on the 31st clamps independently against each
+   target month's actual length (Jan 31 → Feb 28/29 → Mar 31 → Apr 30 …)
+   instead of drifting to the 28th permanently. The month/year clamping
+   arithmetic itself lives in one shared, already-reused routine,
+   `lib/core/finance/calendar_month_math.dart`'s `addWholeCalendarMonths`
+   (also used by Checkpoint F's deposit maturity-date math) — there is
+   exactly one such implementation in the codebase, not two that could
+   silently drift apart. `startDate`/`endDate`/`scheduledDate` are all
+   calendar-only UTC-midnight dates (`normalizeRecurringDate`), never
+   genuine instants — the same "never `.toUtc()` a picked local date"
+   discipline `SavingsGoals.targetDate` established.
+
+4. **Posting/skipping already goes through the canonical transaction
+   path — no second ledger.** `RecurringOccurrenceRepository
+   .postOccurrence` calls the exact same `TransactionRepository
+   .recordExpense`/`.recordIncome`/`.recordTransfer` the manual Add
+   Transaction screen calls — proven directly (not merely asserted) by
+   this checkpoint's new "a posted recurring expense/income changes the
+   account balance by exactly its amount" tests, which run the posted
+   occurrence through `FinanceEngine.accountBalance` the same way
+   Checkpoint S's savings-goal ledger-weight test did. `skipOccurrence`
+   creates no `Transactions` row at all — also newly proven directly
+   (account balance before/after a skip is bit-for-bit identical, and
+   the transactions table stays empty). Downstream consumers (account
+   balances, income/expense totals, budget "spent" figures) are
+   generic queries over `Transactions`/`LedgerTransaction` with no
+   recurring-specific branch anywhere, so they see a posted occurrence's
+   transaction exactly as they would a manually entered one, by
+   construction — no dedicated recurring-vs-budget integration test was
+   added, since it would only re-prove the budget feature's own
+   already-tested generic category-sum logic against a different
+   transaction source.
+
+5. **Duplicate-post protection is durable, not merely a UI guard, and
+   this checkpoint proved the concurrent case the existing tests had
+   not.** At most one `RecurringOccurrences` row may exist per
+   `(ruleId, scheduledDate)` pair, enforced at the application layer:
+   both `postOccurrence` and `skipOccurrence` check for ANY existing
+   handled row for that pair before writing, AND re-check a second time
+   *inside* the same `AppDatabase.transaction()` block that performs the
+   actual write — the real ledger transaction and the occurrence row are
+   written atomically together. The existing test suite already proved
+   this holds when the same occurrence is posted/skipped **sequentially**
+   (`recurring_occurrence_repository_test.dart`'s "handled-occurrence
+   uniqueness" group predates this checkpoint). It had not proved the
+   race matters most: two truly **concurrent**, unawaited calls. This
+   checkpoint added that test — firing two `postOccurrence` calls
+   together via `Future.wait` with no sequential `await` between them —
+   and it passes: because Drift/SQLite serializes transaction bodies on
+   the single connection, the second call's in-transaction re-check
+   always observes the first call's already-committed row, so exactly
+   one transaction and one occurrence row are ever created, never two
+   and never zero. A second new test proves the mixed post-vs-skip race
+   the same way: a single occurrence is never both posted and skipped.
+
+6. **Two genuine UI production defects: the same double-submit
+   re-entrancy gap ADR-042 fixed for the savings-goal dialogs, present
+   here too.** `_RuleDialogState._submit` (create/edit a rule) and
+   `_PendingItemTileState._handle` (post/skip/edit/delete a pending
+   item) each disable their button via `onPressed: _isSaving ? null :
+   ...` / `onPressed: _isBusy ? null : ...`, but neither method itself
+   checked that flag before doing its work — `setState` only takes
+   effect on Flutter's next rendered frame, so a second `onPressed`
+   invocation landing before that frame renders ran the full method body
+   again regardless. For `_RuleDialogState._submit`, this is a genuine
+   financial-data-integrity gap: `RecurringRuleRepository.createRule`/
+   `.updateRule` have no natural uniqueness key to reject a duplicate
+   call with, so two concurrent Saves really would create two separate
+   recurring rules (or apply the same edit twice). For
+   `_PendingItemTileState._handle`, item 5 above already means a second
+   concurrent post/skip could never create a duplicate financial
+   transaction — but without a guard it would reach `postOccurrence`/
+   `skipOccurrence` a second time, get rejected with
+   `RecurringOccurrenceAlreadyHandledException`, and surface a confusing
+   error snackbar for an action the user only meant to perform once. The
+   fix is the same one-line pattern both times: `if (_isSaving) return;`
+   / `if (_isBusy) return;` as the very first line of each method.
+
+7. **Test technique for both fixes follows the corrected (not the
+   originally-flawed) Checkpoint S technique from the start.** Two
+   physical `tester.tap()` calls risk the exact false positive
+   documented in ADR-042's own test-technique correction (a tap's
+   internal `await`s can let the first call's `_submit`/`_handle` run to
+   completion and pop/rebuild before the second tap's hit-test executes,
+   making "only one write happened" true because the second tap missed,
+   not because a guard worked). Both new widget tests instead fetch the
+   current `FilledButton` once and invoke its real `onPressed` callback
+   twice with no `await` between the calls — exercising the actual
+   production closure deterministically, with no gesture/hit-testing
+   involved and no test-only seam.
+
+8. **Overdue policy: multiple missed periods are deliberately
+   represented, not collapsed to one.** `_pendingItemsForRule`
+   (`recurring_providers.dart`) surfaces every unhandled occurrence
+   between a rule's `startDate` and today as a separate, individually
+   addressable pending item (each with its own `scheduledDateUtc`
+   identity) — a rule overdue for three periods shows three cards, not
+   one. This is bounded (never infinite): the overdue/due-today range is
+   inherently capped at "today", and the separate forward-looking
+   "upcoming preview" (shown only once a rule has nothing unhandled on
+   or before today) is walked via `RecurringSchedule.nextOccurrenceAfter`
+   with a defensive 10,000-iteration cap against a pathological
+   never-ending schedule. This was already implemented and already
+   documented in the source; this checkpoint did not change it.
+
+9. **Generated-transaction edit/delete interaction was ambiguous only
+   in the sense of "untested", not "undecided" — this checkpoint added
+   the missing proof.** Two new tests establish, directly: (a) deleting
+   (soft-deleting) the `Transactions` row a posted occurrence generated
+   leaves that `RecurringOccurrences` row permanently `'posted'` — there
+   is no reconciliation code path that frees the occurrence up, so it
+   can never be re-posted or re-skipped through stale state; and (b)
+   editing that generated transaction's fields directly is never
+   overwritten by later editing or soft-deleting the recurring rule —
+   `RecurringRuleRepository` has no rule-to-transaction sync/
+   re-derivation path at all, by design (its own doc comment already
+   said so; this proves it).
+
+10. **Account/category lifecycle is already handled correctly.**
+    `AccountLifecycleService.closeAccount` calls `RecurringRuleRepository
+    .activeRulesReferencingAccountOnce` and blocks the close entirely if
+    any active rule (as source or transfer destination) references that
+    account — a recurring rule can never be left pointing at a closed
+    account and silently post invalid ledger activity. Categories have
+    no delete path anywhere in this codebase (`CategoryRepository` has
+    no delete/soft-delete method at all), so a recurring rule's
+    `categoryId` can never dangle — item 42 is not applicable to this
+    V1 architecture, not an unhandled case.
+
+11. **Currency/minor-unit invariants are unchanged and already
+    enforced.** `RecurringRuleRepository._validateAccounts` enforces the
+    rule's currency matches its account(s)' currency for every kind, and
+    rejects a cross-currency transfer, before any row is written — no
+    hidden conversion exists anywhere in this feature. All amounts are
+    integer minor units throughout; nothing in this checkpoint touched
+    money representation.
+
+12. **Deliberately deferred / out of scope (per the checkpoint's own
+    non-goals and this audit's findings):** bank sync, automatic
+    background posting, calendar integration, an RRULE editor, AI
+    rule generation, split/family recurring rules, and the app-wide
+    icon/color visual identity system — none of these exist today and
+    none were added. The pre-existing Riverpod `.stream` deprecation
+    infos in `app_router.dart`/`savings_goal_providers.dart` were left
+    untouched, as instructed.
+
+**Files changed:** `lib/features/recurring/presentation/recurring_screen.dart`
+(the two one-line re-entrancy guards, each with an explanatory comment);
+`test/core/database/repositories/recurring_occurrence_repository_test.dart`
+(seven new tests: two genuine concurrency races, two account-balance
+ledger-impact proofs, one skip-zero-ledger-effect proof, and two
+generated-transaction edit/delete interaction tests);
+`test/widget/recurring_screen_test.dart` (two new widget-level
+re-entrancy tests). No other production file changed; no
+migration; no localization change (no new user-visible string was
+introduced).

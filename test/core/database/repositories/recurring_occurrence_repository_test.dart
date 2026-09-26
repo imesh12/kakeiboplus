@@ -275,4 +275,278 @@ void main() {
       );
     });
   });
+
+  group('concurrent post/skip race -- Section F items 26/29/34', () {
+    test(
+      'two concurrent post attempts for the same occurrence create exactly one transaction, not '
+      'two',
+      () async {
+        final String ruleId = await createExpenseRule();
+
+        // Fired together, NOT sequentially awaited -- unlike the
+        // sequential-await tests above (which already prove calling
+        // this twice in a row is rejected), this is the genuine race
+        // Section F asks for: two truly simultaneous in-flight calls,
+        // exercising `RecurringOccurrenceRepository`'s own claim that
+        // the re-check INSIDE `_db.transaction()` closes this race
+        // because Drift/SQLite serializes transaction bodies on a
+        // single connection, rather than merely trusting that claim.
+        final List<Object> results = await Future.wait<Object>(<Future<Object>>[
+          occurrenceRepo
+              .postOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1))
+              .then<Object>((String id) => id, onError: (Object e) => e),
+          occurrenceRepo
+              .postOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1))
+              .then<Object>((String id) => id, onError: (Object e) => e),
+        ]);
+
+        final List<String> succeededIds = results.whereType<String>().toList();
+        final List<RecurringOccurrenceAlreadyHandledException> rejections =
+            results.whereType<RecurringOccurrenceAlreadyHandledException>().toList();
+        expect(succeededIds, hasLength(1)); // exactly one call actually posted
+        expect(rejections, hasLength(1)); // the other was rejected, never silently dropped
+
+        final List<Transaction> transactions = await db.select(db.transactions).get();
+        expect(transactions, hasLength(1));
+        final List<RecurringOccurrenceRow> occurrences =
+            await db.select(db.recurringOccurrences).get();
+        expect(occurrences, hasLength(1));
+        expect(occurrences.single.id, succeededIds.single);
+      },
+    );
+
+    test(
+      'a concurrent post and skip for the same occurrence produce exactly one handled outcome, '
+      'never both',
+      () async {
+        final String ruleId = await createExpenseRule();
+
+        final List<Object> results = await Future.wait<Object>(<Future<Object>>[
+          occurrenceRepo
+              .postOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1))
+              .then<Object>((String id) => id, onError: (Object e) => e),
+          occurrenceRepo
+              .skipOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1))
+              .then<Object>((String id) => id, onError: (Object e) => e),
+        ]);
+
+        final List<String> succeededIds = results.whereType<String>().toList();
+        final List<RecurringOccurrenceAlreadyHandledException> rejections =
+            results.whereType<RecurringOccurrenceAlreadyHandledException>().toList();
+        expect(succeededIds, hasLength(1));
+        expect(rejections, hasLength(1));
+
+        // Never both posted AND skipped for the same (ruleId, scheduledDate).
+        final List<RecurringOccurrenceRow> occurrences =
+            await db.select(db.recurringOccurrences).get();
+        expect(occurrences, hasLength(1));
+
+        // A Transactions row exists iff the winner was the post, never
+        // otherwise -- whichever action actually won the race, item 34's
+        // "never both posted and skipped" invariant.
+        final List<Transaction> transactions = await db.select(db.transactions).get();
+        expect(transactions.length, occurrences.single.status == 'posted' ? 1 : 0);
+      },
+    );
+  });
+
+  group('ledger impact (FinanceEngine) -- Section F/K', () {
+    test('a posted recurring expense reduces the account balance by exactly its amount', () async {
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet with balance',
+        type: 'cash',
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(500000, 'JPY'),
+      );
+      final String ruleId = await ruleRepo.createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Rent',
+        amount: Money.fromMinorUnits(80000, 'JPY'),
+        accountId: accountId,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: DateTime.utc(2026, 1, 1),
+      );
+
+      await occurrenceRepo.postOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1));
+
+      final AccountRow account = await accountRepo.requireById(accountId);
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final Money balance = FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+      // Exactly the same effect a manually-entered 80,000 expense against
+      // this account would have -- `postOccurrence` calls the identical
+      // `TransactionRepository.recordExpense` the Add Transaction screen
+      // uses, never a parallel calculation (items 21/44).
+      expect(balance, Money.fromMinorUnits(420000, 'JPY'));
+    });
+
+    test('a posted recurring income increases the account balance by exactly its amount', () async {
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet with balance',
+        type: 'cash',
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(500000, 'JPY'),
+      );
+      final String ruleId = await ruleRepo.createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.income,
+        name: 'Salary',
+        amount: Money.fromMinorUnits(300000, 'JPY'),
+        accountId: accountId,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: DateTime.utc(2026, 1, 1),
+      );
+
+      await occurrenceRepo.postOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1));
+
+      final AccountRow account = await accountRepo.requireById(accountId);
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      final Money balance = FinanceEngine.accountBalance(account.toLedgerAccount(), ledger);
+      expect(balance, Money.fromMinorUnits(800000, 'JPY')); // items 22/44
+    });
+
+    test(
+      'skipping an occurrence has zero ledger effect -- account balance and transaction history '
+      'are both unchanged (item 32, CRITICAL)',
+      () async {
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Wallet with balance',
+          type: 'cash',
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(500000, 'JPY'),
+        );
+        final String ruleId = await ruleRepo.createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: 'Rent',
+          amount: Money.fromMinorUnits(80000, 'JPY'),
+          accountId: accountId,
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: DateTime.utc(2026, 1, 1),
+        );
+
+        final AccountRow accountBefore = await accountRepo.requireById(accountId);
+        final Money balanceBefore = FinanceEngine.accountBalance(
+          accountBefore.toLedgerAccount(),
+          await transactionRepo.watchLedgerForProfile(profileId).first,
+        );
+
+        await occurrenceRepo.skipOccurrence(
+          ruleId: ruleId,
+          scheduledDateUtc: DateTime.utc(2026, 1, 1),
+        );
+
+        final AccountRow accountAfter = await accountRepo.requireById(accountId);
+        final Money balanceAfter = FinanceEngine.accountBalance(
+          accountAfter.toLedgerAccount(),
+          await transactionRepo.watchLedgerForProfile(profileId).first,
+        );
+        expect(balanceAfter, balanceBefore);
+        expect(balanceAfter, Money.fromMinorUnits(500000, 'JPY')); // opening balance, untouched
+
+        final List<Transaction> transactions = await db.select(db.transactions).get();
+        expect(transactions, isEmpty); // no Transactions row is ever created for a skip
+
+        final List<RecurringOccurrenceRow> occurrences =
+            await db.select(db.recurringOccurrences).get();
+        expect(occurrences, hasLength(1));
+        expect(occurrences.single.status, 'skipped');
+        expect(occurrences.single.transactionId, isNull); // per the table's documented invariant
+      },
+    );
+  });
+
+  group('generated-transaction edit/delete interaction -- items 38-40', () {
+    test(
+      'deleting the transaction a posted occurrence generated leaves the occurrence permanently '
+      "'posted' -- it can never be re-posted or re-skipped through stale state",
+      () async {
+        final String ruleId = await createExpenseRule();
+        final String occurrenceId = await occurrenceRepo.postOccurrence(
+          ruleId: ruleId,
+          scheduledDateUtc: DateTime.utc(2026, 1, 1),
+        );
+        final RecurringOccurrenceRow occurrenceBefore =
+            await (db.select(db.recurringOccurrences)..where((tbl) => tbl.id.equals(occurrenceId)))
+                .getSingle();
+        final String transactionId = occurrenceBefore.transactionId!;
+
+        // The user deletes the generated transaction from the Activity
+        // screen, through the same `TransactionRepository.softDelete`
+        // every other transaction deletion uses -- nothing recurring-
+        // specific.
+        await transactionRepo.softDelete(transactionId);
+
+        // The occurrence row itself is untouched -- still 'posted',
+        // still linked to the now-deleted transaction id. There is no
+        // reconciliation code path that frees it up.
+        final RecurringOccurrenceRow occurrenceAfter =
+            await (db.select(db.recurringOccurrences)..where((tbl) => tbl.id.equals(occurrenceId)))
+                .getSingle();
+        expect(occurrenceAfter.status, 'posted');
+        expect(occurrenceAfter.transactionId, transactionId);
+
+        // Neither posting nor skipping that same scheduled date is
+        // possible afterward -- the occurrence stays historically
+        // 'posted' rather than silently becoming postable again.
+        await expectLater(
+          occurrenceRepo.postOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1)),
+          throwsA(isA<RecurringOccurrenceAlreadyHandledException>()),
+        );
+        await expectLater(
+          occurrenceRepo.skipOccurrence(ruleId: ruleId, scheduledDateUtc: DateTime.utc(2026, 1, 1)),
+          throwsA(isA<RecurringOccurrenceAlreadyHandledException>()),
+        );
+      },
+    );
+
+    test(
+      'editing the generated transaction directly is never overwritten by editing or deleting '
+      'the recurring rule afterward',
+      () async {
+        final String ruleId = await createExpenseRule();
+        final String occurrenceId = await occurrenceRepo.postOccurrence(
+          ruleId: ruleId,
+          scheduledDateUtc: DateTime.utc(2026, 1, 1),
+        );
+        final RecurringOccurrenceRow occurrence =
+            await (db.select(db.recurringOccurrences)..where((tbl) => tbl.id.equals(occurrenceId)))
+                .getSingle();
+        final String transactionId = occurrence.transactionId!;
+
+        // The user edits the posted transaction's note directly, same as
+        // any ordinary transaction -- nothing about this being
+        // recurring-generated makes it special.
+        await transactionRepo.updateExpense(
+          id: transactionId,
+          accountId: jpyAccountId,
+          amount: Money.fromMinorUnits(80000, 'JPY'),
+          note: 'Edited by hand',
+          occurredAtUtc: DateTime.utc(2026, 1, 1),
+        );
+
+        // Editing the RULE afterward (amount) never touches this
+        // already-posted transaction -- there is no sync/re-derivation
+        // code path from rule to historical transaction.
+        await ruleRepo.updateRule(id: ruleId, amount: Money.fromMinorUnits(99999, 'JPY'));
+        // Soft-deleting the rule likewise never touches it.
+        await ruleRepo.softDelete(ruleId);
+
+        final Transaction transactionAfter =
+            await (db.select(db.transactions)..where((tbl) => tbl.id.equals(transactionId)))
+                .getSingle();
+        expect(transactionAfter.note, 'Edited by hand');
+        expect(transactionAfter.amountMinorUnits, 80000); // unchanged by the rule edit
+        expect(transactionAfter.deletedAt, isNull); // unchanged by the rule's soft-delete
+      },
+    );
+  });
 }

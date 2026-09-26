@@ -177,6 +177,61 @@ void main() {
     },
   );
 
+  testWidgets(
+    'two rapid submit attempts when creating a recurring rule create only one rule, not two',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('recurringNameField')), 'Rent');
+      await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('recurringAmountField')), '80000');
+
+      // NOT two physical `tester.tap()` calls: Checkpoint S diagnosed
+      // exactly this false-positive risk for the savings-goal dialogs --
+      // `tester.tap()`'s own internal gesture-dispatch code contains
+      // genuine `await` points, and the first tap's `_submit()` can run
+      // its pending `await createRule(...)` to completion and pop this
+      // dialog during the second tap's own internal awaits, before the
+      // second tap's hit-test ever runs against the (by then stale)
+      // button -- which would make "only one rule created" true for an
+      // uninteresting reason (the second tap missed) rather than because
+      // a guard actually intercepted a second concurrent submit.
+      //
+      // Instead: fetch the CURRENT `FilledButton` once, then invoke its
+      // real `onPressed` callback -- the actual `_submit` closure
+      // `_RuleDialogState.build` wired up -- twice with NO `await`
+      // between the calls. Two back-to-back synchronous statements
+      // never yield to the microtask queue, so this deterministically
+      // fires `_submit()` twice before either call's
+      // `await createRule(...)` can resolve, exercising the new
+      // `if (_isSaving) return;` guard (`docs/14_DECISION_LOG.md`
+      // ADR-043) without any gesture/hit-testing involved.
+      final FilledButton saveButton =
+          tester.widget<FilledButton>(find.byKey(const Key('saveRecurringRule')));
+      saveButton.onPressed!();
+      saveButton.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(find.text('New recurring rule'), findsNothing); // dialog closed
+      final List<RecurringRuleRow> rules = await db.select(db.recurringRules).get();
+      expect(rules, hasLength(1)); // not 2
+      expect(rules.single.name, 'Rent');
+    },
+  );
+
   // Manual Android testing found: a JPY -> USD recurring transfer reached
   // Save, the repository correctly threw `CurrencyMismatchException`
   // (see `recurring_rule_repository_test.dart`'s
@@ -481,6 +536,63 @@ void main() {
       expect(transactions, hasLength(1));
       expect(transactions.single.id, occurrences.single.transactionId);
       expect(transactions.single.type, 'expense');
+    },
+  );
+
+  testWidgets(
+    'two rapid post attempts for the same occurrence create only one transaction, not two',
+    (tester) async {
+      useTallSurface(tester);
+      final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+      final DateTime todayUtc = DateTime.now().toUtc();
+      final DateTime today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
+      final String ruleId = await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+        profileId: profileId,
+        kind: RecurringRuleKind.expense,
+        name: 'Rent',
+        amount: Money.fromMinorUnits(80000, 'JPY'),
+        accountId: accounts.first.id,
+        frequency: RecurrenceFrequency.monthly,
+        interval: 1,
+        startDate: today,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRecurring(container));
+      await tester.pumpAndSettle();
+
+      // Same deterministic technique as the create-rule double-submit
+      // test above -- see that test's comment for why two physical
+      // `tester.tap()` calls risk a false positive here too. The
+      // durable protection already lives in
+      // `RecurringOccurrenceRepository.postOccurrence` (ADR-023: a
+      // second concurrent call is rejected inside the same
+      // `_db.transaction()` re-check -- see the dedicated concurrent-
+      // race test in `recurring_occurrence_repository_test.dart`), but
+      // this proves the NEW `if (_isBusy) return;` guard
+      // (`docs/14_DECISION_LOG.md` ADR-043) in `_PendingItemTileState
+      // ._handle` stops the UI from ever reaching that second call at
+      // all -- rather than reaching it and surfacing a confusing error
+      // snackbar for a single intended tap.
+      final Finder postButtonFinder = find.byWidgetPredicate(
+        (Widget w) =>
+            w is FilledButton &&
+            (w.key as ValueKey<String>?)?.value.startsWith('postOccurrence_$ruleId') == true,
+      );
+      final FilledButton postButton = tester.widget<FilledButton>(postButtonFinder);
+      postButton.onPressed!();
+      postButton.onPressed!();
+      await tester.pumpAndSettle();
+
+      final List<Transaction> transactions = await db.select(db.transactions).get();
+      expect(transactions, hasLength(1)); // not 2
+      final List<RecurringOccurrenceRow> occurrences =
+          await db.select(db.recurringOccurrences).get();
+      expect(occurrences, hasLength(1));
+      expect(occurrences.single.status, 'posted');
+      expect(find.byType(SnackBar), findsNothing); // no error snackbar from a rejected second post
     },
   );
 

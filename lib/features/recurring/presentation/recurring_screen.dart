@@ -413,6 +413,22 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
   String get _dateKey => widget.item.scheduledDateUtc.toIso8601String();
 
   Future<void> _handle(Future<void> Function() action) async {
+    // Re-entrancy guard against a double-tap/rapid-repeat action: two
+    // `onPressed` invocations (Post/Skip/Edit/Delete) can both fire
+    // before Flutter ever rebuilds this tile with the disabled button --
+    // `setState` only schedules a rebuild for the NEXT frame, it does
+    // not retroactively block a second tap that lands before that frame
+    // renders. This mirrors the exact hazard `_RuleDialogState._submit`
+    // guards against below, and the one Checkpoint S fixed for the
+    // savings-goal dialogs (ADR-042): `RecurringOccurrenceRepository
+    // .postOccurrence`/`.skipOccurrence` already reject a genuine
+    // duplicate at the durable/service boundary (see ADR-023), so a
+    // second concurrent call here could never create a second financial
+    // transaction -- but without this guard it WOULD throw
+    // `RecurringOccurrenceAlreadyHandledException` on every double-tap
+    // and surface a confusing error snackbar for an action the user only
+    // meant to perform once. See `docs/14_DECISION_LOG.md` ADR-043.
+    if (_isBusy) return;
     setState(() => _isBusy = true);
     try {
       await action();
@@ -707,6 +723,18 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
   }
 
   Future<void> _submit(List<AccountRow> accounts) async {
+    // Re-entrancy guard against a double-tap/rapid-repeat Save -- same
+    // hazard and same fix as `_PendingItemTileState._handle` above and
+    // the Checkpoint S savings-goal dialogs (ADR-042). Unlike posting/
+    // skipping an occurrence, `RecurringRuleRepository.createRule`/
+    // `.updateRule` have no natural uniqueness key to reject a duplicate
+    // call with -- two concurrent Saves before this dialog disables its
+    // button would genuinely create two separate recurring rules (or
+    // apply the same edit twice). This check must be the very first
+    // thing `_submit` does, before any validation, so a second call
+    // that reaches this point while the first is still in flight returns
+    // immediately. See `docs/14_DECISION_LOG.md` ADR-043.
+    if (_isSaving) return;
     final AppLocalizations l10n = AppLocalizations.of(context);
     setState(() => _errorMessage = null);
     if (!(_formKey.currentState?.validate() ?? false)) return;
