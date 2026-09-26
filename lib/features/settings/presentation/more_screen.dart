@@ -99,6 +99,62 @@ class MoreScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: <Widget>[
+          // Checkpoint M: the one place in the app that shows the
+          // full KakeiboPlus wordmark -- see docs/14_DECISION_LOG.md
+          // ADR-036. Purely an identity header, not a nav row: no
+          // onTap, no chevron. The wordmark PNG's ink is a FIXED
+          // brand green, not theme-derived -- unlike every other
+          // color on this screen it deliberately does NOT come from
+          // `colorScheme` (that rule governs semantic UI color, not a
+          // fixed imported brand asset), because on the Dark/Ocean/
+          // Forest themes' own dark `colorScheme.surface` the
+          // wordmark's dark-green lettering would be close to
+          // unreadable. Wrapping it in a small fixed off-white card
+          // keeps it legible and on-brand across all five themes, the
+          // same way a logo badge stays on-brand regardless of a host
+          // app's own theme.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: Container(
+              key: const Key('moreBrandHeader'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDFDFB),
+                borderRadius: BorderRadius.circular(tokens.radii.medium),
+                border: Border.all(color: tokens.colors.subtleBorder),
+              ),
+              child: Center(
+                child: Semantics(
+                  label: l10n.brandName,
+                  image: true,
+                  // Checkpoint M validation fix: `Image` itself wraps its
+                  // `RawImage` in a second, internal `Semantics(image:
+                  // true, label: '')` node unless told not to
+                  // (`Image.excludeFromSemantics`'s own doc: "useful when
+                  // the caller already provides a semanticLabel via a
+                  // wrapping Semantics widget" -- exactly this case).
+                  // That inner node was already inert -- the explicit
+                  // label above is the only one a screen reader ever
+                  // announced -- but it left a second, redundant
+                  // `Semantics`-typed widget sitting in the tree for no
+                  // reason, which is what made a structural
+                  // `find.byType(Semantics)` finder here ambiguous.
+                  // `excludeFromSemantics: true` on the `Image` below
+                  // stops it from being created at all, so there is now
+                  // exactly one `Semantics` widget in this subtree, both
+                  // in the accessibility tree and in the widget tree a
+                  // test walks.
+                  child: Image.asset(
+                    'assets/branding/kakeiboplus-wordmark.png',
+                    height: 32,
+                    fit: BoxFit.contain,
+                    excludeFromSemantics: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text(l10n.moreScreenSubtitle, style: context.appTypography.secondaryBody),

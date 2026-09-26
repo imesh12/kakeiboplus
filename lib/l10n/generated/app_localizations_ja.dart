@@ -9,6 +9,9 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String get brandName => 'KakeiboPlus';
+
+  @override
   String get internationalPreferences => '言語・地域設定';
 
   @override

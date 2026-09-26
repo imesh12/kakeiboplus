@@ -126,3 +126,17 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+
+  # Checkpoint M: only the one branding image actually loaded at
+  # runtime via Image.asset (the More screen's brand header -- see
+  # docs/14_DECISION_LOG.md ADR-036). The other three files in
+  # assets/branding/ are source artwork for the launcher icon
+  # (copied as derived, differently-sized platform resources into
+  # android/.../mipmap-*/ and ios/.../AppIcon.appiconset/, which do
+  # not go through Flutter's asset bundle) and for external/
+  # marketing use -- neither is loaded by any widget, so neither is
+  # registered here. Exact filename casing matters on case-sensitive
+  # filesystems; this path has no spaces, unlike this repo's
+  # existing docs/design/* reference images.
+  assets:
+    - assets/branding/kakeiboplus-wordmark.png

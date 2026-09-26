@@ -120,7 +120,15 @@ class _AiFinancialCoachAppState extends ConsumerState<AiFinancialCoachApp>
     final AppThemeStyle themeStyle = ref.watch(appThemeStyleProvider);
 
     return MaterialApp.router(
-      title: 'AI Financial Coach',
+      // Checkpoint M: the official product name (see
+      // docs/14_DECISION_LOG.md ADR-036). Never surfaced as visible
+      // in-app UI text -- this is the OS-level task-switcher/
+      // accessibility title Flutter's own `WidgetsApp.title` takes,
+      // so it stays a literal Dart string rather than an
+      // AppLocalizations key: it must read identically in every
+      // locale, and MaterialApp.title has no access to l10n here
+      // anyway (it is consumed before Localizations resolves).
+      title: 'KakeiboPlus',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.resolve(themeStyle),
       themeMode: ThemeMode.light,

@@ -1,6 +1,8 @@
 import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/settings/presentation/more_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations_en.dart';
+import 'package:ai_financial_coach/l10n/generated/app_localizations_ja.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -288,6 +290,75 @@ void main() {
     );
   });
 
+  group('Checkpoint M -- KakeiboPlus branding', () {
+    testWidgets(
+        'shows the KakeiboPlus brand header at the top of More -- resolving the exact '
+        'wordmark asset path and semantic label -- and never the old "AI Financial Coach" '
+        'product name', (tester) async {
+      await tester.pumpWidget(appWithRouter());
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      // Always mounted -- the very first ListView child, above the fold,
+      // unlike the section groups below it (see scrollUntilFound).
+      expect(find.byKey(const Key('moreBrandHeader')), findsOneWidget);
+
+      final Image wordmark = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const Key('moreBrandHeader')),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        (wordmark.image as AssetImage).assetName,
+        'assets/branding/kakeiboplus-wordmark.png',
+      );
+
+      final Semantics semantics = tester.widget<Semantics>(
+        find.descendant(
+          of: find.byKey(const Key('moreBrandHeader')),
+          matching: find.byType(Semantics),
+        ),
+      );
+      expect(semantics.properties.label, 'KakeiboPlus');
+
+      // The old product name must not remain anywhere on this screen.
+      expect(find.text('AI Financial Coach'), findsNothing);
+      expect(find.textContaining('Financial Coach'), findsNothing);
+    });
+
+    testWidgets(
+        'the brand header, its asset path, and its semantic label are unchanged under '
+        'Japanese -- "KakeiboPlus" is a brand name, never translated', (tester) async {
+      await tester.pumpWidget(appWithRouter(locale: const Locale('ja')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('moreBrandHeader')), findsOneWidget);
+
+      final Image wordmark = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const Key('moreBrandHeader')),
+          matching: find.byType(Image),
+        ),
+      );
+      expect(
+        (wordmark.image as AssetImage).assetName,
+        'assets/branding/kakeiboplus-wordmark.png',
+      );
+
+      final Semantics semantics = tester.widget<Semantics>(
+        find.descendant(
+          of: find.byKey(const Key('moreBrandHeader')),
+          matching: find.byType(Semantics),
+        ),
+      );
+      expect(semantics.properties.label, 'KakeiboPlus');
+
+      expect(find.text('AI Financial Coach'), findsNothing);
+    });
+  });
+
   group('Japanese locale', () {
     testWidgets('renders every section header and row label in Japanese', (tester) async {
       await tester.pumpWidget(appWithRouter(locale: const Locale('ja')));
@@ -318,6 +389,14 @@ void main() {
 
       await scrollUntilFound(tester, find.text('整理'));
       expect(find.text('整理'), findsOneWidget);
+      // Checkpoint M's new brand header shifted every row down by its
+      // own height, so -- unlike before -- scrolling the section header
+      // ('整理') into view no longer reliably also brings its row
+      // ('カテゴリ') inside the lazy ListView's build/cache extent. This
+      // mirrors the English test above, which already scrolls to each
+      // row label individually rather than relying on its section
+      // header's scroll to carry it into view.
+      await scrollUntilFound(tester, find.text('カテゴリ'));
       expect(find.text('カテゴリ'), findsOneWidget); // categoriesScreenTitle
 
       await scrollUntilFound(tester, find.text('個人設定'));
@@ -374,6 +453,10 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('More'), findsOneWidget);
+      // Checkpoint M: the brand header (a fixed-height image in a fixed
+      // card, unaffected by textScaleFactor) survives this narrow
+      // width/large-text combination too.
+      expect(find.byKey(const Key('moreBrandHeader')), findsOneWidget);
     });
 
     testWidgets('renders without overflow at an extreme 2.0x text scale', (tester) async {
@@ -409,4 +492,17 @@ void main() {
       },
     );
   });
+
+  // Checkpoint M: "KakeiboPlus" is a proper/brand name -- it must read
+  // exactly the same in every locale, never translated. Checked
+  // directly against the generated locale classes (rather than only
+  // through a pumped widget) so this is unambiguous about which two
+  // values are being compared -- see docs/14_DECISION_LOG.md ADR-036.
+  test(
+    'KakeiboPlus brand name is identical in English and Japanese -- never translated',
+    () {
+      expect(AppLocalizationsEn().brandName, 'KakeiboPlus');
+      expect(AppLocalizationsJa().brandName, 'KakeiboPlus');
+    },
+  );
 }

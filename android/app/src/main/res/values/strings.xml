@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Checkpoint M: KakeiboPlus product identity/branding: the
+     user-visible Android application label (task switcher, app
+     drawer, Settings > Apps), resource-backed rather than the
+     previous inline `android:label="ai_financial_coach"` literal.
+     Deliberately does NOT touch applicationId/namespace
+     (com.example.ai_financial_coach); see docs/14_DECISION_LOG.md
+     ADR-036 for why that migration is out of scope for a branding
+     checkpoint. -->
+<resources>
+    <string name="app_name">KakeiboPlus</string>
+</resources>

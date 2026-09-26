@@ -1,5 +1,9 @@
 {
   "@@locale": "ja",
+  "brandName": "KakeiboPlus",
+  "@brandName": {
+    "description": "Checkpoint M: the product name, used as the accessibility semantic label for the brand wordmark image on the More screen (see docs/14_DECISION_LOG.md ADR-036). This is a proper/brand name -- translators must keep the value exactly 'KakeiboPlus' in every locale, never translate it."
+  },
   "internationalPreferences": "言語・地域設定",
   "locationSection": "地域",
   "currencySection": "通貨",

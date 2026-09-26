@@ -1952,3 +1952,164 @@ correctly by the flat `accounts.type` free-text model, and two candidate
 schema shapes were evaluated in detail — including an explicit attempt to
 falsify each — before this one was adopted, rather than committing to the
 first design that appeared adequate.
+
+## ADR-036 — Checkpoint M: KakeiboPlus product identity and branding
+
+Status: Implemented 2026-09-26 (product identity/branding checkpoint on top of
+`62ccd4b`; no financial/domain logic touched).
+
+**Decision: the product's official visible name is KakeiboPlus.** This
+checkpoint updates every user-visible surface that names the app (the OS
+task-switcher title via `MaterialApp.title`, the installed Android
+application label, and the iOS `CFBundleDisplayName`/`CFBundleName`) to
+"KakeiboPlus", replacing the previous "AI Financial Coach"/"Ai Financial
+Coach" strings. It deliberately does **not** touch the Dart package name
+(`ai_financial_coach`, used in every `package:ai_financial_coach/...` import
+across the codebase), the Android `applicationId`/`namespace`
+(`com.example.ai_financial_coach`), the iOS `PRODUCT_BUNDLE_IDENTIFIER`
+(`com.example.aiFinancialCoach`), or the on-disk SQLite filename
+(`ai_financial_coach.sqlite` in `native_connection.dart`) — renaming any of
+those is a genuinely separate, higher-risk migration (an app/bundle-identifier
+change can break update continuity on real devices; the SQLite filename is
+load-bearing storage, not display text, and renaming it would orphan every
+existing installed user's database) that this branding-only checkpoint has no
+reason to take on. Both are recorded here as an explicit, intentional
+deferral, not an oversight: `com.example.*` should be revisited as its own
+release-readiness decision before any real store submission.
+
+**Branding source assets — role decision.** Four source PNGs live in
+`assets/branding/` (left byte-for-byte untouched by this checkpoint; every
+platform/in-app usage below is a derived, resized, or separately-encoded copy,
+never an edit of the originals):
+
+- `kakeiboplus-app-icon.png` (1254×1254, its own baked-in rounded-square
+  gradient background plus a bold white "K" + green leaf + amber "+"
+  monogram, reads clearly even at 48px) is the only one of the four already
+  shaped like a launcher icon. Used for the Android and iOS launcher icon.
+- `kakeiboplus-primary-logo.png` (1254×1254, the same monogram on a
+  *transparent* background, no background chip) is the foreground-only
+  counterpart of the icon above. Not used in-app this checkpoint; reserved as
+  the natural source for a future Android adaptive-icon foreground layer, if
+  that migration happens later (see "Deferred" below).
+- `kakeiboplus-wordmark.png` (2172×724, transparent background, "KakeiboPlus"
+  in a two-tone green logotype, no tagline) is the one asset suited to
+  showing the full product name. Used once, on the More screen (see below).
+- `kakeiboplus-wallet-growth-logo.png` (1254×1254, a wallet/growth
+  illustration *with the wordmark and an English tagline, "Money made
+  simple.", already baked into the pixels*) is a composite marketing/store-
+  listing graphic, not a UI asset: its fixed English tagline cannot be
+  localized for Japanese, and it is too detailed to read at any in-app icon
+  size. Deliberately **not** used in-app this checkpoint (reserved for store-
+  listing/marketing use outside the Flutter bundle) — this is a considered
+  exclusion, not "display all four assets because they exist."
+
+**Launcher icon strategy.** The project already used plain legacy mipmap PNGs
+(`android/app/src/main/res/mipmap-*/ic_launcher.png`, no adaptive-icon XML,
+no `flutter_launcher_icons` dependency) and a standard `AppIcon.appiconset`
+with an existing `Contents.json`. This checkpoint keeps that exact mechanism
+rather than introducing a new one: all 5 Android density PNGs (mdpi 48,
+hdpi 72, xhdpi 96, xxhdpi 144, xxxhdpi 192) and all 15 iOS `Contents.json`
+entries (20/29/40/60/76/83.5pt at their declared `@1x`/`@2x`/`@3x` scales,
+plus the 1024 marketing icon) were regenerated as resized copies of
+`kakeiboplus-app-icon.png`. The iOS copies are additionally flattened onto an
+opaque white background (`-alpha remove -alpha off`): Apple requires a fully
+opaque icon with no alpha channel, and the source PNG's rounded corners and
+soft edge blur carry transparency that iOS's own corner-mask expects to be
+opaque square content underneath, not letterboxing. No new package
+dependency was added for this.
+
+**Android application label.** `AndroidManifest.xml`'s `android:label` was
+switched from the inline literal `"ai_financial_coach"` to `@string/app_name`,
+backed by a new `android/app/src/main/res/values/strings.xml` defining
+`app_name = "KakeiboPlus"` — the project had no `strings.xml` before this
+checkpoint, so this is a clean, minimal addition rather than a restructuring.
+No permission, activity, intent-filter, signing, or unrelated Gradle setting
+was touched.
+
+**iOS display name and icon.** `Info.plist`'s `CFBundleDisplayName` ("Ai
+Financial Coach" → "KakeiboPlus") and `CFBundleName` ("ai_financial_coach" →
+"KakeiboPlus") were updated; `PRODUCT_BUNDLE_IDENTIFIER` in the `.pbxproj` was
+left untouched (see the package/bundle identifier decision above). The iOS
+launch screen (`LaunchScreen.storyboard` / `LaunchImage.imageset`) was
+deliberately **not** touched: its existing `LaunchImage`/`@2x`/`@3x` files are
+68-byte placeholder stubs from the original Flutter template, never replaced
+with real artwork, and the supplied source assets are not pre-cropped to that
+imageset's required point sizes/aspect ratio. Hand-editing an Xcode
+Interface-Builder `.storyboard` XML file without Xcode itself to validate it
+carries real corruption risk for a benefit (a splash image) explicitly marked
+optional/conservative-only in this checkpoint's own brief; this is recorded
+as an intentional deferral, not a gap discovered by accident.
+
+**Android splash.** `launch_background.xml` (both the default and `-v21`
+density-independent variant) already contained a commented-out example
+showing exactly how to add a centered bitmap. This checkpoint uncomments that
+exact pattern, pointing at the same `@mipmap/ic_launcher` this checkpoint just
+regenerated — no new asset, no new dependency, no artificial startup delay,
+no animation.
+
+**Flutter runtime asset registration.** `pubspec.yaml` gained one `assets:`
+entry, `assets/branding/kakeiboplus-wordmark.png` — the only one of the four
+branding images actually loaded via `Image.asset` at runtime. The other three
+are consumed as platform-native derived resources (copied/resized into
+Android/iOS locations above, which do not go through Flutter's asset bundle)
+or are unused in-app this checkpoint (the wallet-growth illustration); neither
+is registered, per "register only what's actually required." The registered
+filename has no spaces, unlike this repo's existing `docs/design/*` reference
+images, so it is safe on case-sensitive filesystems and Windows alike.
+
+**In-app brand placement.** Home was audited and deliberately left
+**unchanged**: it must stay a financial dashboard first (per this checkpoint's
+own UX principle and the pre-existing Checkpoint J privacy architecture — Net
+Worth is still reachable only via More → Net Worth, never shown on Home), and
+a large decorative logo there would compete with the balance/budget/goal
+information that screen exists to show. The one place branding was added is
+the **More screen**: a small, non-interactive, non-tappable card at the very
+top of its existing `ListView` (above the pre-existing subtitle), showing the
+KakeiboPlus wordmark. This matches "More/About is an appropriate place for
+stronger product identity" without inventing a new About screen/route this
+checkpoint did not ask for (`more_screen.dart`'s own pre-existing doc comment
+already records that About has no real V1 screen/route, and adding one is out
+of scope for a branding checkpoint). The wordmark's ink is a fixed brand
+green, not `colorScheme`-derived; on this app's Dark/Ocean/Forest themes'
+dark `colorScheme.surface`, that fixed dark-green text would be close to
+unreadable, so the card wraps it in a small fixed off-white background,
+independent of the active theme — the same way a logo badge conventionally
+stays on-brand regardless of a host app's own theme, rather than a "recolor
+the whole screen" change.
+
+**Accessibility.** The wordmark image carries a single `Semantics(label:
+l10n.brandName, image: true)` wrapping an `ExcludeSemantics`-guarded `Image`,
+mirroring the exact `Semantics(...) → ExcludeSemantics(child: ...)` idiom
+`theme_customization_screen.dart` already uses for a decorative-but-labeled
+visual: one meaningful announcement ("KakeiboPlus"), not a noisy nested
+semantics tree. No navigation or financial information is encoded only inside
+this image.
+
+**Localization.** One new key, `brandName` = "KakeiboPlus", was added to both
+`lib/l10n/app_en.arb` and `lib/l10n/app_ja.arb` with an identical value and an
+explicit translator-facing `description` warning it must never be translated
+— it is the accessibility label for the wordmark, and "KakeiboPlus" is a
+proper/brand name by requirement, not a translatable string.
+`MaterialApp.title` itself stays a literal Dart string rather than an
+`AppLocalizations` key: it is consumed by `WidgetsApp` before `Localizations`
+resolves, so it has no access to `l10n` at that point regardless, and a
+literal string is the most direct way to guarantee it reads identically in
+every locale.
+
+**Explicitly deferred, not decided against:** the `com.example.*`
+Android/iOS package and bundle identifiers (a release-readiness decision, not
+a branding one); the iOS native launch-screen image (source artwork not
+pre-cropped for it, and hand-editing the storyboard XML blind is a needless
+risk for an optional splash-image polish item); an Android adaptive icon
+(foreground/background split) migration, for which `kakeiboplus-primary-
+logo.png` is already the correctly-shaped source when that work happens; and
+any in-app usage of `kakeiboplus-wallet-growth-logo.png` (reserved for
+external/marketing use, given its baked-in non-localizable English tagline).
+None of these is a defect in this checkpoint — each was a considered
+boundary, recorded so it is not silently forgotten.
+
+**Scope of this decision: product identity/branding only.** This ADR does not
+modify the Drift schema, `FinanceEngine`, any repository, provider, account/
+transaction/budget/goal/dashboard/net-worth calculation, or the Home screen.
+`docs/design/*` reference files were not touched. Nothing was staged or
+committed by this checkpoint.

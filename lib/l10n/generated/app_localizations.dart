@@ -98,6 +98,12 @@ abstract class AppLocalizations {
     Locale('ja')
   ];
 
+  /// Checkpoint M: the product name, used as the accessibility semantic label for the brand wordmark image on the More screen (see docs/14_DECISION_LOG.md ADR-036). This is a proper/brand name -- translators must keep the value exactly 'KakeiboPlus' in every locale, never translate it.
+  ///
+  /// In en, this message translates to:
+  /// **'KakeiboPlus'**
+  String get brandName;
+
   /// No description provided for @internationalPreferences.
   ///
   /// In en, this message translates to:
