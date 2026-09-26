@@ -581,5 +581,121 @@ void main() {
       final BudgetMonthSummary jpy = summaries.firstWhere((s) => s.currencyCode == 'JPY');
       expect(jpy.totalBudget, Money.fromMinorUnits(20000, 'JPY'));
     });
+
+    // Checkpoint R Section H: V1 explicitly has no rollover/carry-forward
+    // between months. Each month's `BudgetMonthSummary` is built purely
+    // from that month's OWN category-budget rows and that month's OWN
+    // `categoryExpenseTotal` -- nothing here ever reads another month's
+    // remaining/overspent figure, so these two tests exist to make that
+    // guarantee an explicit regression, not merely an implicit property
+    // of the current code shape.
+    test('an unused remainder in one month never increases the following month\'s total budget '
+        '-- V1 has no rollover (Section H)', () async {
+      final String profileId = await seedProfile(living: 'JPY', home: 'LKR');
+      final String categoryId = await seedCategory(profileId);
+      final String walletId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final BudgetMonth august = BudgetMonth(year: 2026, month: 8);
+      final BudgetMonth september = BudgetMonth(year: 2026, month: 9);
+      // August: budgeted 50,000, spent 40,000 -- a real, unused
+      // ¥10,000 remainder.
+      await budgetRepo.setCategoryBudget(
+        profileId: profileId,
+        categoryId: categoryId,
+        month: august,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: walletId,
+        amount: Money.fromMinorUnits(40000, 'JPY'),
+        occurredAtUtc: august.startUtc,
+        categoryId: categoryId,
+      );
+      // September: its own, independent 50,000 budget, no spend yet.
+      await budgetRepo.setCategoryBudget(
+        profileId: profileId,
+        categoryId: categoryId,
+        month: september,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+      );
+
+      await container.read(activeProfileProvider.future);
+      await container.read(ledgerProvider.future);
+
+      container.read(selectedBudgetMonthProvider.notifier).state = august;
+      await container.read(budgetsForSelectedMonthProvider.future);
+      final AsyncValue<List<BudgetMonthSummary>> augustResult = await readSettledSummaries(container);
+      expect(augustResult.requireValue.single.remaining, Money.fromMinorUnits(10000, 'JPY'));
+
+      container.read(selectedBudgetMonthProvider.notifier).state = september;
+      await container.read(budgetsForSelectedMonthProvider.future);
+      final AsyncValue<List<BudgetMonthSummary>> septemberResult = await readSettledSummaries(container);
+      // Exactly 50,000 -- NOT 60,000 (50,000 configured + August's
+      // 10,000 unused remainder). August's leftover budget never rolls
+      // forward.
+      expect(septemberResult.requireValue.single.totalBudget, Money.fromMinorUnits(50000, 'JPY'));
+      expect(septemberResult.requireValue.single.spent, Money.zero('JPY'));
+      expect(septemberResult.requireValue.single.remaining, Money.fromMinorUnits(50000, 'JPY'));
+    });
+
+    test('overspending in one month never reduces the following month\'s total budget -- V1 has '
+        'no rollover (Section H)', () async {
+      final String profileId = await seedProfile(living: 'JPY', home: 'LKR');
+      final String categoryId = await seedCategory(profileId);
+      final String walletId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      final BudgetMonth august = BudgetMonth(year: 2026, month: 8);
+      final BudgetMonth september = BudgetMonth(year: 2026, month: 9);
+      // August: budgeted 50,000, spent 55,000 -- a real ¥5,000
+      // overspend.
+      await budgetRepo.setCategoryBudget(
+        profileId: profileId,
+        categoryId: categoryId,
+        month: august,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: walletId,
+        amount: Money.fromMinorUnits(55000, 'JPY'),
+        occurredAtUtc: august.startUtc,
+        categoryId: categoryId,
+      );
+      // September: its own, independent 50,000 budget, no spend yet.
+      await budgetRepo.setCategoryBudget(
+        profileId: profileId,
+        categoryId: categoryId,
+        month: september,
+        amount: Money.fromMinorUnits(50000, 'JPY'),
+      );
+
+      await container.read(activeProfileProvider.future);
+      await container.read(ledgerProvider.future);
+
+      container.read(selectedBudgetMonthProvider.notifier).state = august;
+      await container.read(budgetsForSelectedMonthProvider.future);
+      final AsyncValue<List<BudgetMonthSummary>> augustResult = await readSettledSummaries(container);
+      expect(augustResult.requireValue.single.isOverBudget, isTrue);
+      expect(augustResult.requireValue.single.remaining, Money.fromMinorUnits(-5000, 'JPY'));
+
+      container.read(selectedBudgetMonthProvider.notifier).state = september;
+      await container.read(budgetsForSelectedMonthProvider.future);
+      final AsyncValue<List<BudgetMonthSummary>> septemberResult = await readSettledSummaries(container);
+      // Exactly 50,000 -- NOT 45,000 (50,000 configured minus August's
+      // 5,000 overspend). August's overspend never carries forward as
+      // a reduction to September's budget.
+      expect(septemberResult.requireValue.single.totalBudget, Money.fromMinorUnits(50000, 'JPY'));
+      expect(septemberResult.requireValue.single.spent, Money.zero('JPY'));
+      expect(septemberResult.requireValue.single.isOverBudget, isFalse);
+    });
   });
 }

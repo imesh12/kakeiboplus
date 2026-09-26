@@ -1264,6 +1264,59 @@ void main() {
       }
     });
 
+    testWidgets('an exactly-used month shows 100% and zero remaining, never "over budget by '
+        '\u00a50"', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb(withCategories: true);
+      final AccountRepository accountRepo = AccountRepository(db);
+      final TransactionRepository transactionRepo = TransactionRepository(db, accountRepo);
+      final String walletId =
+          await accountRepo.createAccount(profileId: profileId, name: 'Wallet', type: 'cash', currencyCode: 'JPY');
+      final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+      await BudgetRepository(db).setCategoryBudget(
+        profileId: profileId,
+        categoryId: 'sys-dining',
+        month: month,
+        amount: Money.fromMinorUnits(10000, 'JPY'),
+      );
+      // Spent exactly equals budgeted -- Section C: this is "exactly
+      // used", not an overspent state.
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: walletId,
+        amount: Money.fromMinorUnits(10000, 'JPY'),
+        occurredAtUtc: month.startUtc,
+        categoryId: 'sys-dining',
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithBudgets(container));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('monthSummaryPercentUsed_JPY'))).data,
+        '100% used',
+      );
+      // Zero remaining, expressed the same way an under-budget month
+      // expresses a positive remaining figure -- never "over budget by
+      // \u00a50" (spent == budget is not an overspent state; isOverBudget
+      // requires spent to be strictly greater than budgeted).
+      expect(
+        tester.widget<Text>(find.byKey(const Key('monthSummaryRemaining_JPY'))).data,
+        '\u00a50',
+      );
+      expect(find.textContaining('over budget'), findsNothing);
+
+      final Iterable<LinearProgressIndicator> bars =
+          tester.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+      expect(bars, isNotEmpty);
+      for (final LinearProgressIndicator bar in bars) {
+        expect(bar.value, 1.0); // fully filled, not clamped-from-overflow
+      }
+    });
+
     testWidgets('no category budgets for the month shows its own localized empty state, even '
         'while an overall budget exists', (tester) async {
       final (AppDatabase db, String profileId) = await seededDb();
@@ -1389,6 +1442,140 @@ void main() {
         tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
         'Remaining: ¥15,000', // 20000 - 5000 expense only, the 9000 income never subtracted
       );
+    });
+
+    // Checkpoint R Section F/D: the four required category progress
+    // states (0%, partial -- already covered above, exactly 100%,
+    // >100%), using the same generic CategoryBudgetProgress/
+    // _CategoryProgressDetails code path the month-level over-budget
+    // test above already exercises -- these just prove it holds at
+    // the category level too, not merely at the whole-month level.
+    testWidgets('a category with no spending yet shows 0% used and the full amount remaining',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb(withCategories: true);
+      final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+      final String budgetId = await BudgetRepository(db).setCategoryBudget(
+        profileId: profileId,
+        categoryId: 'sys-dining',
+        month: month,
+        amount: Money.fromMinorUnits(20000, 'JPY'),
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithBudgets(container));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.byKey(Key('categoryProgressPercentUsed_$budgetId'))).data,
+        '0% used',
+      );
+      expect(
+        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        'Remaining: ¥20,000',
+      );
+      // The category progress bar is a sibling of the keyed
+      // `ListTile`, not a descendant of it (see the existing
+      // `_CategoryBudgetTile` layout), so it is checked the same
+      // unscoped way the month-level over-budget test above checks
+      // its bars -- safe here because this fixture has exactly one
+      // category, so every bar on screen (Month Summary's and this
+      // category's) shares the same 0.0 ratio.
+      final Iterable<LinearProgressIndicator> bars =
+          tester.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+      expect(bars, isNotEmpty);
+      for (final LinearProgressIndicator bar in bars) {
+        expect(bar.value, 0.0);
+      }
+    });
+
+    testWidgets('a category spent exactly its budget shows 100% used and zero remaining, never '
+        '"over budget by ¥0"', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb(withCategories: true);
+      final AccountRepository accountRepo = AccountRepository(db);
+      final TransactionRepository transactionRepo = TransactionRepository(db, accountRepo);
+      final String walletId =
+          await accountRepo.createAccount(profileId: profileId, name: 'Wallet', type: 'cash', currencyCode: 'JPY');
+      final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+      final String budgetId = await BudgetRepository(db).setCategoryBudget(
+        profileId: profileId,
+        categoryId: 'sys-dining',
+        month: month,
+        amount: Money.fromMinorUnits(20000, 'JPY'),
+      );
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: walletId,
+        amount: Money.fromMinorUnits(20000, 'JPY'),
+        occurredAtUtc: month.startUtc,
+        categoryId: 'sys-dining',
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithBudgets(container));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.byKey(Key('categoryProgressPercentUsed_$budgetId'))).data,
+        '100% used',
+      );
+      expect(
+        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        'Remaining: ¥0',
+      );
+    });
+
+    testWidgets('a category spent past its budget shows the uncapped percentage and an explicit '
+        'over-budget amount, with a fully-filled (never overflowed) progress bar',
+        (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb(withCategories: true);
+      final AccountRepository accountRepo = AccountRepository(db);
+      final TransactionRepository transactionRepo = TransactionRepository(db, accountRepo);
+      final String walletId =
+          await accountRepo.createAccount(profileId: profileId, name: 'Wallet', type: 'cash', currencyCode: 'JPY');
+      final BudgetMonth month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+      final String budgetId = await BudgetRepository(db).setCategoryBudget(
+        profileId: profileId,
+        categoryId: 'sys-dining',
+        month: month,
+        amount: Money.fromMinorUnits(20000, 'JPY'),
+      );
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: walletId,
+        amount: Money.fromMinorUnits(25000, 'JPY'),
+        occurredAtUtc: month.startUtc,
+        categoryId: 'sys-dining',
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithBudgets(container));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.byKey(Key('categoryProgressPercentUsed_$budgetId'))).data,
+        '125% used', // uncapped -- never hidden behind a false 100%
+      );
+      expect(
+        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        '¥5,000 over budget',
+      );
+      // Same sibling-not-descendant reasoning as the 0% test above --
+      // unscoped is safe with exactly one category on screen.
+      final Iterable<LinearProgressIndicator> bars =
+          tester.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+      expect(bars, isNotEmpty);
+      for (final LinearProgressIndicator bar in bars) {
+        expect(bar.value, 1.0); // clamped, never fed 1.25 directly
+      }
     });
   });
 

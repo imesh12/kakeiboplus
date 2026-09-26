@@ -2406,3 +2406,93 @@ concept from the raw percentage-of-budget-used this checkpoint displays), the Ho
 budget card, or any other checkpoint's regression boundary (Savings, Deposit, Credit Card,
 cheques, Net Worth, KakeiboPlus branding) — all confirmed unaffected by inspection, since none
 of those areas' files were touched.
+
+## ADR-041 — Checkpoint R: Budget experience completion is an audit-and-harden pass over ADR-040's architecture, not a new one; V1 has no rollover
+
+Decision: Checkpoint R is the acceptance/completion checkpoint for the month-based Budget
+experience ADR-040 built. The audit found ADR-040's architecture already correct and complete
+for nearly every requirement in the checkpoint brief; R's actual changes are two explicit
+regression tests proving a policy that was already true by construction, plus targeted widget
+tests for category/month states the existing test suite had not yet exercised directly. No
+production behavior changed. No schema change (still schema v13). No `FinanceEngine` change.
+
+1. **Selected month remains the Budget screen's single presentation context, unchanged from
+   ADR-040.** `selectedBudgetMonthProvider` still drives `budgetsForSelectedMonthProvider` and
+   `budgetMonthSummariesProvider` exclusively; `currentBudgetMonthProvider` (the Home
+   dashboard's real-"now" budget card) remains untouched and independent. Every value on the
+   Budgets screen — total budget, spent, remaining/over-budget, percentage, progress bars,
+   category rows, empty states, and the Add/Edit dialogs' target month — is derived from
+   whichever `BudgetMonth` is currently selected, never from `DateTime.now()` directly. This
+   was already fully true and tested under ADR-040; R only re-confirms it and adds the
+   remaining scenario coverage below.
+
+2. **Month/category progress formulas are unchanged:** `totalBudget = Σ active category
+   budgets for the selected currency/month`; `spent = Σ FinanceEngine.categoryExpenseTotal`
+   per budgeted category (expense-only, soft-deletes excluded, exact category-id match);
+   `remaining = totalBudget - spent` (can be negative); `usedRatio = spent / totalBudget`,
+   uncapped in text; `isOverBudget = spent > totalBudget` (strict). The "exactly used" case
+   (`spent == totalBudget`) therefore falls out of `isOverBudget` correctly on its own —
+   `remaining` is `0`, `usedRatio` is `1.0`, and the UI takes the ordinary (non-over-budget)
+   `_StatRow` branch, showing "100% used" and a plain "¥0" remaining figure rather than "over
+   budget by ¥0". This was already correct in the existing formula (no code changed); R adds
+   `budgets_screen_test.dart`'s "an exactly-used month shows 100% and zero remaining..." and "a
+   category spent exactly its budget shows 100% used..." tests, since no prior test exercised
+   this exact boundary at either the month or category level.
+
+3. **Displayed percentage above 100% and clamped visual progress are unchanged.** Text is
+   always the true, uncapped `usedRatio * 100` (e.g. "125% used"); only
+   `AppProgressBar`/`LinearProgressIndicator`'s fill fraction clamps to `[0.0, 1.0]`
+   (`summary.usedRatio.clamp(0.0, 1.0)` / `progress.usedRatio.clamp(0.0, 1.0)`), and the
+   over-budget amount is always stated explicitly in words
+   (`l10n.overBudgetByAmountLabel`), never disguised as a positive "remaining". R adds explicit
+   category-level 0%/100%/>100% widget tests alongside the month-level test ADR-040 already
+   had, closing the only genuinely missing widget coverage the audit found.
+
+4. **Zero-budget vs. no-budget remains an enforced invariant, not a new decision.**
+   `BudgetRepository._validateAmount` (`InvalidBudgetAmountException`, already tested in
+   `budget_repository_test.dart` before ADR-021) rejects a zero or negative amount before any
+   write, so a persisted budget row is always strictly positive — "budget configured as zero"
+   is not a state the schema can express. "No budget configured" is simply the absence of an
+   active row for that profile/currency/year/month(/category), rendered as the existing
+   localized empty states (`noBudgetsSetThisMonthMessage`, `noCategoryBudgetsForMonthMessage`),
+   never a fabricated ¥0 card. `BudgetMonthSummary.usedRatio`/`CategoryBudgetProgress.usedRatio`
+   can therefore never divide by zero, by construction of the persistence layer they're built
+   from.
+
+5. **V1 explicit no-rollover policy — audited, confirmed absent, and now regression-tested.**
+   A full-codebase search (`lib/`, `test/`, `docs/`) for rollover/carry-forward/carried-balance/
+   automatic-budget-generation concepts found no such implementation anywhere in production
+   code or tests. Every hit was either an unrelated feature already documenting its own "no
+   rollover" stance (`deposit_status.dart`'s deposit renewal) or an existing document already
+   recording rollover as explicitly out of scope for Beta 1/V1
+   (`docs/00_MASTER_BLUEPRINT.md`, `docs/03_DATABASE_SCHEMA.md`'s `rollover_enabled` listed as
+   an out-of-scope column, `docs/22_UI_REFERENCE_PRODUCT_ARCHITECTURE.md`'s "No rollover...",
+   `lib/features/budgets/README.md`'s "recurring/rollover budgets... out of scope"). No
+   conflicting rollover model exists to report or reconcile. `BudgetMonthSummary` is built
+   exclusively from the selected month's own category-budget rows and the selected month's own
+   `categoryExpenseTotal` window — it has no field, parameter, or code path that reads any
+   other month's remaining or overspent figure, so no rollover can occur by construction. R
+   makes this an explicit regression rather than an implicit property: two new
+   `budget_providers_test.dart` tests ("an unused remainder in one month never increases the
+   following month's total budget" / "overspending in one month never reduces the following
+   month's total budget") seed August with a real unused remainder and a real overspend
+   respectively, then assert September's `totalBudget` is exactly the amount configured for
+   September — never adjusted by August's leftover or shortfall.
+
+6. **Month isolation, currency isolation, and the historical-month Add/Edit fix all remain
+   exactly as ADR-040 left them** — verified by inspection and by the pre-existing, still-
+   passing `budgets_screen_test.dart` groups ("budgets never leak across months", "Add/Edit
+   Budget respect the selected historical month"), unchanged by this checkpoint.
+
+7. **Why these remain derived, not persisted:** `remaining`, `usedRatio`, `isOverBudget`, and
+   every percentage/progress value continue to be pure functions of persisted budget rows and
+   persisted transactions, recomputed on read — never written back to the database. This keeps
+   the no-rollover policy trivially true (there is no stored "remaining" value for a rollover
+   calculation to ever read) and keeps `FinanceEngine` and the ledger completely unaware that
+   budgets exist, matching Section P/O of the checkpoint brief.
+
+8. **Credit Card (Checkpoint O), Deposit (P), Cheques (N), Net Worth, Home, and KakeiboPlus
+   branding are all unaffected** — none of their files were touched by this checkpoint; the
+   only files changed are `test/features/budgets/presentation/budget_providers_test.dart` and
+   `test/widget/budgets_screen_test.dart` (new test coverage) and this decision log entry. No
+   production file changed.
