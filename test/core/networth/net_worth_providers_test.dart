@@ -103,6 +103,40 @@ void main() {
       expect(line.isClosed, isFalse);
     });
 
+    test(
+        'Checkpoint K: a savings account contributes to totalAssets as a normal asset, '
+        'never flagged isDeposit/isLiability, distinct from a bank account only by subtype',
+        () async {
+      final String profileId = await seedProfile(living: 'JPY', home: 'USD');
+      final String savingsId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Savings',
+        type: 'savings',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.savings,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(5000, 'JPY'),
+      );
+
+      final NetWorthCurrencySummary jpy = (await readSummaries()).single;
+      expect(jpy.totalAssets, Money.fromMinorUnits(5000, 'JPY'));
+      expect(jpy.totalLiabilities, Money.zero('JPY'));
+      expect(jpy.netWorth, Money.fromMinorUnits(5000, 'JPY'));
+      expect(jpy.liabilityLines, isEmpty);
+      final NetWorthAccountLine line = jpy.assetLines.single;
+      expect(line.accountId, savingsId);
+      // Contributes positively to net worth like any other asset --
+      // never excluded the way a deposit's liquidity is on Home, and
+      // never subtracted the way a liability would be.
+      expect(line.isDeposit, isFalse);
+      expect(line.isLiability, isFalse);
+      expect(line.isClosed, isFalse);
+
+      final AccountRow savings = await accountRepo.requireById(savingsId);
+      expect(savings.subtypeValue, FinancialAccountSubtype.savings);
+      expect(savings.subtypeValue, isNot(FinancialAccountSubtype.bank));
+    });
+
     test('a deposit contributes to totalAssets (not excluded) and is flagged isDeposit',
         () async {
       final String profileId = await seedProfile(living: 'JPY', home: 'USD');

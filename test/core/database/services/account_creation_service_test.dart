@@ -98,7 +98,9 @@ void main() {
       });
     }
 
-    test('savings and bank share the same FinancialAccountSubtype (docs/20 §13.5)', () async {
+    test(
+        'savings persists its own FinancialAccountSubtype.savings, distinct from bank '
+        '(Checkpoint K -- docs/20 §13.5 open question 1, now resolved)', () async {
       final String bankId = await service.createSimpleAccount(
         kind: AccountCreationKind.bank,
         profileId: profileId,
@@ -114,8 +116,13 @@ void main() {
       final AccountRow bank = await accountRepo.requireById(bankId);
       final AccountRow savings = await accountRepo.requireById(savingsId);
       expect(bank.subtypeValue, FinancialAccountSubtype.bank);
-      expect(savings.subtypeValue, FinancialAccountSubtype.bank);
-      // But their presentation-only `type` strings stay distinct.
+      expect(savings.subtypeValue, FinancialAccountSubtype.savings);
+      expect(savings.subtypeValue, isNot(bank.subtypeValue));
+      // Both remain plain assets -- savings is not a distinct
+      // BalanceClass, just its own subtype.
+      expect(savings.balanceClassValue, BalanceClass.asset);
+      // Their presentation-only `type` strings also stay distinct, as
+      // they always have.
       expect(bank.type, isNot(savings.type));
     });
 

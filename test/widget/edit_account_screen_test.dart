@@ -375,14 +375,17 @@ void main() {
   // The repair (see `account_type_presentation.dart`'s
   // `kEditableAccountTypeLabels`/`isAccountTypeEditable`, and
   // `account_form_fields.dart`'s `typeOptions`/`typeEditable`):
-  // `savings` was added to the freely-relabelable set (safe -- it shares
-  // `bank`'s exact `FinancialAccountSubtype`, so relabeling is purely
-  // cosmetic); `deposit`/`creditCard` instead get a read-only type
-  // display, since those two subtypes carry a mandatory composite record
-  // and relabeling them would misrepresent (without truly being able to
-  // change) what the account actually is. `AccountRepository.updateAccount`
-  // has no `balanceClass`/`subtype` parameter at all, so no path through
-  // this screen -- editable or not -- can ever mutate either.
+  // `savings` was added to the freely-relabelable set (safe -- like
+  // `bank`, it carries no mandatory composite record, so relabeling is
+  // purely cosmetic; Checkpoint K later gave it its own
+  // `FinancialAccountSubtype.savings`, but that doesn't change this --
+  // `updateAccount` never touches `subtype` regardless); `deposit`/
+  // `creditCard` instead get a read-only type display, since those two
+  // subtypes carry a mandatory composite record and relabeling them
+  // would misrepresent (without truly being able to change) what the
+  // account actually is. `AccountRepository.updateAccount` has no
+  // `balanceClass`/`subtype` parameter at all, so no path through this
+  // screen -- editable or not -- can ever mutate either.
   group('Checkpoint G Android regression repair: simple kinds stay freely relabelable', () {
     const List<(AccountCreationKind, String)> simpleCases = <(AccountCreationKind, String)>[
       (AccountCreationKind.cash, 'cash'),

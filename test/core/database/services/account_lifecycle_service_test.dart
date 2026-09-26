@@ -108,6 +108,35 @@ void main() {
       expect(after.subtypeValue, before.subtypeValue);
     });
 
+    test(
+        'Checkpoint K: closing a savings account behaves identically to closing a bank '
+        'account -- same isActive/deletedAt/identity/balance/currency/class/subtype '
+        'preservation', () async {
+      final String accountId = await creationService.createSimpleAccount(
+        kind: AccountCreationKind.savings,
+        profileId: profileId,
+        name: 'Nest egg',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(150000, 'USD'),
+      );
+      final AccountRow before = await accountRepo.requireById(accountId);
+      expect(before.subtypeValue, FinancialAccountSubtype.savings);
+
+      await lifecycleService.closeAccount(accountId: accountId);
+
+      final AccountRow after = await accountRepo.requireById(accountId);
+      expect(after.isActive, isFalse);
+      expect(after.deletedAt, isNotNull);
+      expect(after.id, before.id);
+      expect(after.name, before.name);
+      expect(after.type, before.type);
+      expect(after.currencyCode, before.currencyCode);
+      expect(after.openingBalanceMinorUnits, before.openingBalanceMinorUnits);
+      expect(after.balanceClassValue, before.balanceClassValue);
+      expect(after.subtypeValue, before.subtypeValue);
+      expect(after.subtypeValue, FinancialAccountSubtype.savings);
+    });
+
     test('a closed account no longer appears in watchActiveForProfile', () async {
       final String accountId = await creationService.createSimpleAccount(
         kind: AccountCreationKind.cash,
@@ -187,6 +216,34 @@ void main() {
       expect(after.openingBalanceMinorUnits, before.openingBalanceMinorUnits);
       expect(after.balanceClassValue, before.balanceClassValue);
       expect(after.subtypeValue, before.subtypeValue);
+    });
+
+    test(
+        'Checkpoint K: reactivating a savings account behaves identically to reactivating '
+        'a bank account -- same restore/identity/balance/currency/class/subtype '
+        'preservation', () async {
+      final String accountId = await creationService.createSimpleAccount(
+        kind: AccountCreationKind.savings,
+        profileId: profileId,
+        name: 'Nest egg',
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(75000, 'USD'),
+      );
+      final AccountRow before = await accountRepo.requireById(accountId);
+      await lifecycleService.closeAccount(accountId: accountId);
+
+      await lifecycleService.reactivateAccount(accountId: accountId);
+
+      final AccountRow after = await accountRepo.requireById(accountId);
+      expect(after.isActive, isTrue);
+      expect(after.deletedAt, isNull);
+      expect(after.id, before.id);
+      expect(after.name, before.name);
+      expect(after.currencyCode, before.currencyCode);
+      expect(after.openingBalanceMinorUnits, before.openingBalanceMinorUnits);
+      expect(after.balanceClassValue, before.balanceClassValue);
+      expect(after.subtypeValue, before.subtypeValue);
+      expect(after.subtypeValue, FinancialAccountSubtype.savings);
     });
 
     test('a reactivated account reappears in watchActiveForProfile — never a replacement id',

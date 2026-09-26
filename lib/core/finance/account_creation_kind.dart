@@ -10,20 +10,19 @@ import 'financial_account_subtype.dart';
 /// term (per the checkpoint brief's explicit "do not expose balanceClass/
 /// asset-liability enum" instruction).
 ///
-/// **[savings] intentionally maps to the SAME [FinancialAccountSubtype.bank]
-/// subtype as [bank].** Docs/20 §13.5's open question 1 freezes "bank is
-/// not split" -- there is no separate `checking`/`savings` subtype, by
-/// design, and this checkpoint does not introduce one (that would be a
-/// database-architecture change, explicitly out of scope). "Savings
-/// account" is presented as its own first-step choice purely for user
-/// clarity (matching the brief's own example list); internally it
-/// creates exactly the same shape a "Bank account" choice does. The two
-/// remain visually distinguishable afterwards only through
-/// `Accounts.type` (a presentation-only field, see `tables.dart`'s own
-/// doc on that column) -- [legacyTypeLabel] is deliberately `'savings'`,
-/// distinct from [bank]'s `'bank'`, so the (unmodified in this
-/// checkpoint) Accounts list/detail screens still show a different
-/// label/icon for the two even though their `subtype` is identical.
+/// **[savings] persists its own [FinancialAccountSubtype.savings]
+/// subtype -- Checkpoint K** (resolving docs/20 §13.5's open question 1,
+/// "bank is not split," in favor of splitting it). [savings] is a
+/// normal, liquid asset for every accounting purpose (availability, net
+/// worth, lifecycle) -- identical to [bank]/[cash]/[wallet] -- it is
+/// simply persisted, identified, and reported as its own subtype rather
+/// than continuing to alias [bank]'s. Before Checkpoint K, [savings] and
+/// [bank] shared the exact same subtype and were distinguishable only
+/// through `Accounts.type` (a presentation-only field); an account
+/// created before Checkpoint K keeps whatever subtype it was created
+/// with -- Checkpoint K never rewrites existing rows. [legacyTypeLabel]
+/// remains `'savings'`, distinct from [bank]'s `'bank'`, unchanged by
+/// this checkpoint -- it was already correct.
 ///
 /// **[deposit] and [creditCard] are the two kinds Checkpoint G's own
 /// `AccountCreationService` composes multiple records for** -- see that
@@ -32,7 +31,7 @@ import 'financial_account_subtype.dart';
 enum AccountCreationKind {
   cash('cash', BalanceClass.asset, FinancialAccountSubtype.cash),
   bank('bank', BalanceClass.asset, FinancialAccountSubtype.bank),
-  savings('savings', BalanceClass.asset, FinancialAccountSubtype.bank),
+  savings('savings', BalanceClass.asset, FinancialAccountSubtype.savings),
   wallet('wallet', BalanceClass.asset, FinancialAccountSubtype.wallet),
   deposit('deposit', BalanceClass.asset, FinancialAccountSubtype.deposit),
   creditCard('creditCard', BalanceClass.liability, FinancialAccountSubtype.creditCard);
@@ -42,11 +41,9 @@ enum AccountCreationKind {
   /// The value stored in `Accounts.type` for an account this kind
   /// creates -- presentation-only metadata (see `Accounts.type`'s own
   /// doc in `tables.dart`), never read for any accounting decision.
-  /// Distinct from every other kind's label (including [bank]/[savings],
-  /// which otherwise share a [subtype]) so the existing Accounts list/
-  /// detail screens -- unmodified by this checkpoint -- can still show a
-  /// recognizable label/icon for each (see
-  /// `account_type_presentation.dart`'s new cases).
+  /// Distinct from every other kind's label so the existing Accounts
+  /// list/detail screens can show a recognizable label/icon for each
+  /// (see `account_type_presentation.dart`'s cases).
   final String legacyTypeLabel;
 
   /// The frozen, authoritative asset/liability classification this kind

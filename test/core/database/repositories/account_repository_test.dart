@@ -182,6 +182,93 @@ void main() {
     });
   });
 
+  group('createClassifiedAccount -- Checkpoint K savings subtype', () {
+    test('persists FinancialAccountSubtype.savings and round-trips it exactly', () async {
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Nest egg',
+        type: 'savings',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.savings,
+        currencyCode: 'USD',
+        openingBalance: Money.fromMinorUnits(5000, 'USD'),
+      );
+      final AccountRow row = await accountRepo.requireById(accountId);
+      expect(row.balanceClassValue, BalanceClass.asset);
+      expect(row.subtypeValue, FinancialAccountSubtype.savings);
+      expect(row.type, 'savings');
+    });
+
+    test('a savings account and a bank account are distinct subtypes, never conflated',
+        () async {
+      final String savingsId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Nest egg',
+        type: 'savings',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.savings,
+        currencyCode: 'USD',
+      );
+      final String bankId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Everyday',
+        type: 'bank',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.bank,
+        currencyCode: 'USD',
+      );
+      final AccountRow savings = await accountRepo.requireById(savingsId);
+      final AccountRow bank = await accountRepo.requireById(bankId);
+      expect(savings.subtypeValue, FinancialAccountSubtype.savings);
+      expect(bank.subtypeValue, FinancialAccountSubtype.bank);
+      expect(savings.subtypeValue, isNot(bank.subtypeValue));
+    });
+
+    test(
+        'an existing bank-subtype row is never heuristically reclassified as savings, even '
+        'when its name/type text says "savings"', () async {
+      // `classifyLegacyAccountType`/`createAccount`'s legacy path (used
+      // by every pre-Checkpoint-K row) has no knowledge of `'savings'`
+      // at all -- it only ever produces cash/bank/wallet/legacyCard/
+      // legacyUnknown. This proves a legacy row whose free-text name or
+      // `type` happens to say "savings" still classifies as plain
+      // asset/bank, never guessed as the new subtype -- the brief's
+      // explicit "no heuristic Bank-to-Savings conversion" requirement.
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'My Savings Account',
+        type: 'bank',
+        currencyCode: 'USD',
+      );
+      final AccountRow row = await accountRepo.requireById(accountId);
+      expect(row.subtypeValue, FinancialAccountSubtype.bank);
+      expect(row.subtypeValue, isNot(FinancialAccountSubtype.savings));
+    });
+
+    test('a savings account appears in watchActiveForProfile -- the same stream the '
+        'transaction account selector reads from', () async {
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Nest egg',
+        type: 'savings',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.savings,
+        currencyCode: 'USD',
+      );
+
+      final List<AccountRow> active =
+          await accountRepo.watchActiveForProfile(profileId).first;
+      expect(active.map((AccountRow a) => a.id), contains(accountId));
+
+      // Closing it removes it from selection, exactly like any other
+      // asset account -- lifecycle behavior is not subtype-specific.
+      await accountRepo.softDelete(accountId);
+      final List<AccountRow> afterClose =
+          await accountRepo.watchActiveForProfile(profileId).first;
+      expect(afterClose.map((AccountRow a) => a.id), isNot(contains(accountId)));
+    });
+  });
+
   group('watchById', () {
     test('emits the live row for an active account', () async {
       final String accountId = await accountRepo.createAccount(

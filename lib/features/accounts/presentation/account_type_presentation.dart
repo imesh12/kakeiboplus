@@ -22,10 +22,13 @@ const List<String> kAccountTypes = <String>['cash', 'bank', 'card', 'wallet'];
 /// to add here specifically (and ONLY here, not to [kAccountTypes] --
 /// see that constant's own doc) because `type` is presentation-only
 /// (see `AccountRepository.updateAccount`'s doc comment -- editing it
-/// never touches `balanceClass`/`subtype`) and `'savings'`/`'bank'`
-/// already share the exact same `FinancialAccountSubtype.bank`
-/// (`AccountCreationKind.savings`'s own doc) -- offering it here changes
-/// only the account's label/icon, never its accounting.
+/// never touches `balanceClass`/`subtype`) -- offering it here changes
+/// only the account's label/icon, never its accounting. Since
+/// Checkpoint K, `'savings'`/`'bank'` persist their own distinct
+/// subtypes ([FinancialAccountSubtype.savings]/`.bank`), but both
+/// remain freely relabelable between each other exactly like
+/// `'cash'`/`'wallet'` -- neither carries a mandatory composite record,
+/// so relabeling either one is still purely cosmetic.
 ///
 /// Deliberately still excludes `'deposit'`/`'creditCard'`: those two
 /// subtypes carry a mandatory one-to-one composite record
@@ -60,6 +63,7 @@ bool isAccountTypeEditable(FinancialAccountSubtype subtype) {
       return false;
     case FinancialAccountSubtype.cash:
     case FinancialAccountSubtype.bank:
+    case FinancialAccountSubtype.savings:
     case FinancialAccountSubtype.wallet:
     case FinancialAccountSubtype.legacyCardNeedsReview:
     case FinancialAccountSubtype.legacyUnknownNeedsReview:
@@ -87,15 +91,15 @@ String accountTypeDisplayLabel(AppLocalizations l10n, String type) {
       return l10n.accountTypeCard;
     case 'wallet':
       return l10n.accountTypeWallet;
-    // Checkpoint G (Add Account UX): the three new
+    // Checkpoint G (Add Account UX) added the three new
     // `AccountCreationKind.legacyTypeLabel` values a real account can
-    // now be created with -- 'savings' shares `bank`'s
-    // `FinancialAccountSubtype` (docs/20 §13.5 open question 1, "bank
-    // is not split") but keeps its own label/icon here purely for
-    // presentation, exactly as `AccountCreationKind`'s own doc
-    // describes. Added to this switch only -- NOT to [kAccountTypes]
-    // above, which stays the closed legacy set `EditAccountScreen`'s
-    // dropdown still uses unmodified.
+    // be created with. 'savings' keeps its own label/icon here purely
+    // for presentation -- unaffected by Checkpoint K giving it its own
+    // `FinancialAccountSubtype.savings`, since `type` was already
+    // distinct from `bank`'s `'bank'` before that change. Added to this
+    // switch only -- NOT to [kAccountTypes] above, which stays the
+    // closed legacy set `EditAccountScreen`'s dropdown still uses
+    // unmodified.
     case 'savings':
       return l10n.addAccountTypeSavingsTitle;
     case 'deposit':

@@ -259,15 +259,15 @@ void main() {
     });
 
     test(
-        'C. a savings account (AccountCreationKind.savings -- FinancialAccountSubtype.bank) '
-        'contributes to available/liquid money', () async {
+        'C. a savings account (AccountCreationKind.savings -- FinancialAccountSubtype.savings, '
+        'Checkpoint K) contributes to available/liquid money', () async {
       final String profileId = await seedProfile(living: 'JPY', home: 'USD');
       await accountRepo.createClassifiedAccount(
         profileId: profileId,
         name: 'Savings',
         type: 'savings',
         balanceClass: BalanceClass.asset,
-        subtype: FinancialAccountSubtype.bank,
+        subtype: FinancialAccountSubtype.savings,
         currencyCode: 'JPY',
         openingBalance: Money.fromMinorUnits(5000, 'JPY'),
       );
@@ -374,7 +374,7 @@ void main() {
         name: 'Savings',
         type: 'savings',
         balanceClass: BalanceClass.asset,
-        subtype: FinancialAccountSubtype.bank,
+        subtype: FinancialAccountSubtype.savings,
         currencyCode: 'JPY',
         openingBalance: Money.fromMinorUnits(5000, 'JPY'),
       );

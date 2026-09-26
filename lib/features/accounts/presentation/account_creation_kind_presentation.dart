@@ -18,8 +18,10 @@ import '../../../l10n/generated/app_localizations.dart';
 /// this checkpoint) to a label/icon; this file maps the pre-creation
 /// [AccountCreationKind] choice itself (used only during the Add
 /// Account flow). The two enums/vocabularies are related but distinct
-/// (see [AccountCreationKind]'s own doc on why `savings` is a separate
-/// choice here despite sharing a `FinancialAccountSubtype` with `bank`).
+/// (see [AccountCreationKind]'s own doc -- since Checkpoint K, `savings`
+/// is also its own distinct [FinancialAccountSubtype], but this file's
+/// separation from `account_type_presentation.dart` predates and does
+/// not depend on that).
 String accountCreationKindTitle(AppLocalizations l10n, AccountCreationKind kind) {
   switch (kind) {
     case AccountCreationKind.cash:

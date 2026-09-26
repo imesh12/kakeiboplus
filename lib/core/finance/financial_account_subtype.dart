@@ -41,12 +41,22 @@
 /// already-asset-classified account (Checkpoint F ships no Add Account
 /// UX either -- docs/20 §13.4 checkpoint G).
 ///
-/// Deliberately still NOT defined here: `checking`/`savings` (bank is
-/// not split -- docs/20 §13.5 open question 1, unresolved by design).
+/// Checkpoint K adds [savings] -- resolving docs/20 §13.5 open question
+/// 1 ("bank is not split") by giving Savings its own first-class
+/// subtype rather than continuing to alias [bank]. A `FinancialAccount`
+/// with `subtype: savings` is a normal, liquid asset -- identical to
+/// [bank]/[cash]/[wallet] for every accounting purpose (availability,
+/// net worth, lifecycle); the only thing that distinguishes it from
+/// those is this subtype value itself. `checking` remains NOT defined
+/// here -- out of scope for Checkpoint K, which only adds the one value
+/// its brief calls for. No migration ever backfills an existing row to
+/// this value: `classifyLegacyAccountType` never returns it, so an
+/// existing `bank`-subtype account (created before this checkpoint)
+/// keeps its `bank` subtype forever, never heuristically reclassified.
 /// `subtype` is a plain `TextColumn` (matching this schema's
 /// enum-as-text convention -- see `Transactions.type`'s doc comment in
-/// `tables.dart`), so a later checkpoint can introduce a new value
-/// without a schema migration.
+/// `tables.dart`), so adding this value needed no schema migration --
+/// exactly as this doc comment predicted before Checkpoint K.
 ///
 /// Stored as [storageValue]. [fromStorageValue] never throws on an
 /// unrecognized/corrupt value -- falling back to
@@ -56,6 +66,7 @@
 enum FinancialAccountSubtype {
   cash('cash'),
   bank('bank'),
+  savings('savings'),
   wallet('wallet'),
   creditCard('creditCard'),
   deposit('deposit'),
