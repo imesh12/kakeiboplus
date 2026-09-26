@@ -344,5 +344,70 @@ void main() {
       expect(jpy.liabilityLines.length, 1);
       expect(jpy.assetLines.where((l) => l.isDeposit).length, 1);
     });
+
+    test(
+        'Checkpoint P -- deposit maturity does not independently change net worth; a matured '
+        'deposit contributes exactly its account balance, same as a not-yet-matured one', () async {
+      final String profileId = await seedProfile(living: 'JPY', home: 'USD');
+      final String activeAccountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Term Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      // A term far in the future -- still active, not matured.
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: activeAccountId,
+        depositType: DepositType.fixed,
+        termNumber: 5,
+        termUnit: DepositTermUnit.years,
+        startDateUtc: DateTime.utc(2026, 1, 1),
+        interestRateBasisPoints: 300,
+        interestMethod: DepositInterestMethod.simple,
+      );
+
+      final NetWorthCurrencySummary whileActive = (await readSummaries()).single;
+      expect(whileActive.netWorth, Money.fromMinorUnits(100000, 'JPY'));
+
+      // Nothing about net worth reads `DepositDetails`/maturity at
+      // all -- `netWorthSummariesProvider` derives purely from
+      // `AccountRow`/`FinanceEngine`. There is no way to "advance time"
+      // in this deterministic test, so this proves the same point the
+      // dashboard-side Checkpoint P test proves directly: a second,
+      // already-matured deposit of the identical balance produces the
+      // identical net-worth contribution -- maturity itself is not an
+      // input to this calculation.
+      final String maturedAccountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Matured Term Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: maturedAccountId,
+        depositType: DepositType.fixed,
+        termNumber: 1,
+        termUnit: DepositTermUnit.years,
+        startDateUtc: DateTime.utc(2020, 1, 1), // long since matured
+        interestRateBasisPoints: 300,
+        interestMethod: DepositInterestMethod.simple,
+      );
+
+      final NetWorthCurrencySummary withBoth = (await readSummaries()).single;
+      // Each deposit contributes exactly its own balance regardless of
+      // maturity -- 100000 (active) + 100000 (matured) = 200000.
+      expect(withBoth.netWorth, Money.fromMinorUnits(200000, 'JPY'));
+      expect(withBoth.assetLines.length, 2);
+      expect(withBoth.assetLines.every((l) => l.balance == Money.fromMinorUnits(100000, 'JPY')),
+          isTrue);
+    });
   });
 }

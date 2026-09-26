@@ -1181,17 +1181,23 @@ void main() {
           currencyCode: 'JPY',
           openingBalance: Money.fromMinorUnits(100000, 'JPY'),
         );
-        // Maturity well in the future relative to "today" in this repo's
-        // Checkpoint J working period -- see `deposit_status_test.dart`
-        // for the pure boundary coverage of the active/matured cutoff
-        // itself; this test only needs "clearly still active".
+        // Checkpoint P: anchored decades out (2090/2091), not merely
+        // "next year" -- a maturity date only months past the real
+        // clock (this test was previously anchored to 2026/2027) is a
+        // latent wall-clock time bomb: it silently flips from Active to
+        // Matured the moment real time catches up, with no code change
+        // and no warning. `DepositStatus.fromMaturityDate` is a pure
+        // function of two dates (see `deposit_status_test.dart` for its
+        // exhaustive, wall-clock-free day-before/exact/day-after
+        // boundary coverage); this widget test only needs "clearly
+        // still active for the lifetime of this test suite".
         await depositRepo.createDetails(
           profileId: profileId,
           accountId: accountId,
           depositType: DepositType.fixed,
           termNumber: 12,
           termUnit: DepositTermUnit.months,
-          startDateUtc: DateTime.utc(2026, 1, 1),
+          startDateUtc: DateTime.utc(2090, 1, 1),
           interestRateBasisPoints: 250,
           interestMethod: DepositInterestMethod.simple,
         );
@@ -1206,8 +1212,8 @@ void main() {
         expect(find.byKey(const Key('depositDetailsCard')), findsOneWidget);
         expect(find.text('Deposit details'), findsOneWidget);
         expect(find.text('2.50%'), findsOneWidget);
-        expect(find.text('Jan 1, 2026'), findsOneWidget);
-        expect(find.text('Jan 1, 2027'), findsOneWidget);
+        expect(find.text('Jan 1, 2090'), findsOneWidget);
+        expect(find.text('Jan 1, 2091'), findsOneWidget);
         expect(find.text('12 months'), findsOneWidget);
         expect(
           find.descendant(
@@ -1305,13 +1311,17 @@ void main() {
         // Details must be attached while the account is still active --
         // `DepositRepository.createDetails` rejects an inactive account
         // -- so close the account only AFTER creating its details.
+        // Checkpoint P: anchored decades out (2090/2091) rather than
+        // "next year" -- see the fix note on the test above for why a
+        // near-future maturity date is a latent wall-clock time bomb in
+        // a widget test that asserts on the derived Active/Matured text.
         await depositRepo.createDetails(
           profileId: profileId,
           accountId: accountId,
           depositType: DepositType.fixed,
           termNumber: 12,
           termUnit: DepositTermUnit.months,
-          startDateUtc: DateTime.utc(2026, 1, 1),
+          startDateUtc: DateTime.utc(2090, 1, 1),
           interestRateBasisPoints: 250,
           interestMethod: DepositInterestMethod.simple,
         );
@@ -1416,6 +1426,57 @@ void main() {
         find.descendant(
           of: find.byKey(const Key('depositStatusBadge')),
           matching: find.text('Matured'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'Checkpoint P: Japanese localization -- Deposit details section, its labels, and the '
+        'Active status badge', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Fixed Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      // Anchored decades out -- see the fix note earlier in this group
+      // for why a near-future maturity date is a wall-clock time bomb.
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: accountId,
+        depositType: DepositType.fixed,
+        termNumber: 12,
+        termUnit: DepositTermUnit.months,
+        startDateUtc: DateTime.utc(2090, 1, 1),
+        interestRateBasisPoints: 250,
+        interestMethod: DepositInterestMethod.simple,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithRouter(container, accountId, locale: const Locale('ja')),
+      );
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('預金の詳細'), findsOneWidget);
+      expect(find.text('金利'), findsOneWidget);
+      expect(find.text('開始日'), findsOneWidget);
+      expect(find.text('満期日'), findsOneWidget);
+      expect(find.text('期間'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('depositStatusBadge')),
+          matching: find.text('運用中'),
         ),
         findsOneWidget,
       );

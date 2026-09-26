@@ -2,10 +2,15 @@ import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/credit_facility_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/deposit_repository.dart';
+import 'package:ai_financial_coach/core/finance/deposit_interest_method.dart';
+import 'package:ai_financial_coach/core/finance/deposit_term_unit.dart';
+import 'package:ai_financial_coach/core/finance/deposit_type.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
 import 'package:ai_financial_coach/core/finance/balance_class.dart';
 import 'package:ai_financial_coach/core/finance/financial_account_subtype.dart';
+import 'package:ai_financial_coach/core/finance/ledger_models.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/accounts/presentation/account_providers.dart';
 import 'package:ai_financial_coach/features/dashboard/presentation/dashboard_providers.dart';
@@ -503,6 +508,55 @@ void main() {
       final CurrencyDashboardSummary jpyAfter = (await readSummaries()).single;
       expect(jpyAfter.availableBalance, Money.zero('JPY'));
       expect(jpyAfter.netWorth, Money.fromMinorUnits(-30000, 'JPY'));
+    });
+
+    test(
+        'K. Checkpoint P -- a MATURED deposit remains excluded from available/liquid money, '
+        'exactly as an active one is; maturity itself never moves availableBalance and never '
+        'creates a transaction or changes the account balance', () async {
+      final String profileId = await seedProfile(living: 'JPY', home: 'USD');
+      final String maturedId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Matured Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: maturedId,
+        depositType: DepositType.fixed,
+        termNumber: 1,
+        termUnit: DepositTermUnit.years,
+        // Long since matured relative to any real wall clock -- this
+        // test asserts the effect of maturity, so it must actually BE
+        // matured, unlike the widget-level "still active" fixtures
+        // elsewhere which deliberately anchor far in the future instead.
+        startDateUtc: DateTime.utc(2020, 1, 1),
+        interestRateBasisPoints: 300,
+        interestMethod: DepositInterestMethod.simple,
+      );
+
+      final CurrencyDashboardSummary jpy = (await readSummaries()).single;
+      // Identical to the not-yet-matured deposit case (test E above) --
+      // maturity moved zero dashboard figures. `isAvailable`'s own
+      // check never reads `DepositDetails`/maturity at all, only
+      // `subtype != deposit`, so this is true by construction, not by
+      // any new maturity-aware filtering added for this checkpoint.
+      expect(jpy.availableBalance, Money.zero('JPY'));
+      expect(jpy.netWorth, Money.fromMinorUnits(100000, 'JPY'));
+
+      // Maturity posted nothing and changed nothing on the account
+      // itself -- there is no code path anywhere that reacts to a
+      // maturity date by writing to `Accounts`/`Transactions`.
+      final AccountRow account = await accountRepo.requireById(maturedId);
+      expect(account.openingBalanceMinorUnits, 100000);
+      final List<LedgerTransaction> ledger =
+          await transactionRepo.watchLedgerForProfile(profileId).first;
+      expect(ledger.where((LedgerTransaction t) => t.accountId == maturedId), isEmpty);
     });
   });
 }

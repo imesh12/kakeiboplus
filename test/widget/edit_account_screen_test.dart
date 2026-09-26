@@ -458,10 +458,21 @@ void main() {
           );
           Future<int> depositDetailsCount() async =>
               (await db.select(db.depositDetails).get()).length;
+          final DepositRepository depositRepo = DepositRepository(db, accountRepo);
 
           final ProviderContainer container =
               ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
           addTearDown(() => disposeInOrder(tester, container, db));
+
+          // Checkpoint P: captured before Edit is even opened, so the
+          // comparison below proves every persisted Deposit field --
+          // not just the row count -- survives untouched. There is no
+          // UI path in this checkpoint that lets any of these fields be
+          // edited (see docs/20's Checkpoint P entry for the deliberate
+          // V1 limitation and its rationale); this test is what backs
+          // that claim.
+          final DepositDetailsRow before =
+              await depositRepo.requireActiveForAccount(created.accountId);
 
           await tester.pumpWidget(appWithRouter(container, created.accountId));
           await openEdit(tester);
@@ -484,6 +495,21 @@ void main() {
           expect(after.subtypeValue, FinancialAccountSubtype.deposit);
           expect(after.balanceClassValue, BalanceClass.asset);
           expect(after.currencyCode, 'JPY');
+
+          // Every persisted Deposit field, byte-for-byte -- not merely
+          // "still exactly one row". Editing the account name (the only
+          // thing this V1 Edit screen lets a Deposit account change)
+          // must never perturb any of these.
+          final DepositDetailsRow afterDeposit =
+              await depositRepo.requireActiveForAccount(created.accountId);
+          expect(afterDeposit.id, before.id);
+          expect(afterDeposit.depositType, before.depositType);
+          expect(afterDeposit.termNumber, before.termNumber);
+          expect(afterDeposit.termUnit, before.termUnit);
+          expect(afterDeposit.startDate, before.startDate);
+          expect(afterDeposit.maturityDate, before.maturityDate);
+          expect(afterDeposit.interestRateBasisPoints, before.interestRateBasisPoints);
+          expect(afterDeposit.interestMethod, before.interestMethod);
         },
       );
 

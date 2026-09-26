@@ -2236,4 +2236,63 @@ dashboard/net-worth calculation, cheque eligibility, or account lifecycle. See
 including every file changed, test coverage, and the complete list of legitimate deferrals
 (statement accounting, APR, billing cycles, minimum payments, and the rest of the explicitly
 deferred feature set).
+
+## ADR-039 — Checkpoint P: Deposit maturity is presentation over an already-complete architecture; deposit-field editing is a deliberate, documented V1 non-goal
+
+**Context.** Deposit/Term Deposit accounts have had full persistence (`DepositDetails`), a pure
+maturity-status function (`DepositStatus.fromMaturityDate`), and an Account Detail presentation
+section since Checkpoints F/J. The question this checkpoint answers: is anything actually
+missing from the V1 deposit experience, and specifically, does "maturity" ever leak into
+account lifecycle, available money, or Net Worth — and separately, should Edit Account let a
+deposit's rate/term/start/maturity be changed after creation.
+
+**Decision.** Nothing in production needed to change. The audit found `DepositStatus
+.fromMaturityDate` already a pure function of two dates (no wall-clock read inside it),
+already exhaustively tested at exact/day-before/day-after boundaries with zero database and
+zero wall-clock dependency, and already correctly independent of `AccountRow.isActive`. The
+dashboard's `isAvailable` check and `netWorthSummariesProvider` were confirmed, by reading the
+code, to never read `DepositDetails` at all — maturity cannot leak into either total because
+neither calculation takes it as an input, not because of any maturity-aware exclusion logic.
+Transaction selection was confirmed to be subtype-blind, matching every other account type.
+
+**The one real gap found: Edit Account exposes no deposit fields at all.** This checkpoint
+deliberately leaves that gap closed rather than adding partial editing. Every editable
+candidate field (interest rate, term, start date, interest method, compounding frequency) feeds
+the single stored `maturityDate` and any live `DepositCalculator` estimate a user may have
+already seen at creation. This schema has no field-level history/versioning — there is no way
+to represent a rate that changed partway through a term, or to safely recompute a previously
+shown estimate after the fact. Editing any of these fields would require either inventing such
+a versioning mechanism (out of this checkpoint's scope and a genuine architecture decision, not
+a UI one) or silently accepting an ambiguous, potentially-misleading result. The existing,
+unmodified account-lifecycle path (close the misconfigured deposit, create a correct one) already
+handles the realistic failure case — a data-entry mistake — without that ambiguity. This mirrors,
+and deliberately contrasts with, ADR-038's Credit Card decision: a credit limit is safe to edit
+because it carries no historical-accounting implication, while a deposit's rate/term/start
+inescapably does.
+
+**One real defect found and fixed, test-only.** Two widget tests anchored a "still active"
+deposit fixture's maturity to a date only a few months past this checkpoint's real-world date
+(`startDate: 2026-01-01` + 12 months = `maturityDate: 2027-01-01`) and asserted the rendered
+status is "Active" — an assertion that silently expires the moment real time catches up, with
+no code change and no warning. Both were moved to a start date decades out (2090) so the
+assertion cannot expire within any realistic test-suite lifetime. This is exactly the class of
+wall-clock hazard this checkpoint's own brief warns against, found by the audit it required
+rather than introduced by this checkpoint.
+
+**Why no `Clock`/time-abstraction class was introduced.** The brief allows "the smallest
+testable time abstraction consistent with the existing codebase" if `DateTime.now()` calls
+prevent deterministic testing. They do not, and did not before this checkpoint either: this
+codebase's one established convention — read `DateTime.now().toUtc()` once at the widget/
+provider boundary, pass it into a pure function that takes `now` as an explicit parameter — is
+already exactly what `DepositStatus.fromMaturityDate` and its call site do, matching
+`budget_providers.dart`/`savings_goal_providers.dart`/`recurring_providers.dart`'s own identical
+pattern. Introducing a dedicated `Clock` class for Deposit alone would be a new, inconsistent
+abstraction solving a problem the codebase's existing convention already solves.
+
+**Scope of this decision: Deposit maturity/lifecycle audit, test hardening, and the Edit-Account
+non-editing decision only.** This ADR does not modify `FinanceEngine`, `DepositDetails`'
+schema, any dashboard/net-worth provider, or transaction selection policy — all were confirmed
+correct, not changed. See `docs/20_ACCOUNTS_ASSETS_HOUSEHOLD_ARCHITECTURE.md` §13.18 for the
+full implementation record, including every file changed, test coverage, and the complete list
+of legitimate deferrals.
 Nothing was staged or committed by this checkpoint.

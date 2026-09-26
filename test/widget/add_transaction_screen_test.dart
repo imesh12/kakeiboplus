@@ -1,6 +1,8 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/finance/balance_class.dart';
+import 'package:ai_financial_coach/core/finance/financial_account_subtype.dart';
 import 'package:ai_financial_coach/core/database/repositories/category_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
@@ -1445,6 +1447,69 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.textContaining('Old Wallet'), findsNothing);
         expect(find.text('Second Active Wallet'), findsWidgets); // the real eligible option
+      },
+    );
+  });
+
+  group('Checkpoint P -- Deposit account transaction selection', () {
+    testWidgets(
+      'an active Deposit account is offered as a selectable source in the ordinary expense '
+      'account dropdown -- the same subtype-blind selector every other account type already '
+      'uses; there is no dedicated "deposit funding" flow and none is added here',
+      (tester) async {
+        final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
+        final ProfileRepository profileRepo = ProfileRepository(db);
+        await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+        final String profileId = await profileRepo.createProfile(
+          displayName: 'Test User',
+          homeCountry: 'LK',
+          currentCountry: 'JP',
+          homeCurrency: 'LKR',
+          livingCurrency: 'JPY',
+          preferredLanguage: 'en',
+          timezone: 'Asia/Tokyo',
+          dateFormat: 'yyyy-MM-dd',
+          numberFormat: '#,##0.##',
+        );
+        final AccountRepository accountRepo = AccountRepository(db);
+        // A bare classified deposit account -- no `DepositDetails` row
+        // at all. The selector is subtype-blind (`accountsProvider`
+        // filtered only by `isActive`), so it never reads
+        // `DepositDetails`/maturity either; this fixture is enough to
+        // prove that.
+        await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Fixed Deposit',
+          type: 'deposit',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.deposit,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+        );
+
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(
+          appWithPushedScreen(container, const AddTransactionScreen(initialType: 'expense')),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+        await tester.pumpAndSettle();
+        // The account dropdown's item label is `'${account.name}
+        // (${account.currencyCode})'` (see `AddTransactionScreen`'s
+        // account `DropdownMenuItem` builder), not the bare account
+        // name -- so this renders as "Fixed Deposit (JPY)". Matches
+        // the established `find.textContaining(...)` convention this
+        // same file already uses for account-dropdown-label assertions
+        // (see the "closed-account dropdown" group above), rather than
+        // an exact `find.text` that can never match a suffixed label.
+        expect(find.textContaining('Fixed Deposit'), findsWidgets);
       },
     );
   });
