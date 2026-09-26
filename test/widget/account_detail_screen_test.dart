@@ -1,9 +1,15 @@
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
+import 'package:ai_financial_coach/core/database/repositories/deposit_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/profile_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/recurring_rule_repository.dart';
 import 'package:ai_financial_coach/core/database/repositories/transaction_repository.dart';
+import 'package:ai_financial_coach/core/finance/balance_class.dart';
+import 'package:ai_financial_coach/core/finance/deposit_interest_method.dart';
+import 'package:ai_financial_coach/core/finance/deposit_term_unit.dart';
+import 'package:ai_financial_coach/core/finance/deposit_type.dart';
+import 'package:ai_financial_coach/core/finance/financial_account_subtype.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurrence_frequency.dart';
 import 'package:ai_financial_coach/features/recurring/domain/recurring_rule_kind.dart';
@@ -716,5 +722,237 @@ void main() {
         expect(stillActive.deletedAt, isNull);
       },
     );
+  });
+
+  // -- Checkpoint J (docs/20 §13.14): deposit Account Detail upgrade.
+  // Uses `AccountRepository.createClassifiedAccount` +
+  // `DepositRepository.createDetails` directly to seed a real
+  // `subtype: deposit` account with a `DepositDetails` row -- the same
+  // precedent `deposit_repository_test.dart` and
+  // `dashboard_providers_test.dart` already established, since
+  // production Add Account still cannot create a deposit account
+  // through the app in V1.
+  group('Checkpoint J -- Deposit details', () {
+    testWidgets(
+      'a deposit account shows interest rate, start date, maturity date, term, and an '
+      'Active status when maturity is in the future',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+        final String accountId = await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Fixed Deposit',
+          type: 'deposit',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.deposit,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        // Maturity well in the future relative to "today" in this repo's
+        // Checkpoint J working period -- see `deposit_status_test.dart`
+        // for the pure boundary coverage of the active/matured cutoff
+        // itself; this test only needs "clearly still active".
+        await depositRepo.createDetails(
+          profileId: profileId,
+          accountId: accountId,
+          depositType: DepositType.fixed,
+          termNumber: 12,
+          termUnit: DepositTermUnit.months,
+          startDateUtc: DateTime.utc(2026, 1, 1),
+          interestRateBasisPoints: 250,
+          interestMethod: DepositInterestMethod.simple,
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('depositDetailsCard')), findsOneWidget);
+        expect(find.text('Deposit details'), findsOneWidget);
+        expect(find.text('2.50%'), findsOneWidget);
+        expect(find.text('Jan 1, 2026'), findsOneWidget);
+        expect(find.text('Jan 1, 2027'), findsOneWidget);
+        expect(find.text('12 months'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('depositStatusBadge')),
+            matching: find.text('Active'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('a deposit account past its maturity date shows a Matured status', (
+      tester,
+    ) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Old Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(50000, 'JPY'),
+      );
+      // A one-year term starting in 2020 has long since matured.
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: accountId,
+        depositType: DepositType.fixed,
+        termNumber: 1,
+        termUnit: DepositTermUnit.years,
+        startDateUtc: DateTime.utc(2020, 1, 1),
+        interestRateBasisPoints: 100,
+        interestMethod: DepositInterestMethod.simple,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('depositStatusBadge')),
+          matching: find.text('Matured'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'a non-deposit account never shows the deposit details card at all',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Ordinary Wallet',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('depositDetailsCard')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'closing a deposit account leaves its deposit status unaffected -- Deposit Status and '
+      'Account Lifecycle status remain independent concepts, both shown, neither masking the '
+      'other',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+        final String accountId = await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Fixed Deposit',
+          type: 'deposit',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.deposit,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        // Details must be attached while the account is still active --
+        // `DepositRepository.createDetails` rejects an inactive account
+        // -- so close the account only AFTER creating its details.
+        await depositRepo.createDetails(
+          profileId: profileId,
+          accountId: accountId,
+          depositType: DepositType.fixed,
+          termNumber: 12,
+          termUnit: DepositTermUnit.months,
+          startDateUtc: DateTime.utc(2026, 1, 1),
+          interestRateBasisPoints: 250,
+          interestMethod: DepositInterestMethod.simple,
+        );
+        await accountRepo.softDelete(accountId);
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        expect(tester.takeException(), isNull);
+        // Account Lifecycle's own Closed badge still renders.
+        expect(find.byKey(const Key('accountClosedBadge')), findsOneWidget);
+        // The deposit details card, and its Active/Matured status, are
+        // entirely unaffected by the account being closed.
+        expect(find.byKey(const Key('depositDetailsCard')), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('depositStatusBadge')),
+            matching: find.text('Active'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('the deposit details card survives a narrow 320px width at a 1.6x text scale',
+        (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final (AppDatabase db, String profileId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+      final String accountId = await accountRepo.createClassifiedAccount(
+        profileId: profileId,
+        name: 'Fixed Deposit',
+        type: 'deposit',
+        balanceClass: BalanceClass.asset,
+        subtype: FinancialAccountSubtype.deposit,
+        currencyCode: 'JPY',
+        openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+      );
+      await depositRepo.createDetails(
+        profileId: profileId,
+        accountId: accountId,
+        depositType: DepositType.fixed,
+        termNumber: 12,
+        termUnit: DepositTermUnit.months,
+        startDateUtc: DateTime.utc(2026, 1, 1),
+        interestRateBasisPoints: 250,
+        interestMethod: DepositInterestMethod.simple,
+      );
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, accountId));
+      await openDetail(tester);
+
+      final Object? overflowException = tester.takeException();
+      if (overflowException != null) {
+        fail(
+          'Narrow-screen (320px) + 1.6x text scale deposit details card threw an '
+          'exception:\n\n$overflowException',
+        );
+      }
+      expect(find.byKey(const Key('depositDetailsCard')), findsOneWidget);
+    });
   });
 }

@@ -2322,18 +2322,19 @@ void main() {
     );
   });
 
-  // -- Checkpoint I (docs/20 §13.4 checkpoint I / §13.13): Home dashboard
-  // net worth / available-money / liquidity presentation. The
-  // underlying aggregation (available vs. net worth, deposit/liability
-  // treatment, closed-account treatment) already has dedicated,
-  // exhaustive coverage in `test/core/dashboard/dashboard_providers_test.dart`
-  // (per this file's own top-of-file note: presentation only here) --
-  // these tests exist only to lock in that `HomeScreen` actually wires
-  // that data up correctly: the new "Net worth" line appears only when
-  // it should, every pre-existing sibling section is unaffected, and the
-  // changed summary cards survive narrow-width + large-text-scale
-  // rendering.
-  group('Checkpoint I -- Home dashboard net worth line', () {
+  // -- Checkpoint J (docs/20 §13.14): Home privacy -- net worth is no
+  // longer shown on Home at all. `dashboardCurrencySummariesProvider`
+  // still computes `CurrencyDashboardSummary.netWorth` exactly as
+  // Checkpoint I left it (dedicated, exhaustive coverage remains in
+  // `test/core/dashboard/dashboard_providers_test.dart` and
+  // `test/core/networth/net_worth_providers_test.dart`) -- these tests
+  // exist only to lock in that `HomeScreen` itself never renders that
+  // figure, or the words "Net worth", anywhere, even in scenarios
+  // (deposit accounts, liabilities) where net worth and available
+  // balance genuinely differ. The full net-worth breakdown is only
+  // ever reachable via a deliberate tap on More's "Net Worth" row --
+  // see `more_screen_test.dart` and `net_worth_screen_test.dart`.
+  group('Checkpoint J -- Home privacy (no net worth shown)', () {
     /// Directly classifies each account via [AccountRepository.createClassifiedAccount]
     /// (Checkpoint B/G's real classification API) rather than
     /// [seededDb]'s plain-cash-only helper above, since these tests need
@@ -2360,8 +2361,8 @@ void main() {
     }
 
     testWidgets(
-      'a deposit makes the hero card show BOTH the (now-lower) available balance AND a '
-      '"Net worth" line, while a plain-cash secondary currency shows no such line at all',
+      'a deposit lowers available balance below net worth, but Home shows only the '
+      'available balance -- no "Net worth" text anywhere, on either currency card',
       (tester) async {
         useTallSurface(tester);
         final AppDatabase db = await seedClassifiedDb(living: 'JPY', home: 'USD');
@@ -2412,32 +2413,30 @@ void main() {
         expect(heroCard, findsOneWidget);
         expect(secondaryCard, findsOneWidget);
 
-        // Hero (JPY): available excludes the deposit (5000, not 105000)
-        // and a "Net worth" line appears with the full total (105000).
+        // Hero (JPY): shows ONLY the available balance (5000, deposit
+        // excluded) -- the deposit's 100000 net-worth-only contribution
+        // is nowhere on this screen.
         expect(find.descendant(of: heroCard, matching: find.text('¥5,000')), findsOneWidget);
+        expect(find.descendant(of: heroCard, matching: find.text('¥105,000')), findsNothing);
+
+        // Neither card, nor the screen as a whole, ever shows the words
+        // "Net worth" -- this is a privacy boundary, not a conditional
+        // display rule.
         expect(
           find.descendant(of: heroCard, matching: find.textContaining('Net worth')),
-          findsOneWidget,
+          findsNothing,
         );
-        expect(
-          find.descendant(of: heroCard, matching: find.text('Net worth: ¥105,000')),
-          findsOneWidget,
-        );
-
-        // Secondary (USD): plain cash only -- available equals net
-        // worth, so no "Net worth" line renders at all, exactly as
-        // before this checkpoint.
-        expect(find.descendant(of: secondaryCard, matching: find.text('\$20.00')), findsOneWidget);
         expect(
           find.descendant(of: secondaryCard, matching: find.textContaining('Net worth')),
           findsNothing,
         );
+        expect(find.textContaining('Net worth'), findsNothing);
       },
     );
 
     testWidgets(
-      'a mixed deposit + credit-card portfolio, plus a configured budget, leaves the budget '
-      'card and the accounts list section completely unaffected by the new net worth line',
+      'a mixed deposit + credit-card portfolio, plus a configured budget, never shows net '
+      'worth on Home -- the budget card and the accounts list section remain unaffected',
       (tester) async {
         useTallSurface(tester);
         final AppDatabase db = await seedClassifiedDb(living: 'JPY', home: 'JPY');
@@ -2488,8 +2487,11 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
 
-        // New net worth line: 5000 + 100000 - 30000 = 75000.
-        expect(find.text('Net worth: ¥75,000'), findsOneWidget);
+        // The would-be net worth figure (5000 + 100000 - 30000 =
+        // 75000) never appears, nor does the words "Net worth", even
+        // though this profile genuinely has a deposit and a liability.
+        expect(find.text('Net worth: ¥75,000'), findsNothing);
+        expect(find.textContaining('Net worth'), findsNothing);
 
         // Budget card is completely untouched by this checkpoint --
         // still renders the configured budget's own remaining figure.
@@ -2497,7 +2499,7 @@ void main() {
 
         // The Accounts list section (active-only, unrelated provider)
         // still lists every active account by name, unaffected by the
-        // new classified accounts or the dashboard aggregation change.
+        // dashboard privacy change.
         expect(find.text('Wallet'), findsOneWidget);
         expect(find.text('Fixed Deposit'), findsOneWidget);
         expect(find.text('Credit Card'), findsOneWidget);
@@ -2505,9 +2507,8 @@ void main() {
     );
 
     testWidgets(
-      'the hero card with both an available balance AND a net worth line survives a narrow '
-      '(320px-wide) screen at a 1.6x text scale without overflow, with both figures still '
-      'findable',
+      'the hero card survives a narrow (320px-wide) screen at a 1.6x text scale without '
+      'overflow, still showing only the available balance and never "Net worth"',
       (tester) async {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
@@ -2561,13 +2562,13 @@ void main() {
         final Object? overflowException = tester.takeException();
         if (overflowException != null) {
           fail(
-            'Narrow-screen (320px) + 1.6x text scale hero card (available + net worth) threw '
-            'an exception:\n\n$overflowException',
+            'Narrow-screen (320px) + 1.6x text scale hero card (available balance only) '
+            'threw an exception:\n\n$overflowException',
           );
         }
 
         expect(find.text('¥5,000'), findsOneWidget);
-        expect(find.text('Net worth: ¥75,000'), findsOneWidget);
+        expect(find.textContaining('Net worth'), findsNothing);
       },
     );
   });

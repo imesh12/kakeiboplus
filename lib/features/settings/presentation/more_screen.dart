@@ -133,8 +133,12 @@ class MoreScreen extends StatelessWidget {
             ),
           ]),
 
-          // Money Tools: Currency Converter (Insights/Exchange Rates
-          // omitted -- see class doc comment).
+          // Money Tools: Currency Converter, Net Worth (Insights/Exchange
+          // Rates omitted -- see class doc comment). Checkpoint J: Net
+          // Worth is the ONLY way to reach `NetWorthScreen` -- Home
+          // deliberately shows no net-worth figure (see
+          // `home_screen.dart`'s doc comment) -- so this row is a
+          // privacy boundary, not merely a convenience shortcut.
           sectionTitle(l10n.moreMoneyToolsSectionTitle),
           navGroup(<Widget>[
             navRow(
@@ -142,6 +146,12 @@ class MoreScreen extends StatelessWidget {
               color: _MoreRowColors.currencyConverter,
               title: l10n.currencyConverterTitle,
               onTap: () => context.push(AppRoutes.currencyConverter),
+            ),
+            navRow(
+              icon: Icons.account_balance_outlined,
+              color: _MoreRowColors.netWorth,
+              title: l10n.netWorthTitle,
+              onTap: () => context.push(AppRoutes.netWorth),
             ),
           ]),
 
@@ -229,4 +239,5 @@ class _MoreRowColors {
   static const Color appearance = Color(0xFFDB2777);
   static const Color cloudAccount = Color(0xFF64748B);
   static const Color currencyConverter = Color(0xFF0EA5E9);
+  static const Color netWorth = Color(0xFF7C3AED);
 }

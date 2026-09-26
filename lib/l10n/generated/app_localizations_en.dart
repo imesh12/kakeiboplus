@@ -200,11 +200,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get totalAvailableBalance => 'Total available balance';
 
   @override
-  String homeNetWorthLine(String amount) {
-    return 'Net worth: $amount';
-  }
-
-  @override
   String get incomeThisMonth => 'Income this month';
 
   @override
@@ -1215,4 +1210,77 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get addAccountExpiryMonthErrorMessage =>
       'Enter a month between 1 and 12.';
+
+  @override
+  String get netWorthTitle => 'Net Worth';
+
+  @override
+  String get netWorthScreenSubtitle =>
+      'Everything you own, minus everything you owe. Shown separately per currency -- amounts are never converted or combined.';
+
+  @override
+  String get netWorthTotalLabel => 'Net worth';
+
+  @override
+  String get totalAssetsLabel => 'Total assets';
+
+  @override
+  String get totalLiabilitiesLabel => 'Total liabilities';
+
+  @override
+  String get assetsSectionTitle => 'Assets';
+
+  @override
+  String get liabilitiesSectionTitle => 'Liabilities';
+
+  @override
+  String get assetsDepositBadge => 'Deposit';
+
+  @override
+  String get netWorthEmptyMessage =>
+      'No accounts yet. Add one to see your net worth here.';
+
+  @override
+  String couldNotLoadNetWorth(String error) {
+    return 'Could not load your net worth: $error';
+  }
+
+  @override
+  String get depositDetailsSectionTitle => 'Deposit details';
+
+  @override
+  String get depositInterestRateLabel => 'Interest rate';
+
+  @override
+  String get depositStartDateLabel => 'Start date';
+
+  @override
+  String get depositMaturityDateLabel => 'Maturity date';
+
+  @override
+  String get depositTermLabel => 'Term';
+
+  @override
+  String get depositStatusActive => 'Active';
+
+  @override
+  String get depositStatusMatured => 'Matured';
+
+  @override
+  String get depositTermUnitDay => 'day';
+
+  @override
+  String get depositTermUnitDays => 'days';
+
+  @override
+  String get depositTermUnitMonth => 'month';
+
+  @override
+  String get depositTermUnitMonths => 'months';
+
+  @override
+  String get depositTermUnitYear => 'year';
+
+  @override
+  String get depositTermUnitYears => 'years';
 }

@@ -244,7 +244,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Appearance'), findsOneWidget);
+
+      // `MoreScreen`'s body is a `ListView` -- like any lazy `Scrollable`,
+      // it only mounts children within its build/cache extent, so a row
+      // far enough down the list is not yet in the element tree right
+      // after the first `pumpAndSettle` (see `more_screen_test.dart`'s
+      // own `scrollUntilFound` doc comment for the same observation).
+      // Checkpoint J inserted a new "Net Worth" row into the Money Tools
+      // group, ABOVE Organization/Personalization in render order -- that
+      // pushed "Appearance" (Personalization) far enough down the list
+      // that it fell out of the initially-mounted range, which is why
+      // this test started failing after Checkpoint J even though nothing
+      // about Appearance itself changed. Rather than asserting on it
+      // un-scrolled (stale assumption from before Net Worth existed),
+      // every row below the fold is scrolled into view first, in the
+      // same top-to-bottom order `MoreScreen` renders its sections --
+      // matching the disclaimer's own pre-existing scroll below, and the
+      // established idiom in `more_screen_test.dart`.
+      final Finder netWorthRow = find.text('Net Worth');
+      await tester.scrollUntilVisible(netWorthRow, 300.0);
+      await tester.pumpAndSettle();
+      expect(netWorthRow, findsOneWidget); // Checkpoint J: Money Tools' new row, under Dark.
+
+      final Finder appearanceRow = find.text('Appearance');
+      await tester.scrollUntilVisible(appearanceRow, 300.0);
+      await tester.pumpAndSettle();
+      expect(appearanceRow, findsOneWidget);
+
       // The disclaimer is the ListView's last child -- see the CP8.1
       // verification fix in `settings_screen_test.dart`'s pre-checkpoint
       // history for why this needs a scroll to become mounted before it

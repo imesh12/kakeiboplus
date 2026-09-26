@@ -468,26 +468,23 @@ class _HeroCurrencyCard extends StatelessWidget {
                     color: colors.onPrimaryContainer.withValues(alpha: 0.85),
                   ),
                 ),
-                // Checkpoint I (docs/20 §13.4 checkpoint I): a single,
-                // restrained secondary line for net worth -- shown ONLY
-                // when it actually differs from the available balance
-                // already shown above (i.e. this currency holds at
-                // least one deposit and/or liability account, active or
-                // closed). For the common case (only cash/bank/savings/
-                // wallet accounts) `netWorth == availableBalance` and
-                // this renders nothing at all, keeping the hero card
-                // exactly as restrained as before this checkpoint --
-                // "do not turn Home into an accounting report."
-                if (summary.netWorth != summary.availableBalance)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      l10n.homeNetWorthLine(_formatter.format(summary.netWorth)),
-                      style: context.appTypography.eyebrow?.copyWith(
-                        color: colors.onPrimaryContainer.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ),
+                // Checkpoint J (docs/20 §13.14): Home shows available/
+                // liquid money ONLY -- no net-worth figure of any kind
+                // renders anywhere on this screen, for any currency,
+                // ever. Checkpoint I's net-worth line (a conditional
+                // "Net worth: <amount>" caption shown only when it
+                // differed from the available balance above) lived here
+                // and has been removed as a presentation-privacy
+                // boundary: net worth (which includes deposit principal
+                // and liability balances) is now shown ONLY on the
+                // dedicated `NetWorthScreen`, reached through a
+                // deliberate tap on More's "Net Worth" row -- never
+                // surfaced passively on the screen the user sees by
+                // default. `CurrencyDashboardSummary.netWorth` itself is
+                // UNCHANGED and still computed the same way (Checkpoint
+                // I's calculation is not undone) -- `NetWorthScreen`'s
+                // own provider consumes that same definition; only this
+                // screen's UI stopped displaying it.
               ],
             ),
         ),
@@ -582,17 +579,9 @@ class _SecondaryCurrencyCard extends StatelessWidget {
           // now correctly describes `availableBalance` -- see the hero
           // card's identical caption comment.
           Text(l10n.totalAvailableBalance, style: context.appTypography.eyebrow),
-          // Checkpoint I: see `_HeroCurrencyCard`'s identical net-worth
-          // line for the full doc comment -- same restrained,
-          // only-when-it-differs rule applies here.
-          if (summary.netWorth != summary.availableBalance)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                l10n.homeNetWorthLine(_formatter.format(summary.netWorth)),
-                style: context.appTypography.eyebrow,
-              ),
-            ),
+          // Checkpoint J: see `_HeroCurrencyCard`'s identical doc comment
+          // -- this card never shows a net-worth figure either. Net
+          // worth is now exclusively on `NetWorthScreen`.
           const SizedBox(height: 12),
           _MonthlyMetricsSection(summary: summary, emphasize: false),
         ],

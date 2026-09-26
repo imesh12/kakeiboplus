@@ -19,6 +19,7 @@ import '../../features/onboarding/presentation/profile_providers.dart';
 import '../../features/recurring/presentation/recurring_screen.dart';
 import '../../features/settings/presentation/international_preferences_screen.dart';
 import '../../features/settings/presentation/more_screen.dart';
+import '../../features/networth/presentation/net_worth_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/settings/presentation/theme_customization_screen.dart';
 import '../../features/transactions/presentation/activity_screen.dart';
@@ -176,6 +177,10 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.cloudAccount,
         builder: (context, state) => const CloudAccountScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.netWorth,
+        builder: (context, state) => const NetWorthScreen(),
       ),
     ],
   );

@@ -116,14 +116,6 @@
     }
   },
   "totalAvailableBalance": "利用可能残高の合計",
-  "homeNetWorthLine": "純資産: {amount}",
-  "@homeNetWorthLine": {
-    "placeholders": {
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
   "incomeThisMonth": "今月の収入",
   "spentThisMonth": "今月の支出",
   "dailySpendingPace": "1日あたりの支出ペース",
@@ -657,5 +649,35 @@
       }
     }
   },
-  "addAccountExpiryMonthErrorMessage": "1から12の間の月を入力してください。"
+  "addAccountExpiryMonthErrorMessage": "1から12の間の月を入力してください。",
+  "netWorthTitle": "純資産",
+  "netWorthScreenSubtitle": "所有するすべての資産から負債を引いた金額です。通貨ごとに別々に表示され、換算や合算は行いません。",
+  "netWorthTotalLabel": "純資産",
+  "totalAssetsLabel": "資産合計",
+  "totalLiabilitiesLabel": "負債合計",
+  "assetsSectionTitle": "資産",
+  "liabilitiesSectionTitle": "負債",
+  "assetsDepositBadge": "預金",
+  "netWorthEmptyMessage": "口座がまだありません。口座を追加すると純資産が表示されます。",
+  "couldNotLoadNetWorth": "純資産を読み込めませんでした: {error}",
+  "@couldNotLoadNetWorth": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "depositDetailsSectionTitle": "預金の詳細",
+  "depositInterestRateLabel": "金利",
+  "depositStartDateLabel": "開始日",
+  "depositMaturityDateLabel": "満期日",
+  "depositTermLabel": "期間",
+  "depositStatusActive": "運用中",
+  "depositStatusMatured": "満期",
+  "depositTermUnitDay": "日",
+  "depositTermUnitDays": "日",
+  "depositTermUnitMonth": "か月",
+  "depositTermUnitMonths": "か月",
+  "depositTermUnitYear": "年",
+  "depositTermUnitYears": "年"
 }

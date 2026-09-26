@@ -196,11 +196,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get totalAvailableBalance => '利用可能残高の合計';
 
   @override
-  String homeNetWorthLine(String amount) {
-    return '純資産: $amount';
-  }
-
-  @override
   String get incomeThisMonth => '今月の収入';
 
   @override
@@ -1176,4 +1171,76 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get addAccountExpiryMonthErrorMessage => '1から12の間の月を入力してください。';
+
+  @override
+  String get netWorthTitle => '純資産';
+
+  @override
+  String get netWorthScreenSubtitle =>
+      '所有するすべての資産から負債を引いた金額です。通貨ごとに別々に表示され、換算や合算は行いません。';
+
+  @override
+  String get netWorthTotalLabel => '純資産';
+
+  @override
+  String get totalAssetsLabel => '資産合計';
+
+  @override
+  String get totalLiabilitiesLabel => '負債合計';
+
+  @override
+  String get assetsSectionTitle => '資産';
+
+  @override
+  String get liabilitiesSectionTitle => '負債';
+
+  @override
+  String get assetsDepositBadge => '預金';
+
+  @override
+  String get netWorthEmptyMessage => '口座がまだありません。口座を追加すると純資産が表示されます。';
+
+  @override
+  String couldNotLoadNetWorth(String error) {
+    return '純資産を読み込めませんでした: $error';
+  }
+
+  @override
+  String get depositDetailsSectionTitle => '預金の詳細';
+
+  @override
+  String get depositInterestRateLabel => '金利';
+
+  @override
+  String get depositStartDateLabel => '開始日';
+
+  @override
+  String get depositMaturityDateLabel => '満期日';
+
+  @override
+  String get depositTermLabel => '期間';
+
+  @override
+  String get depositStatusActive => '運用中';
+
+  @override
+  String get depositStatusMatured => '満期';
+
+  @override
+  String get depositTermUnitDay => '日';
+
+  @override
+  String get depositTermUnitDays => '日';
+
+  @override
+  String get depositTermUnitMonth => 'か月';
+
+  @override
+  String get depositTermUnitMonths => 'か月';
+
+  @override
+  String get depositTermUnitYear => '年';
+
+  @override
+  String get depositTermUnitYears => '年';
 }

@@ -6,7 +6,10 @@ import 'package:intl/intl.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/providers.dart';
 import '../../../core/database/repositories/account_repository.dart' show AccountRowX;
+import '../../../core/database/repositories/deposit_repository.dart' show DepositDetailsRowX;
 import '../../../core/database/services/account_lifecycle_service.dart';
+import '../../../core/finance/deposit_status.dart';
+import '../../../core/finance/deposit_term_unit.dart';
 import '../../../core/finance/financial_account_subtype.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
@@ -338,6 +341,16 @@ class _AccountDetailBody extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 24),
+        // Checkpoint J: a deposit-only card of exactly the fields the
+        // persisted `DepositDetails` model actually supports -- see
+        // `_DepositDetailsSection`'s own doc for what is (and is
+        // deliberately not) shown. Renders nothing at all for every
+        // other account subtype, and nothing (not even an empty card)
+        // if this deposit account somehow has no details row yet.
+        if (account.subtypeValue == FinancialAccountSubtype.deposit) ...<Widget>[
+          _DepositDetailsSection(accountId: account.id),
+          const SizedBox(height: 24),
+        ],
         // [Recent activity] -- account-scoped, only if it can be shown
         // without any new accounting rule (it can: see
         // `accountRecentActivityProvider`'s doc comment).
@@ -345,6 +358,118 @@ class _AccountDetailBody extends ConsumerWidget {
         const SizedBox(height: 8),
         _RecentActivitySection(accountId: account.id),
       ],
+    );
+  }
+}
+
+/// Checkpoint J (docs/20 §13.14): upgrades the deposit Account Detail
+/// with exactly the fields the persisted `DepositDetails` model
+/// actually supports -- interest rate, start date, maturity date, term,
+/// and a derived Active/Matured status (see `DepositStatus`'s own doc
+/// for why status is derived purely from `maturityDate`, independent of
+/// [AccountRow.isActive]/`deletedAt`). Deliberately does NOT show
+/// `DepositCalculator`'s estimated-interest/estimated-maturity-value
+/// figures (out of this checkpoint's scope), does not expose
+/// `depositType`/`autoRenew`/`renewalMode`/installment fields (not
+/// listed in this checkpoint's required minimum), and never fabricates
+/// a status this model cannot support (e.g. "pending funding").
+/// "Current/principal information" is already shown above by the
+/// existing, generic hero balance + "Opening balance" metadata row --
+/// this section does not duplicate either.
+class _DepositDetailsSection extends ConsumerWidget {
+  const _DepositDetailsSection({required this.accountId});
+  final String accountId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final DepositDetailsRow? details = ref.watch(depositDetailsForAccountProvider(accountId));
+    if (details == null) {
+      return const SizedBox.shrink();
+    }
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    final DateTime today = DateTime.now().toUtc();
+    final DateTime todayCalendarOnly = DateTime.utc(today.year, today.month, today.day);
+    final DepositStatus status = DepositStatus.fromMaturityDate(
+      maturityDateUtc: details.maturityDate,
+      nowUtc: todayCalendarOnly,
+    );
+    final String statusLabel = switch (status) {
+      DepositStatus.active => l10n.depositStatusActive,
+      DepositStatus.matured => l10n.depositStatusMatured,
+    };
+
+    final String termUnitWord = switch (details.termUnitValue) {
+      DepositTermUnit.days =>
+        details.termNumber == 1 ? l10n.depositTermUnitDay : l10n.depositTermUnitDays,
+      DepositTermUnit.months =>
+        details.termNumber == 1 ? l10n.depositTermUnitMonth : l10n.depositTermUnitMonths,
+      DepositTermUnit.years =>
+        details.termNumber == 1 ? l10n.depositTermUnitYear : l10n.depositTermUnitYears,
+    };
+    // Basis points -> percent with 2 decimal places (550 -> "5.50%").
+    // No existing shared percent formatter exists in this codebase
+    // (docs/20 §12.8's basis-points representation is otherwise only
+    // ever consumed by `DepositCalculator`'s exact-fraction arithmetic,
+    // never displayed directly before this checkpoint) -- this is a
+    // minimal, local, display-only conversion, not a new shared money/
+    // percent abstraction.
+    final String interestRateLabel =
+        '${(details.interestRateBasisPoints / 100).toStringAsFixed(2)}%';
+
+    return AppCard(
+      key: const Key('depositDetailsCard'),
+      bordered: true,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    l10n.depositDetailsSectionTitle,
+                    style: context.appTypography.secondaryBody,
+                  ),
+                ),
+                Container(
+                  key: const Key('depositStatusBadge'),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: context.appTypography.caption?.copyWith(color: colors.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          _DetailRow(label: l10n.depositInterestRateLabel, value: interestRateLabel),
+          const Divider(height: 1),
+          _DetailRow(
+            label: l10n.depositStartDateLabel,
+            value: DateFormat.yMMMd().format(details.startDate),
+          ),
+          const Divider(height: 1),
+          _DetailRow(
+            label: l10n.depositMaturityDateLabel,
+            value: DateFormat.yMMMd().format(details.maturityDate),
+          ),
+          const Divider(height: 1),
+          _DetailRow(
+            label: l10n.depositTermLabel,
+            value: '${details.termNumber} $termUnitWord',
+          ),
+        ],
+      ),
     );
   }
 }

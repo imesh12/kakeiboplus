@@ -116,15 +116,6 @@
     }
   },
   "totalAvailableBalance": "Total available balance",
-  "homeNetWorthLine": "Net worth: {amount}",
-  "@homeNetWorthLine": {
-    "description": "Checkpoint I: a small secondary line on the Home dashboard currency card, shown only when net worth (assets minus liabilities, including deposit principal and closed-account balances) differs from the immediately available balance shown as the card's primary figure.",
-    "placeholders": {
-      "amount": {
-        "type": "String"
-      }
-    }
-  },
   "incomeThisMonth": "Income this month",
   "spentThisMonth": "Spent this month",
   "dailySpendingPace": "Daily spending pace",
@@ -658,5 +649,60 @@
       }
     }
   },
-  "addAccountExpiryMonthErrorMessage": "Enter a month between 1 and 12."
+  "addAccountExpiryMonthErrorMessage": "Enter a month between 1 and 12.",
+  "netWorthTitle": "Net Worth",
+  "@netWorthTitle": {
+    "description": "Checkpoint J: title of the dedicated Net Worth screen, and the label of the More-screen row that opens it. Reached only via a deliberate tap from More -- never shown on Home."
+  },
+  "netWorthScreenSubtitle": "Everything you own, minus everything you owe. Shown separately per currency -- amounts are never converted or combined.",
+  "@netWorthScreenSubtitle": {
+    "description": "Checkpoint J: a short explanatory line at the top of the Net Worth screen, clarifying that multiple currencies are shown as independent sections rather than one converted total."
+  },
+  "netWorthTotalLabel": "Net worth",
+  "@netWorthTotalLabel": {
+    "description": "Checkpoint J: the small eyebrow caption under a currency's hero net-worth figure on the Net Worth screen."
+  },
+  "totalAssetsLabel": "Total assets",
+  "totalLiabilitiesLabel": "Total liabilities",
+  "assetsSectionTitle": "Assets",
+  "liabilitiesSectionTitle": "Liabilities",
+  "assetsDepositBadge": "Deposit",
+  "@assetsDepositBadge": {
+    "description": "Checkpoint J: a small badge next to a deposit account's line in the Net Worth screen's Assets list, distinguishing it from ordinary cash/bank/wallet assets."
+  },
+  "netWorthEmptyMessage": "No accounts yet. Add one to see your net worth here.",
+  "@netWorthEmptyMessage": {
+    "description": "Checkpoint J: empty state for the Net Worth screen when the profile genuinely has no accounts at all."
+  },
+  "couldNotLoadNetWorth": "Could not load your net worth: {error}",
+  "@couldNotLoadNetWorth": {
+    "description": "Checkpoint J: error state for the Net Worth screen.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "depositDetailsSectionTitle": "Deposit details",
+  "@depositDetailsSectionTitle": {
+    "description": "Checkpoint J: title of the deposit-specific details card on Account Detail, shown only for deposit-subtype accounts."
+  },
+  "depositInterestRateLabel": "Interest rate",
+  "depositStartDateLabel": "Start date",
+  "depositMaturityDateLabel": "Maturity date",
+  "depositTermLabel": "Term",
+  "depositStatusActive": "Active",
+  "@depositStatusActive": {
+    "description": "Checkpoint J: shown when today is strictly before the deposit's maturity date. Independent of the account's own open/closed lifecycle status."
+  },
+  "depositStatusMatured": "Matured",
+  "@depositStatusMatured": {
+    "description": "Checkpoint J: shown when today is on or after the deposit's maturity date. Says nothing about whether the principal was withdrawn or rolled over. Independent of the account's own open/closed lifecycle status."
+  },
+  "depositTermUnitDay": "day",
+  "depositTermUnitDays": "days",
+  "depositTermUnitMonth": "month",
+  "depositTermUnitMonths": "months",
+  "depositTermUnitYear": "year",
+  "depositTermUnitYears": "years"
 }

@@ -132,6 +132,10 @@ void main() {
           path: AppRoutes.cloudAccount,
           builder: (context, state) => const Scaffold(body: Text('CLOUD_ACCOUNT_MARKER')),
         ),
+        GoRoute(
+          path: AppRoutes.netWorth,
+          builder: (context, state) => const Scaffold(body: Text('NET_WORTH_MARKER')),
+        ),
       ],
     );
     return MaterialApp.router(
@@ -193,6 +197,7 @@ void main() {
         'Budgets',
         'Savings Goals',
         'Currency Converter',
+        'Net Worth',
         'Categories',
         'Profile',
         'International preferences',
@@ -209,6 +214,7 @@ void main() {
       ('Savings Goals', 'GOALS_MARKER'),
       ('Recurring', 'RECURRING_MARKER'),
       ('Currency Converter', 'CURRENCY_CONVERTER_MARKER'),
+      ('Net Worth', 'NET_WORTH_MARKER'),
       ('Categories', 'CATEGORIES_MARKER'),
       ('Profile', 'PROFILE_MARKER'),
       ('International preferences', 'INTERNATIONAL_PREFS_MARKER'),
@@ -308,6 +314,7 @@ void main() {
       await scrollUntilFound(tester, find.text('マネーツール'));
       expect(find.text('マネーツール'), findsOneWidget);
       expect(find.text('通貨換算'), findsOneWidget); // currencyConverterTitle
+      expect(find.text('純資産'), findsOneWidget); // netWorthTitle
 
       await scrollUntilFound(tester, find.text('整理'));
       expect(find.text('整理'), findsOneWidget);

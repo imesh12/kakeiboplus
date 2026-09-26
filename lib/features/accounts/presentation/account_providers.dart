@@ -109,3 +109,28 @@ final AutoDisposeProviderFamily<AsyncValue<Money>, AccountRow> accountBalancePro
   );
   return AsyncValue<Money>.data(balance);
 });
+
+/// Checkpoint J: the active `DepositDetails` row for one deposit
+/// account, reactively -- `null` once none exists (not a deposit-
+/// subtype account, or its details were somehow soft-deleted) or while
+/// still loading/erroring is collapsed to `null` too, matching this
+/// file's own `monthlyBudgetSummaryProvider`-style "momentary loading
+/// collapses to the empty/absent state" convention rather than
+/// exposing a separate loading flicker for what is, in practice, an
+/// instantly-resolving local Drift query. Autodispose + family, the
+/// same convention [accountByIdProvider] already established: only
+/// `AccountDetailScreen`'s deposit-specific card watches this, for one
+/// specific account, so there is no reason for this stream to outlive
+/// that screen.
+final AutoDisposeProviderFamily<DepositDetailsRow?, String> depositDetailsForAccountProvider =
+    Provider.autoDispose.family<DepositDetailsRow?, String>((ref, accountId) {
+  final AsyncValue<DepositDetailsRow?> detailsAsync = ref.watch(
+    _depositDetailsStreamProvider(accountId),
+  );
+  return detailsAsync.valueOrNull;
+});
+
+final AutoDisposeStreamProviderFamily<DepositDetailsRow?, String> _depositDetailsStreamProvider =
+    StreamProvider.autoDispose.family<DepositDetailsRow?, String>((ref, accountId) {
+  return ref.watch(depositRepositoryProvider).watchForAccount(accountId);
+});

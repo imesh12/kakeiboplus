@@ -440,12 +440,6 @@ abstract class AppLocalizations {
   /// **'Total available balance'**
   String get totalAvailableBalance;
 
-  /// Checkpoint I: a small secondary line on the Home dashboard currency card, shown only when net worth (assets minus liabilities, including deposit principal and closed-account balances) differs from the immediately available balance shown as the card's primary figure.
-  ///
-  /// In en, this message translates to:
-  /// **'Net worth: {amount}'**
-  String homeNetWorthLine(String amount);
-
   /// No description provided for @incomeThisMonth.
   ///
   /// In en, this message translates to:
@@ -2241,6 +2235,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter a month between 1 and 12.'**
   String get addAccountExpiryMonthErrorMessage;
+
+  /// Checkpoint J: title of the dedicated Net Worth screen, and the label of the More-screen row that opens it. Reached only via a deliberate tap from More -- never shown on Home.
+  ///
+  /// In en, this message translates to:
+  /// **'Net Worth'**
+  String get netWorthTitle;
+
+  /// Checkpoint J: a short explanatory line at the top of the Net Worth screen, clarifying that multiple currencies are shown as independent sections rather than one converted total.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything you own, minus everything you owe. Shown separately per currency -- amounts are never converted or combined.'**
+  String get netWorthScreenSubtitle;
+
+  /// Checkpoint J: the small eyebrow caption under a currency's hero net-worth figure on the Net Worth screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth'**
+  String get netWorthTotalLabel;
+
+  /// No description provided for @totalAssetsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total assets'**
+  String get totalAssetsLabel;
+
+  /// No description provided for @totalLiabilitiesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total liabilities'**
+  String get totalLiabilitiesLabel;
+
+  /// No description provided for @assetsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assets'**
+  String get assetsSectionTitle;
+
+  /// No description provided for @liabilitiesSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Liabilities'**
+  String get liabilitiesSectionTitle;
+
+  /// Checkpoint J: a small badge next to a deposit account's line in the Net Worth screen's Assets list, distinguishing it from ordinary cash/bank/wallet assets.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit'**
+  String get assetsDepositBadge;
+
+  /// Checkpoint J: empty state for the Net Worth screen when the profile genuinely has no accounts at all.
+  ///
+  /// In en, this message translates to:
+  /// **'No accounts yet. Add one to see your net worth here.'**
+  String get netWorthEmptyMessage;
+
+  /// Checkpoint J: error state for the Net Worth screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your net worth: {error}'**
+  String couldNotLoadNetWorth(String error);
+
+  /// Checkpoint J: title of the deposit-specific details card on Account Detail, shown only for deposit-subtype accounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit details'**
+  String get depositDetailsSectionTitle;
+
+  /// No description provided for @depositInterestRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest rate'**
+  String get depositInterestRateLabel;
+
+  /// No description provided for @depositStartDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Start date'**
+  String get depositStartDateLabel;
+
+  /// No description provided for @depositMaturityDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Maturity date'**
+  String get depositMaturityDateLabel;
+
+  /// No description provided for @depositTermLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Term'**
+  String get depositTermLabel;
+
+  /// Checkpoint J: shown when today is strictly before the deposit's maturity date. Independent of the account's own open/closed lifecycle status.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get depositStatusActive;
+
+  /// Checkpoint J: shown when today is on or after the deposit's maturity date. Says nothing about whether the principal was withdrawn or rolled over. Independent of the account's own open/closed lifecycle status.
+  ///
+  /// In en, this message translates to:
+  /// **'Matured'**
+  String get depositStatusMatured;
+
+  /// No description provided for @depositTermUnitDay.
+  ///
+  /// In en, this message translates to:
+  /// **'day'**
+  String get depositTermUnitDay;
+
+  /// No description provided for @depositTermUnitDays.
+  ///
+  /// In en, this message translates to:
+  /// **'days'**
+  String get depositTermUnitDays;
+
+  /// No description provided for @depositTermUnitMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'month'**
+  String get depositTermUnitMonth;
+
+  /// No description provided for @depositTermUnitMonths.
+  ///
+  /// In en, this message translates to:
+  /// **'months'**
+  String get depositTermUnitMonths;
+
+  /// No description provided for @depositTermUnitYear.
+  ///
+  /// In en, this message translates to:
+  /// **'year'**
+  String get depositTermUnitYear;
+
+  /// No description provided for @depositTermUnitYears.
+  ///
+  /// In en, this message translates to:
+  /// **'years'**
+  String get depositTermUnitYears;
 }
 
 class _AppLocalizationsDelegate

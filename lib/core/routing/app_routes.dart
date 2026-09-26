@@ -124,4 +124,15 @@ abstract class AppRoutes {
   /// row, same no-new-bottom-nav-destination pattern as
   /// [themeCustomization]/[currencyConverter] above.
   static const String cloudAccount = '/cloud-account';
+
+  /// The dedicated Net Worth screen -- Checkpoint J (docs/20 §13.14).
+  /// Reached ONLY via a deliberate tap on More's new "Net Worth" row
+  /// (see `MoreScreen`) -- never from Home, and never auto-navigated to.
+  /// This is a privacy-by-navigation boundary, not merely a routing
+  /// convenience: Home shows available/liquid money only, and a user's
+  /// full net worth (including deposit principal and liabilities) is
+  /// shown only after this deliberate extra step. Same no-new-bottom-
+  /// nav-destination pattern as [themeCustomization]/[currencyConverter]/
+  /// [cloudAccount] above.
+  static const String netWorth = '/net-worth';
 }
