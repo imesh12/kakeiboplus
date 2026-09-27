@@ -23,15 +23,27 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // row is left with `color_key = null`, and a fresh row can still be
 // written with the new field.
 //
-// Deliberately a MINIMAL fixture -- only `currencies`/`profiles`/
-// `categories` (the one table this step touches, plus its own FK
-// dependencies) -- following the exact same "minimal fixture" reasoning
-// `recurring_notifications_migration_test.dart`'s own file-level doc
-// comment already establishes for a single-column-add step: a v13
-// fixture only triggers this ONE `from < 14` branch when opened by
-// TODAY's `AppDatabase` (every earlier `from < N` branch, N <= 13, is
-// already false for `from == 13`), so no other table needs to exist
-// here at all.
+// Originally a MINIMAL fixture -- only `currencies`/`profiles`/
+// `categories` (the one table the v13 -> v14 step itself touches, plus
+// its own FK dependencies) -- following the exact same "minimal
+// fixture" reasoning `recurring_notifications_migration_test.dart`'s
+// own file-level doc comment establishes for a single-column-add step.
+//
+// Checkpoint U2 repair: `accounts`/`transactions`/`recurring_rules` were
+// added below for a reason unrelated to the v13 -> v14 step this test
+// targets -- opening this fixture through the CURRENT `AppDatabase` also
+// runs every LATER `onUpgrade` branch up to today's schema version,
+// including Checkpoint U2's `from < 15` branch, which runs `ALTER TABLE
+// transactions ADD COLUMN service_identity_key ...` and (for `from >=
+// 4`, which v13 satisfies) the same on `recurring_rules`. Those
+// statements fail with "no such table" if the tables aren't here --
+// exactly the same class of gap Checkpoint U1's own repair fixed in
+// `cloud_account_links_migration_test.dart`/
+// `recurring_notifications_migration_test.dart` (see
+// `docs/14_DECISION_LOG.md`'s ADR-044 repair note). Their shape below is
+// each table's historically accurate pre-v15 shape; no row is ever
+// inserted into `accounts`/`transactions`/`recurring_rules` -- only
+// their existence is needed for the later `ALTER TABLE`s to succeed.
 void main() {
   test(
     'v13 -> v14 upgrade adds categories.color_key, backfills the 8 system categories '
@@ -82,6 +94,63 @@ void main() {
             sort_order INTEGER NOT NULL DEFAULT 0,
             is_system INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE accounts (
+            id TEXT NOT NULL,
+            profile_id TEXT NOT NULL REFERENCES profiles (id),
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            currency_code TEXT NOT NULL REFERENCES currencies (code),
+            opening_balance_minor_units INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE transactions (
+            id TEXT NOT NULL,
+            profile_id TEXT NOT NULL REFERENCES profiles (id),
+            account_id TEXT NOT NULL REFERENCES accounts (id),
+            destination_account_id TEXT REFERENCES accounts (id),
+            type TEXT NOT NULL,
+            amount_minor_units INTEGER NOT NULL,
+            currency_code TEXT NOT NULL REFERENCES currencies (code),
+            category_id TEXT REFERENCES categories (id),
+            note TEXT,
+            occurred_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_status TEXT NOT NULL DEFAULT 'localOnly',
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE recurring_rules (
+            id TEXT NOT NULL,
+            profile_id TEXT NOT NULL REFERENCES profiles (id),
+            kind TEXT NOT NULL,
+            name TEXT NOT NULL,
+            amount_minor_units INTEGER NOT NULL,
+            currency_code TEXT NOT NULL REFERENCES currencies (code),
+            account_id TEXT NOT NULL REFERENCES accounts (id),
+            destination_account_id TEXT REFERENCES accounts (id),
+            category_id TEXT REFERENCES categories (id),
+            note TEXT,
+            frequency TEXT NOT NULL,
+            interval INTEGER NOT NULL DEFAULT 1,
+            start_date INTEGER NOT NULL,
+            end_date INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            notifications_enabled INTEGER NOT NULL DEFAULT 0,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_status TEXT NOT NULL DEFAULT 'localOnly',
             PRIMARY KEY (id)
           );
         ''');
@@ -152,6 +221,16 @@ void main() {
       final CategoryRow fresh =
           await (db.select(db.categories)..where((tbl) => tbl.id.equals('user-cat-2'))).getSingle();
       expect(fresh.colorKey, 'blue');
+
+      // Checkpoint U2 repair: proves this v13 fixture also survives
+      // every LATER `onUpgrade` branch, in particular the new `from <
+      // 15` step -- `transactions`/`recurring_rules` are still present
+      // and queryable, which they would not be if that step's `ALTER
+      // TABLE` had failed.
+      final List<Transaction> transactionRows = await db.select(db.transactions).get();
+      expect(transactionRows, isEmpty);
+      final List<RecurringRuleRow> recurringRuleRows = await db.select(db.recurringRules).get();
+      expect(recurringRuleRows, isEmpty);
     },
   );
 

@@ -2,107 +2,103 @@ import 'package:flutter/material.dart';
 
 import '../../categories/domain/category_color.dart';
 
-/// Checkpoint U1 (Category, Service, Currency & Card Visual Identity
-/// Foundation): a SEPARATE identity catalog for services/subscriptions
-/// (e.g. "Netflix", "Spotify") -- category ("Entertainment") and
-/// service ("Netflix") are deliberately different concepts, per the
-/// checkpoint brief's own explicit requirement.
+/// Checkpoint U2 (Service / Merchant Identity Integration & App-Wide
+/// Financial Visual Consistency): the coarse VISUAL family a service
+/// identity belongs to -- "streaming", "music", "cloud infrastructure",
+/// etc. Every icon/color this app ever shows for a service -- named
+/// (Netflix) or generic ("Streaming service") -- resolves through one of
+/// these 8 families; see `ServiceIdentityDefinition` in
+/// `service_identity_catalog.dart` for the NAMED layer built on top of
+/// this one.
 ///
-/// # Why this is a family catalog, not a brand-logo catalog
+/// # Evolves U1's `ServiceIdentityKey`, does not replace its architecture
 ///
-/// The brief requires: use official/licensed/permitted brand assets
-/// WHERE APPROPRIATE, or otherwise fall back to a neutral service
-/// identity -- and separately forbids ever fabricating an approximation
-/// of a real trademark, recoloring a brand logo, or depending on a
-/// remote logo URL. This codebase has no licensed brand-asset source
-/// available to it (no asset files, no vetted logo package -- see this
-/// checkpoint's own audit in `docs/14_DECISION_LOG.md` ADR-044), so the
-/// only choice consistent with the brief's own rules is the neutral
-/// fallback branch: every [ServiceIdentityKey] here names a service
-/// FAMILY (streaming video, music, cloud storage, AI/software,
-/// productivity, gaming) and resolves to a generic, unbranded icon +
-/// color -- never a specific company's mark. This is a deliberate,
-/// explicit choice, not an oversight: it satisfies "never fabricate a
-/// trademark approximation" and "never depend on a remote logo" at zero
-/// risk, while still proving the "category identity and service
-/// identity are two separate catalogs" architecture the brief asks for.
-/// A future checkpoint that gains a genuine licensed-asset source can
-/// extend this enum with specific branded entries without changing
-/// [serviceIdentityIconFor]/[serviceIdentityColorFor]'s call sites.
+/// U1 shipped this exact enum under the name `ServiceIdentityKey` with 7
+/// values, deliberately unwired to any persisted field (its own doc
+/// comment: "nothing yet persists a selection"). Since nothing has ever
+/// stored one of its `storageValue` strings anywhere (confirmed: no DB
+/// column existed for it before this checkpoint), renaming it here to
+/// `ServiceIdentityFamily` -- and splitting its old single `aiSoftware`
+/// value into separate [cloudInfrastructure] and [ai] families, matching
+/// this checkpoint's brief -- changes no persisted data and breaks no
+/// migration. The resolution architecture itself (a fixed, generic,
+/// unbranded icon+color per value, reusing `CategoryColorKey`'s palette
+/// rather than a second one) is unchanged from U1.
 ///
-/// # Not wired into any screen yet
+/// # Still a family catalog, not a brand-logo catalog
 ///
-/// No existing transaction/recurring-rule/subscription feature in this
-/// codebase persists a "which service" selection anywhere (the
-/// pre-checkpoint audit found no service/subscription matching logic
-/// at all) -- so there is nothing yet to attach this catalog TO. This
-/// checkpoint proves the architecture (this file, [ServiceIdentityIcon],
-/// and their tests) without inventing a new persisted field or a
-/// merchant-matching heuristic; the brief itself only asks that
-/// "service matching... be conservative/presentation-only" WHEN it
-/// exists, and that persistence be added only once actually needed --
-/// premature persistence for a feature with no UI yet would violate
-/// that same "audit before adding a column" discipline this checkpoint
-/// applied everywhere else.
-enum ServiceIdentityKey {
+/// Exactly as U1 established: this codebase has no licensed brand-asset
+/// source (see `docs/14_DECISION_LOG.md` ADR-044/045), so every value
+/// here resolves to a generic, unbranded icon + color -- never a
+/// specific company's mark. A NAMED service (e.g. "Netflix") still
+/// renders through its family's generic icon/color today; see
+/// `ServiceIdentityDefinition`'s own doc comment for the seam a future
+/// checkpoint with a genuine licensed-asset source would extend instead
+/// of replace.
+enum ServiceIdentityFamily {
   streaming('streaming'),
   music('music'),
   cloudStorage('cloudStorage'),
-  aiSoftware('aiSoftware'),
+  cloudInfrastructure('cloudInfrastructure'),
+  ai('ai'),
   productivity('productivity'),
   gaming('gaming'),
   other('other');
 
-  const ServiceIdentityKey(this.storageValue);
+  const ServiceIdentityFamily(this.storageValue);
 
-  /// Reserved for the day a service SELECTION is actually persisted
-  /// somewhere -- not read/written by anything in this checkpoint. Kept
-  /// as a stable string, matching every other identity key in this
-  /// checkpoint (`CategoryColorKey.storageValue`, `CardNetwork
-  /// .storageValue`), so that day never has to invent this convention.
+  /// Stable string -- never persisted directly by anything in this
+  /// checkpoint (a transaction/recurring rule persists a
+  /// `ServiceIdentityDefinition.id` instead, which for a generic-family
+  /// selection simply equals this value -- see that class's doc
+  /// comment), but kept as a stable string regardless, matching every
+  /// other identity key in this codebase (`CategoryColorKey
+  /// .storageValue`, `CardNetwork.storageValue`).
   final String storageValue;
 
-  static ServiceIdentityKey fromStorageValue(String? value) {
-    for (final ServiceIdentityKey key in ServiceIdentityKey.values) {
-      if (key.storageValue == value) return key;
+  static ServiceIdentityFamily fromStorageValue(String? value) {
+    for (final ServiceIdentityFamily family in ServiceIdentityFamily.values) {
+      if (family.storageValue == value) return family;
     }
-    return ServiceIdentityKey.other;
+    return ServiceIdentityFamily.other;
   }
 }
 
-const Map<ServiceIdentityKey, IconData> _icons = <ServiceIdentityKey, IconData>{
-  ServiceIdentityKey.streaming: Icons.smart_display,
-  ServiceIdentityKey.music: Icons.music_note,
-  ServiceIdentityKey.cloudStorage: Icons.cloud,
-  ServiceIdentityKey.aiSoftware: Icons.smart_toy,
-  ServiceIdentityKey.productivity: Icons.apps,
-  ServiceIdentityKey.gaming: Icons.sports_esports,
-  ServiceIdentityKey.other: Icons.subscriptions,
+const Map<ServiceIdentityFamily, IconData> _icons = <ServiceIdentityFamily, IconData>{
+  ServiceIdentityFamily.streaming: Icons.smart_display,
+  ServiceIdentityFamily.music: Icons.music_note,
+  ServiceIdentityFamily.cloudStorage: Icons.cloud,
+  ServiceIdentityFamily.cloudInfrastructure: Icons.dns,
+  ServiceIdentityFamily.ai: Icons.smart_toy,
+  ServiceIdentityFamily.productivity: Icons.apps,
+  ServiceIdentityFamily.gaming: Icons.sports_esports,
+  ServiceIdentityFamily.other: Icons.subscriptions,
 };
 
-/// Reuses [CategoryColorKey]'s existing curated, light+dark-safe palette
-/// rather than inventing a second color system -- see this file's own
-/// "prefer extending/reusing existing architecture" doc note above.
-const Map<ServiceIdentityKey, CategoryColorKey> _colorKeys = <ServiceIdentityKey, CategoryColorKey>{
-  ServiceIdentityKey.streaming: CategoryColorKey.red,
-  ServiceIdentityKey.music: CategoryColorKey.green,
-  ServiceIdentityKey.cloudStorage: CategoryColorKey.blue,
-  ServiceIdentityKey.aiSoftware: CategoryColorKey.purple,
-  ServiceIdentityKey.productivity: CategoryColorKey.indigo,
-  ServiceIdentityKey.gaming: CategoryColorKey.teal,
-  ServiceIdentityKey.other: CategoryColorKey.slate,
+/// Reuses `CategoryColorKey`'s existing curated, light+dark-safe palette
+/// rather than inventing a second color system -- unchanged from U1's
+/// own reasoning, just extended to the 2 new families.
+const Map<ServiceIdentityFamily, CategoryColorKey> _colorKeys =
+    <ServiceIdentityFamily, CategoryColorKey>{
+  ServiceIdentityFamily.streaming: CategoryColorKey.red,
+  ServiceIdentityFamily.music: CategoryColorKey.green,
+  ServiceIdentityFamily.cloudStorage: CategoryColorKey.blue,
+  ServiceIdentityFamily.cloudInfrastructure: CategoryColorKey.cyan,
+  ServiceIdentityFamily.ai: CategoryColorKey.purple,
+  ServiceIdentityFamily.productivity: CategoryColorKey.indigo,
+  ServiceIdentityFamily.gaming: CategoryColorKey.teal,
+  ServiceIdentityFamily.other: CategoryColorKey.slate,
 };
 
-/// The generic, unbranded icon for [key]. Total over [ServiceIdentityKey
-/// .values] -- every enum value has an entry, so this never needs a
-/// fallback branch of its own (unlike [categoryIconFor], which resolves
-/// an arbitrary persisted string).
-IconData serviceIdentityIconFor(ServiceIdentityKey key) => _icons[key] ?? Icons.subscriptions;
+/// The generic, unbranded icon for [family]. Total over
+/// [ServiceIdentityFamily.values] -- every enum value has an entry, so
+/// this never needs a fallback branch of its own.
+IconData serviceFamilyIconFor(ServiceIdentityFamily family) =>
+    _icons[family] ?? Icons.subscriptions;
 
-/// The color for [key], for [isDark]. See [_colorKeys]'s own doc note
-/// for why this delegates to [categoryColorForKey] instead of a second
-/// palette.
-Color serviceIdentityColorFor(ServiceIdentityKey key, {required bool isDark}) {
-  final CategoryColorKey colorKey = _colorKeys[key] ?? CategoryColorKey.slate;
+/// The color for [family], for [isDark]. Delegates to
+/// `categoryColorForKey` -- see [_colorKeys]'s own doc note.
+Color serviceFamilyColorFor(ServiceIdentityFamily family, {required bool isDark}) {
+  final CategoryColorKey colorKey = _colorKeys[family] ?? CategoryColorKey.slate;
   return categoryColorForKey(colorKey, isDark: isDark);
 }

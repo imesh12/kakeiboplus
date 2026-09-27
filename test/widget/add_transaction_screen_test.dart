@@ -97,6 +97,34 @@ Future<void> scrollToSaveButton(WidgetTester tester, {String label = 'Save'}) {
   );
 }
 
+/// Checkpoint U2 follow-up: the Date row's calendar icon can also sit
+/// past the ListView's initially-built extent once enough fields
+/// precede it on screen -- the new Service dropdown (inserted right
+/// after the category dropdown) pushed it just past the default 800x600
+/// widget-test viewport in edit mode, so a bare `tester.tap` on it now
+/// intermittently misses (the tap lands outside the viewport, the date
+/// picker never opens, and the subsequent `find.text('20')` fails).
+/// Same reasoning as [scrollToSaveButton] immediately above applies here
+/// too -- `scrollUntilVisible`, not `tester.ensureVisible` (which
+/// requires the target to already be mounted, which it may not be yet
+/// at this depth).
+Future<void> scrollToDateField(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.byIcon(Icons.calendar_today_outlined),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  // Unlike the Save button (far enough down that `scrollUntilVisible`'s
+  // own drag loop always runs at least one real, pumped drag), the
+  // calendar icon is close enough to the top that it can already be
+  // MOUNTED (just off-screen) on the very first check -- in that case
+  // the loop never iterates, no `pump()` ever runs, and the trailing
+  // `Scrollable.ensureVisible` animation it kicks off is still pending,
+  // unpumped, when this returns. Settling it explicitly here is what
+  // actually moves the icon into the viewport before the caller taps it.
+  await tester.pumpAndSettle();
+}
+
 void main() {
   Future<AppDatabase> seededDb() async {
     final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -611,6 +639,12 @@ void main() {
       // Opens the Material date picker, already on the transaction's own
       // month/year (`initialDate: _occurredAt`) -- pick a different day
       // in the same month so no month/year navigation is needed.
+      //
+      // Checkpoint U2 follow-up: the calendar icon can sit past the
+      // default widget-test viewport once the Service dropdown is on
+      // screen too -- scroll it into view first, see
+      // `scrollToDateField`'s own doc comment.
+      await scrollToDateField(tester);
       await tester.tap(find.byIcon(Icons.calendar_today_outlined));
       await tester.pumpAndSettle();
       await tester.tap(find.text('20'));
@@ -909,6 +943,152 @@ void main() {
       expect(find.byType(SegmentedButton<String>), findsNothing);
       expect(find.byType(ChoiceChip), findsNothing);
       expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(2));
+    });
+  });
+
+  // -- Checkpoint U2 (Service / Merchant Identity Integration) -- the
+  // Add/Edit Transaction form's `ServiceIdentityDropdown`, alongside
+  // (never replacing) the pre-existing `_CategoryDropdown` above.
+  group('Checkpoint U2 -- service identity', () {
+    Future<(AppDatabase, String profileId, String accountId)> seededServiceDb() async {
+      final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
+      final ProfileRepository profileRepo = ProfileRepository(db);
+      final AccountRepository accountRepo = AccountRepository(db);
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final String profileId = await profileRepo.createProfile(
+        displayName: 'Test User',
+        homeCountry: 'JP',
+        currentCountry: 'JP',
+        homeCurrency: 'JPY',
+        livingCurrency: 'JPY',
+        preferredLanguage: 'en',
+        timezone: 'Asia/Tokyo',
+        dateFormat: 'yyyy-MM-dd',
+        numberFormat: '#,##0.##',
+      );
+      final String accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'JPY Wallet',
+        type: 'cash',
+        currencyCode: 'JPY',
+      );
+      return (db, profileId, accountId);
+    }
+
+    Future<Transaction> transactionRow(AppDatabase db, String id) {
+      return (db.select(db.transactions)..where((tbl) => tbl.id.equals(id))).getSingle();
+    }
+
+    testWidgets(
+        'the service dropdown defaults to None, and choosing "Netflix" then saving a new '
+        'expense persists it as serviceIdentityKey', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededServiceDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'expense')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
+        findsOneWidget,
+      );
+      expect(find.text('None'), findsWidgets); // the service dropdown's default selection
+
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Netflix').last);
+      await tester.pumpAndSettle();
+
+      // The only account (JPY Wallet) is already selected by default --
+      // same convention the pre-existing create-mode tests above rely
+      // on -- so no account selection is needed here.
+      await tester.enterText(find.byType(TextFormField).first, '1500');
+      await scrollToSaveButton(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsOneWidget); // saved and popped
+      final List<Transaction> rows = await db.select(db.transactions).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.serviceIdentityKey, 'netflix');
+    });
+
+    testWidgets(
+        'editing an expense that already has a service identity prefills the dropdown with its '
+        'display name, and changing it back to None persists a null serviceIdentityKey',
+        (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededServiceDb();
+      final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+      final String txId = await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(980, 'JPY'),
+        categoryId: 'sys-dining',
+        serviceIdentityKey: 'netflix',
+        occurredAtUtc: DateTime.utc(2026, 4, 1),
+      );
+      final Transaction existing = await transactionRow(db, txId);
+      expect(existing.serviceIdentityKey, 'netflix'); // sanity check on the seed itself
+
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, AddTransactionScreen(existingTransaction: existing)),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Prefilled with the named service's display name, not the raw
+      // persisted key.
+      expect(find.text('Netflix'), findsOneWidget);
+
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('None').last);
+      await tester.pumpAndSettle();
+
+      await scrollToSaveButton(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsOneWidget); // saved and popped
+      final Transaction updated = await transactionRow(db, txId);
+      expect(updated.serviceIdentityKey, isNull);
+      expect(updated.categoryId, 'sys-dining'); // category untouched by the service change
+    });
+
+    testWidgets('the service dropdown is never shown for a transfer', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededServiceDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'transfer')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
+        findsNothing,
+      );
     });
   });
 

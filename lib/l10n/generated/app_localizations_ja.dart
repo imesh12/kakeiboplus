@@ -111,6 +111,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get categoryOptionalLabel => 'カテゴリ（任意）';
 
   @override
+  String get serviceOptionalLabel => 'サービス（任意）';
+
+  @override
   String get noteOptionalLabel => 'メモ（任意）';
 
   @override
@@ -494,6 +497,33 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get categoryFieldLabel => 'カテゴリ';
+
+  @override
+  String get serviceFieldLabel => 'サービス';
+
+  @override
+  String get serviceFamilyStreamingGenericLabel => '動画配信サービス';
+
+  @override
+  String get serviceFamilyMusicGenericLabel => '音楽配信サービス';
+
+  @override
+  String get serviceFamilyCloudStorageGenericLabel => 'クラウドストレージ';
+
+  @override
+  String get serviceFamilyCloudInfrastructureGenericLabel => 'クラウドインフラ';
+
+  @override
+  String get serviceFamilyAiGenericLabel => 'AIサービス';
+
+  @override
+  String get serviceFamilyProductivityGenericLabel => '業務効率化ツール';
+
+  @override
+  String get serviceFamilyGamingGenericLabel => 'ゲームサービス';
+
+  @override
+  String get serviceFamilyOtherGenericLabel => 'その他のサービス';
 
   @override
   String get chooseCategoryMessage => 'カテゴリを選択してください。';

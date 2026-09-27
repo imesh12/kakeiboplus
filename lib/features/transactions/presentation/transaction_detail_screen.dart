@@ -16,6 +16,7 @@ import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_status_chip.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
+import '../../services/domain/service_identity_catalog.dart';
 import 'transaction_icon_badge.dart';
 import 'transaction_providers.dart';
 
@@ -221,6 +222,20 @@ class _TransactionDetailBody extends ConsumerWidget {
     final String categoryDisplayValue =
         tx.categoryId == null ? l10n.noneOptionLabel : (category?.name ?? '—');
 
+    // Checkpoint U2 (Service / Merchant Identity Integration): unlike
+    // `category` above, `serviceIdentityDefinitionFor` never fails to
+    // resolve a NON-null key -- an unrecognized/legacy key still lands
+    // on the generic "other" family definition (see that function's own
+    // doc comment) -- so there is no analogous "resolved but no name"
+    // '—' case here; only "no key at all" -> None.
+    final ServiceIdentityDefinition? serviceDefinition =
+        isTransfer ? null : serviceIdentityDefinitionFor(tx.serviceIdentityKey);
+    final String? serviceDisplayName =
+        serviceDefinition != null ? serviceIdentityDisplayName(l10n, serviceDefinition) : null;
+    final String serviceDisplayValue = tx.serviceIdentityKey == null || isTransfer
+        ? l10n.noneOptionLabel
+        : (serviceDisplayName ?? l10n.noneOptionLabel);
+
     final String formattedAmount = _formatter.format(amount);
     // Spoken sign, independent of the visual '+'/'-'/none prefix and of
     // amountColor -- "don't rely on color alone" extends to the amount
@@ -237,12 +252,15 @@ class _TransactionDetailBody extends ConsumerWidget {
         _DetailHeader(
           type: tx.type,
           typeLabel: typeLabel,
-          // Only shown in the header when it's an actual resolved
-          // category -- unlike the metadata row below, the header omits
-          // the line entirely rather than showing 'None'/'—', since it's
-          // meant to read as "category, when there is one" up front.
-          categoryName: isTransfer ? null : category?.name,
+          // Checkpoint U2: same service > category precedence as
+          // Activity's row title -- only shown in the header when
+          // there's an actual name to show (service OR category), never
+          // both stacked; the metadata card below always shows both
+          // fields explicitly regardless of which one (if any) appears
+          // here.
+          categoryName: isTransfer ? null : (serviceDisplayName ?? category?.name),
           categoryIconName: isTransfer ? null : category?.icon,
+          serviceIdentityKey: isTransfer ? null : tx.serviceIdentityKey,
           amountColor: amountColor,
           amountPrefix: amountPrefix,
           formattedAmount: formattedAmount,
@@ -291,6 +309,8 @@ class _TransactionDetailBody extends ConsumerWidget {
                 const Divider(height: 1),
                 _DetailRow(label: l10n.categoryFieldLabel, value: categoryDisplayValue),
                 const Divider(height: 1),
+                _DetailRow(label: l10n.serviceFieldLabel, value: serviceDisplayValue),
+                const Divider(height: 1),
               ],
               _DetailRow(
                 label: l10n.dateLabel,
@@ -326,6 +346,7 @@ class _DetailHeader extends StatelessWidget {
     required this.amountPrefix,
     required this.formattedAmount,
     required this.spokenAmount,
+    this.serviceIdentityKey,
   });
 
   /// `'expense'` | `'income'` | `'transfer'` -- `Transaction.type`,
@@ -333,9 +354,16 @@ class _DetailHeader extends StatelessWidget {
   final String type;
   final String typeLabel;
 
-  /// Null for a transfer (a transfer is never categorized) or an
-  /// expense/income with no resolved category -- the header shows the
-  /// category line only when there's an actual name to show.
+  /// Null for a transfer (a transfer is never categorized/service-
+  /// identified) or an expense/income with neither resolved -- the
+  /// header shows this line only when there's an actual name to show.
+  ///
+  /// Checkpoint U2: despite the name, the CALLER now resolves this to
+  /// the service display name when a service identity is present,
+  /// falling back to the category name otherwise -- the same service >
+  /// category precedence used everywhere else in this checkpoint. This
+  /// widget itself stays unaware of the distinction; it only renders
+  /// whichever single name (if any) the caller decided wins.
   final String? categoryName;
 
   /// Null for a transfer, or for an expense/income with no category
@@ -343,6 +371,11 @@ class _DetailHeader extends StatelessWidget {
   /// which already falls back safely (via `categoryIconFor`, or to the
   /// plain type icon when this is null).
   final String? categoryIconName;
+
+  /// Checkpoint U2: forwarded to [TransactionIconBadge], which gives it
+  /// glyph precedence over [categoryIconName] when non-null -- null for
+  /// a transfer or when no service was chosen.
+  final String? serviceIdentityKey;
   final Color amountColor;
   final String amountPrefix;
   final String formattedAmount;
@@ -364,6 +397,7 @@ class _DetailHeader extends StatelessWidget {
             type: type,
             color: amountColor,
             categoryIconName: categoryIconName,
+            serviceIdentityKey: serviceIdentityKey,
           ),
         ),
         const SizedBox(height: 12),

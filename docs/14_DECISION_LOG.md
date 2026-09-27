@@ -3169,3 +3169,246 @@ indicator, never color alone.
 **Files changed by this repair:**
 `lib/features/categories/presentation/category_icon_color_picker.dart`
 only.
+
+## ADR-045 — Checkpoint U2: Service / Merchant Identity Integration extends U1's category identity, does not replace or merge with it
+
+Decision: Checkpoint U1 (ADR-044) built category identity (icon+color)
+and a category-adjacent `ServiceIdentityKey` enum that nothing yet
+persisted. Checkpoint U2's own mandatory pre-implementation audit
+confirmed that gap directly -- no transaction or recurring rule had
+anywhere to store a chosen service/merchant, and no screen resolved one
+into UI. This entry records the one genuine schema change U2 made, the
+category-vs-service architecture built on top of it, and the explicit
+scope this checkpoint declined (Dashboard, Search/Filters, OCR, cloud
+merchant lookup, and a large merchant database all stay out).
+
+1. **Category identity and service identity are two independent,
+   optional relationships -- never interchangeable, never one silently
+   replacing the other.** A transaction or recurring rule may have
+   neither, either, or both. Category answers "what kind of spending is
+   this" (`categoryId`, U1's domain) and is unaffected by this
+   checkpoint. Service identity answers "who/what is this payment
+   associated with" (`serviceIdentityKey`, new) and is presentation
+   metadata only, exactly like `categories.icon`/`colorKey` -- never
+   read by `FinanceEngine` or any balance/budget/goal calculation.
+   Choosing a service never clears, requires, or overrides the category
+   choice, and vice versa; both dropdowns render side by side wherever
+   this checkpoint integrates them.
+
+2. **The one genuine schema change: `serviceIdentityKey` on
+   `transactions` and `recurring_rules`.** Schema version 14 -> 15 adds
+   one nullable `TextColumn` to each table -- see
+   `app_database.dart`'s `if (from < 15)` migration-step doc comment and
+   `tables.dart`'s own doc comments on the two new columns. `categories`
+   was already fully covered by U1 and needed no change.
+   `recurring_occurrences` was deliberately left untouched: an
+   occurrence is a scheduled/handled instance of its rule and always
+   inherits the rule's service identity at presentation time rather than
+   duplicating it onto every generated occurrence row --
+   `RecurringPendingItem`'s presentation already resolves through
+   `widget.item.rule`, so no new join or duplicated column was needed
+   there. A transfer's `serviceIdentityKey` is defensively forced to
+   `null` everywhere a value could otherwise be written
+   (`TransactionRepository.updateTransfer`,
+   `RecurringRuleRepository.createRule`/`updateRule`'s
+   `kind == transfer` branch), mirroring the pre-existing
+   `categoryId: null // transfers are never categorized` convention
+   exactly -- a transfer is never service-identified for the same reason
+   it is never categorized.
+
+3. **A migration hazard specific to `recurring_rules`, resolved by
+   reasoning about table creation order, not by running the
+   migration.** `recurring_rules` is itself created mid-chain, at
+   `if (from < 4)`, via `m.createTable(recurringRules)` -- and Drift's
+   generated table object for that `createTable` call already includes
+   `serviceIdentityKey` once `tables.dart` declares it, regardless of
+   which schema version the fixture claims to start from. Unconditionally
+   also calling `m.addColumn(recurringRules, recurringRules
+   .serviceIdentityKey)` for every `from < 15` would therefore throw
+   "duplicate column" for any upgrade path that passes through
+   `from < 4` (creating the table already-complete) before reaching the
+   new step. The v15 step guards this addColumn with `if (from >= 4)`,
+   exactly mirroring the pre-existing `notifications_enabled`
+   `if (from < 4) {...} else if (from == 4) { addColumn(...) }` split
+   already in this file. No toolchain was available in this environment
+   to execute the migration and observe this firsthand; this was
+   determined by inspecting the generated-table/`createTable` semantics
+   directly against the existing precedent.
+
+4. **Historical migration-fixture audit, per the brief's explicit
+   "remember U1" warning.** Two of the pre-existing minimal fixtures
+   (`category_color_migration_test.dart`'s v13 fixture,
+   `cloud_account_links_migration_test.dart`'s v7 fixture) were missing
+   `transactions`/`recurring_rules` tables that the new v15 step now
+   touches, which would have broken them the same way U1's own repair
+   note (above) describes for a different pair of tables. Both were
+   fixed proactively -- before any test was run, since none could be
+   run in this environment -- by adding the missing historically-
+   accurate table shapes plus a regression assertion that the newly-
+   touched table stays empty after migrating from that fixture. The
+   other two historical fixtures that plausibly needed the same review
+   (`recurring_migration_test.dart` at v3,
+   `savings_goals_migration_test.dart` at v2) were confirmed correct
+   as-is: both predate schema v4, where `recurring_rules` is first
+   created, so `createTable` -- not `addColumn` -- is what will run for
+   them, and `createTable` always uses the current, complete generated
+   table definition.
+
+5. **Stable string identifiers, two layers, never a volatile one.**
+   `ServiceIdentityFamily` (an 8-value enum -- streaming, music,
+   cloudStorage, cloudInfrastructure, ai, productivity, gaming, other --
+   each with a `storageValue` string) is the coarse visual family;
+   `ServiceIdentityDefinition` (`service_identity_catalog.dart`) is the
+   named layer on top of it -- 28 named services plus exactly one
+   generic entry per family (36 total), each with a stable `id` that is
+   what actually gets persisted into `serviceIdentityKey`. Persisting
+   `ServiceIdentityDefinition.id` rather than the family directly is
+   what lets a future checkpoint add more named services under an
+   existing family without ever touching already-stored data.
+   `ServiceIdentityFamily` itself is U1's own `ServiceIdentityKey`,
+   renamed and extended (see `service_identity.dart`'s own doc comment
+   for why the rename is safe: nothing had ever persisted one of its
+   values). `serviceIdentityDefinitionFor(String? key)` never throws:
+   `null` resolves to `null` ("no service", distinguishable from
+   "unknown service"), and any unrecognized non-null key resolves to the
+   catalog's single generic `other` entry -- an old app version's
+   choice, or a future catalog revision's removed id, both degrade
+   safely rather than crashing the transaction/recurring-rule screens
+   that render it.
+
+6. **No brand assets exist in this repo, so none were invented.**
+   Exactly as ADR-044 already established for category icons, every
+   service identity -- named (Netflix, ChatGPT, AWS, ...) or generic --
+   renders through its family's fixed, unbranded Material icon +
+   `CategoryColorKey` color pairing (`serviceFamilyIconFor`/
+   `serviceFamilyColorFor`), never a company logo. `serviceIdentityCatalog`
+   only ever stores an `id`/`family`/`properName` (a plain string, e.g.
+   `'Netflix'`) -- never an asset path like `assets/logos/netflix.png` --
+   specifically so that a future checkpoint with a genuine licensed
+   brand-asset source can extend the family-icon resolver to prefer a
+   real logo per named id without any migration, without touching a
+   single persisted `serviceIdentityKey` value, and without this
+   checkpoint scraping, fabricating, or fetching any logo now.
+
+7. **Visual integration hierarchy: service identity, then category
+   identity, then the pre-existing generic fallback -- one shared rule,
+   applied consistently, never reinvented per screen.** `Transaction
+   IconBadge` gained a `serviceIdentityKey` parameter with the highest
+   glyph precedence (service icon > category icon > plain type glyph);
+   the tinted container's `color` itself is deliberately left exactly as
+   before -- still the caller's transaction-type color
+   (error/positive/onSurfaceVariant) -- so "color = financial type"
+   stays authoritative in list rows, and full-color service/category
+   identity stays reserved for picker/dialog contexts
+   (`ServiceIdentityIcon`/`CategoryIdentityIcon`). The same
+   service-then-category precedence governs: Activity's row title
+   (falls back to category name, then the type word, with the demoted
+   name moving into the subtitle rather than disappearing when a service
+   takes the title slot), the transaction detail header and its new
+   "Service" metadata row (added beside the pre-existing "Category"
+   row), the recurring rule dialog's new `ServiceIdentityDropdown`
+   (beside its pre-existing category dropdown, both hidden for a
+   transfer), and the Recurring/Subscriptions pending-item tile's
+   leading icon+color (which, unlike the transaction row, was never
+   type-tinted to begin with, so giving a resolved service or category
+   its own full color there introduces no conflict).
+
+8. **One shared, stateless picker widget, not a per-screen
+   duplicate.** `ServiceIdentityDropdown`
+   (`service_identity_picker.dart`) is used unchanged by both the
+   Add/Edit Transaction screen and the recurring rule dialog.
+   Unlike `_CategoryDropdown` (deliberately duplicated per screen
+   because each copy watches a different `categoriesForTypeProvider`
+   parameter), `serviceIdentityCatalog` is a plain constant list with
+   nothing to watch, so one shared widget is strictly simpler than
+   screen-local copies. An unrecognized/legacy persisted value is
+   preserved as one synthetic extra dropdown item rather than silently
+   discarded, via the same `_itemsPreservingCurrentValue` technique
+   `international_preferences_screen.dart` already established.
+
+9. **Accessibility: the proven `DropdownButtonFormField` path, not the
+   pattern U1 had to repair.** `ServiceIdentityDropdown` is a standard
+   `DropdownButtonFormField`, the same mechanism the pre-existing
+   category dropdowns already use safely -- not the custom selectable-
+   `Semantics`-grid pattern (`Semantics` + `Tooltip` + `GridView`,
+   missing `ExcludeSemantics`) that caused the real semantics-tree crash
+   the ADR-044 repair note above documents. Each dropdown item's own
+   icon + text is sufficient for Flutter's built-in dropdown-item
+   semantics; no nested selectable-`Semantics` widgets are introduced by
+   this checkpoint.
+
+10. **CurrencyBadge audit (Phase 8): adopted only where it adds real
+    value, not mechanically everywhere.** The two bare
+    `Text(currency.code)` currency-picker items in `budgets_screen.dart`
+    (`_OverallBudgetDialog`, `_CategoryBudgetDialog`) now render through
+    the existing `CurrencyBadge(currencyCode:, showRegionIndicator: true)`
+    widget ADR-044 already built, matching the precedent
+    `add_account_form_screen.dart` already set for the identical
+    "bare currency code inside a picker item" situation. This reuses
+    `CurrencyBadge`'s own existing currency-never-implies-country
+    safeguard (its small, explicit region-glyph map, which already
+    treats EUR/other shared or regionless currencies as having no
+    single-country glyph) rather than creating any second
+    currency/region registry. `international_preferences_screen.dart`'s
+    own richer, pre-existing `_dropdownItem`/`_DropdownField` currency
+    rendering (also used by `currency_converter_screen.dart`, and by
+    country/language pickers) was deliberately left untouched -- it
+    already shows richer currency context than a bare code and is
+    outside this checkpoint's "app-wide bare-code dropdown" audit scope.
+
+11. **Card-network audit (Phase 9): no new code needed.** No
+    presentation surface beyond account creation/edit (already fully
+    covered by ADR-044's `CardNetworkBadge`/`CardNetwork` work) shows a
+    saved payment instrument's network. This checkpoint's scope --
+    service/merchant identity on transactions and recurring rules --
+    never touches payment-instrument display, so nothing here invents an
+    unofficial card-network logo or exposes sensitive card detail.
+
+12. **Localization: 10 new ARB keys, English and Japanese, service
+    proper names left untranslated.** `serviceOptionalLabel`,
+    `serviceFieldLabel`, and 8 `serviceFamily*GenericLabel` keys were
+    added to `app_en.arb`/`app_ja.arb` (and hand-synchronized into the
+    three generated `app_localizations*.dart` files, since no `flutter
+    gen-l10n` toolchain was available in this environment -- see the
+    "Remaining issues" section of this checkpoint's report for the exact
+    command the maintainer should run to confirm the generated files
+    match). `serviceIdentityDisplayName` renders a NAMED service's
+    `properName` (e.g. `'Netflix'`, `'ChatGPT'`) verbatim in every locale
+    -- brand proper names are not translated -- while every surrounding
+    label (the field label, the "None" option, each generic family's own
+    label) is fully localized.
+
+13. **Explicitly deferred, per the brief's own scope boundaries.** This
+    checkpoint does not touch Dashboard V1, Search/Filters/History, OCR,
+    cloud merchant lookup, network logo fetching/scraping, fuzzy/AI
+    merchant classification from arbitrary text, navigation, or private
+    Net Worth exposure. The service catalog stays at 36 curated entries
+    (28 named, 8 generic) -- not a large merchant database -- and
+    service selection remains entirely explicit user choice; no
+    deterministic auto-detection rule was added in U2, and none is
+    planned without a separately-approved, well-tested rule.
+
+**Files changed:** `lib/core/database/tables.dart`; `lib/core/database
+/app_database.dart`; `lib/core/database/repositories
+/transaction_repository.dart`; `lib/core/database/repositories
+/recurring_rule_repository.dart`; `lib/features/services/domain
+/service_identity.dart` (evolved from U1); `lib/features/services/domain
+/service_identity_catalog.dart` (new); `lib/features/services
+/presentation/service_identity_icon.dart` (evolved from U1);
+`lib/features/services/presentation/service_identity_picker.dart` (new);
+`lib/features/transactions/presentation/transaction_icon_badge.dart`;
+`lib/features/transactions/presentation/add_transaction_screen.dart`;
+`lib/features/transactions/presentation/activity_screen.dart`;
+`lib/features/transactions/presentation/transaction_detail_screen.dart`;
+`lib/features/recurring/presentation/recurring_screen.dart`;
+`lib/features/budgets/presentation/budgets_screen.dart`; `lib/l10n
+/app_en.arb`, `lib/l10n/app_ja.arb`, and the three generated
+`app_localizations*.dart` files; `test/core/database
+/category_color_migration_test.dart` and `test/core/database
+/cloud_account_links_migration_test.dart` (fixture repairs, item 4
+above); `test/core/database/service_identity_migration_test.dart` (new);
+`test/features/services/domain/service_identity_test.dart` (updated for
+the `ServiceIdentityFamily` rename); `test/features/services/domain
+/service_identity_catalog_test.dart` (new); `test/features/services
+/presentation/service_identity_icon_test.dart` (updated for the
+`serviceIdentityKey`-based API).

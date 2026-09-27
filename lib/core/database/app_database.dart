@@ -84,7 +84,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   /// v1 -> v2 (Beta 1 Task 2): adds the `budgets` table. No existing
   /// table changes shape and no historical data is touched -- see
@@ -260,6 +260,21 @@ class AppDatabase extends _$AppDatabase {
   /// (see that function's doc comment), so backfilling every user row
   /// here would add migration complexity for a case the resolver
   /// already handles safely and consistently.
+  ///
+  /// Schema version 15 (Checkpoint U2, Service / Merchant Identity
+  /// Integration & App-Wide Financial Visual Consistency) adds one
+  /// nullable `service_identity_key` column to `transactions` AND to
+  /// `recurring_rules` -- see `Transactions.serviceIdentityKey`'s own
+  /// doc comment in `tables.dart` for the full rationale (a service
+  /// identity like "Netflix" is independent of, and never replaces,
+  /// `categoryId`). Purely additive: no existing column changes shape,
+  /// no existing row anywhere is read, rewritten, or deleted, and every
+  /// pre-existing transaction/rule simply gets `service_identity_key =
+  /// null` ("no service identity") via the column's own nullability --
+  /// correct historical meaning, so no backfill statement is needed.
+  /// `recurring_occurrences` is untouched: an occurrence's service
+  /// identity is always inherited from the rule/transaction it points
+  /// to, never a copy of its own.
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
@@ -415,6 +430,40 @@ class AppDatabase extends _$AppDatabase {
             await customStatement("UPDATE categories SET color_key = 'slate' WHERE id = 'sys-other-expense'");
             await customStatement("UPDATE categories SET color_key = 'teal' WHERE id = 'sys-salary'");
             await customStatement("UPDATE categories SET color_key = 'lime' WHERE id = 'sys-other-income'");
+          }
+          if (from < 15) {
+            // Checkpoint U2 -- see the doc comment above `migration`
+            // for the full rationale. Additive-only: one nullable
+            // `TextColumn` on `transactions`, and the same on
+            // `recurring_rules`. No existing column changes shape, no
+            // existing row anywhere is read, rewritten, or deleted, and
+            // every pre-existing row simply gets `service_identity_key =
+            // null` via the column's own nullability -- correct
+            // historical meaning ("no service identity") for every
+            // transaction/rule that predates this feature, so no
+            // backfill statement is needed or run.
+            //
+            // `transactions` is a v1 base table -- always present by the
+            // time any `onUpgrade` call reaches here, for any `from`.
+            await m.addColumn(transactions, transactions.serviceIdentityKey);
+            //
+            // `recurring_rules`, by contrast, is NOT a v1 base table --
+            // it's created by the `from < 4` branch above using drift's
+            // CURRENT generated table object, which (now that
+            // `RecurringRules.serviceIdentityKey` exists in
+            // `tables.dart`) already includes this column the moment
+            // it's created -- the exact same "createTable already has
+            // it, addColumn would double-add it" hazard this file's own
+            // `from < 4` / `from == 4` split already documents for
+            // `notifications_enabled`. So: for `from < 4`, the table was
+            // just created a few lines above already including this
+            // column -- nothing more to do. For `from >= 4`,
+            // `recurring_rules` has existed since a version that
+            // predates this column, so it genuinely needs the
+            // `addColumn` below.
+            if (from >= 4) {
+              await m.addColumn(recurringRules, recurringRules.serviceIdentityKey);
+            }
           }
         },
       );

@@ -88,6 +88,7 @@ class TransactionRepository {
     String? note,
     required DateTime occurredAtUtc,
     String? paymentInstrumentId,
+    String? serviceIdentityKey,
   }) {
     return _insert(
       profileId: profileId,
@@ -98,6 +99,7 @@ class TransactionRepository {
       note: note,
       occurredAtUtc: occurredAtUtc,
       paymentInstrumentId: paymentInstrumentId,
+      serviceIdentityKey: serviceIdentityKey,
     );
   }
 
@@ -111,6 +113,7 @@ class TransactionRepository {
     String? note,
     required DateTime occurredAtUtc,
     String? paymentInstrumentId,
+    String? serviceIdentityKey,
   }) {
     return _insert(
       profileId: profileId,
@@ -121,6 +124,7 @@ class TransactionRepository {
       note: note,
       occurredAtUtc: occurredAtUtc,
       paymentInstrumentId: paymentInstrumentId,
+      serviceIdentityKey: serviceIdentityKey,
     );
   }
 
@@ -223,6 +227,7 @@ class TransactionRepository {
     String? categoryId,
     String? note,
     required DateTime occurredAtUtc,
+    String? serviceIdentityKey,
   }) {
     return _updateExpenseOrIncome(
       id: id,
@@ -232,6 +237,7 @@ class TransactionRepository {
       categoryId: categoryId,
       note: note,
       occurredAtUtc: occurredAtUtc,
+      serviceIdentityKey: serviceIdentityKey,
     );
   }
 
@@ -245,6 +251,7 @@ class TransactionRepository {
     String? categoryId,
     String? note,
     required DateTime occurredAtUtc,
+    String? serviceIdentityKey,
   }) {
     return _updateExpenseOrIncome(
       id: id,
@@ -254,6 +261,7 @@ class TransactionRepository {
       categoryId: categoryId,
       note: note,
       occurredAtUtc: occurredAtUtc,
+      serviceIdentityKey: serviceIdentityKey,
     );
   }
 
@@ -265,6 +273,7 @@ class TransactionRepository {
     String? categoryId,
     String? note,
     required DateTime occurredAtUtc,
+    String? serviceIdentityKey,
   }) {
     // Checkpoint N: the existence/type check, the cheque-link guard,
     // and the write all happen inside one `AppDatabase.transaction`
@@ -310,6 +319,7 @@ class TransactionRepository {
           amountMinorUnits: Value<int>(amount.minorUnits),
           currencyCode: Value<String>(account.currencyCode),
           categoryId: Value<String?>(categoryId),
+          serviceIdentityKey: Value<String?>(serviceIdentityKey),
           note: Value<String?>(note),
           occurredAt: Value<DateTime>(occurredAtUtc),
           updatedAt: Value<DateTime>(DateTime.now().toUtc()),
@@ -385,6 +395,10 @@ class TransactionRepository {
           amountMinorUnits: Value<int>(amount.minorUnits),
           currencyCode: Value<String>(source.currencyCode),
           categoryId: const Value<String?>(null), // transfers are never categorized
+          // Checkpoint U2: transfers never carry a service identity
+          // either -- same convention, same reasoning as categoryId
+          // immediately above.
+          serviceIdentityKey: const Value<String?>(null),
           note: Value<String?>(note),
           occurredAt: Value<DateTime>(occurredAtUtc),
           updatedAt: Value<DateTime>(DateTime.now().toUtc()),
@@ -459,6 +473,7 @@ class TransactionRepository {
     String? note,
     required DateTime occurredAtUtc,
     String? paymentInstrumentId,
+    String? serviceIdentityKey,
   }) async {
     if (!amount.isPositive) {
       throw ArgumentError.value(amount, 'amount', 'Transaction amount must be positive.');
@@ -482,6 +497,7 @@ class TransactionRepository {
             amountMinorUnits: amount.minorUnits,
             currencyCode: amount.currencyCode,
             categoryId: Value<String?>(categoryId),
+            serviceIdentityKey: Value<String?>(serviceIdentityKey),
             note: Value<String?>(note),
             occurredAt: occurredAtUtc,
             createdAt: now,

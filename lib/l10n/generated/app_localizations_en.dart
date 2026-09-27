@@ -111,6 +111,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get categoryOptionalLabel => 'Category (optional)';
 
   @override
+  String get serviceOptionalLabel => 'Service (optional)';
+
+  @override
   String get noteOptionalLabel => 'Note (optional)';
 
   @override
@@ -507,6 +510,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get categoryFieldLabel => 'Category';
+
+  @override
+  String get serviceFieldLabel => 'Service';
+
+  @override
+  String get serviceFamilyStreamingGenericLabel => 'Streaming service';
+
+  @override
+  String get serviceFamilyMusicGenericLabel => 'Music service';
+
+  @override
+  String get serviceFamilyCloudStorageGenericLabel => 'Cloud storage';
+
+  @override
+  String get serviceFamilyCloudInfrastructureGenericLabel =>
+      'Cloud infrastructure';
+
+  @override
+  String get serviceFamilyAiGenericLabel => 'AI service';
+
+  @override
+  String get serviceFamilyProductivityGenericLabel => 'Productivity tool';
+
+  @override
+  String get serviceFamilyGamingGenericLabel => 'Gaming service';
+
+  @override
+  String get serviceFamilyOtherGenericLabel => 'Other service';
 
   @override
   String get chooseCategoryMessage => 'Choose a category.';

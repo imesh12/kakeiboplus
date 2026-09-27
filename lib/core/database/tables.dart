@@ -876,6 +876,20 @@ class Transactions extends Table {
   IntColumn get amountMinorUnits => integer()();
   TextColumn get currencyCode => text().references(Currencies, #code)();
   TextColumn get categoryId => text().nullable().references(Categories, #id)();
+
+  /// One of `ServiceIdentityDefinition.id` -- see
+  /// `lib/features/services/domain/service_identity_catalog.dart`.
+  /// Checkpoint U2 (Service / Merchant Identity Integration). Independent
+  /// of [categoryId] -- a service identity ("Netflix") never replaces or
+  /// implies a category ("Entertainment"); either, both, or neither may
+  /// be set. Presentation metadata only, exactly like [categoryId]'s own
+  /// icon/color -- never read by `FinanceEngine`/any balance, budget, or
+  /// goal calculation. `null` for every row that existed before this
+  /// column was added, and for any transaction the user hasn't
+  /// associated with a service -- never backfilled, and never for a
+  /// transfer (see `TransactionRepository.recordTransfer`'s own doc,
+  /// same convention as [categoryId]).
+  TextColumn get serviceIdentityKey => text().nullable()();
   TextColumn get note => text().nullable()();
 
   /// Stored in UTC — see `STAGE1_BETA0_IMPLEMENTATION_PLAN.md` §10.
@@ -1110,6 +1124,14 @@ class RecurringRules extends Table {
   /// Never set for a transfer (transfers are never categorized -- same
   /// convention as `Transactions.categoryId`).
   TextColumn get categoryId => text().nullable().references(Categories, #id)();
+
+  /// See `Transactions.serviceIdentityKey`'s own doc comment -- same
+  /// convention, same catalog, same independence from [categoryId], same
+  /// "never for a transfer" rule (`RecurringRuleRepository.createRule`
+  /// forces this `null` whenever `kind == RecurringRuleKind.transfer`,
+  /// identical to how it already forces [categoryId] `null` there).
+  /// Checkpoint U2.
+  TextColumn get serviceIdentityKey => text().nullable()();
   TextColumn get note => text().nullable()();
 
   /// 'daily' | 'weekly' | 'monthly' | 'yearly' -- see

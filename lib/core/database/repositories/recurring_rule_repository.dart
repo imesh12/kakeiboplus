@@ -178,6 +178,7 @@ class RecurringRuleRepository {
     required String accountId,
     String? destinationAccountId,
     String? categoryId,
+    String? serviceIdentityKey,
     String? note,
     required RecurrenceFrequency frequency,
     required int interval,
@@ -198,9 +199,11 @@ class RecurringRuleRepository {
       currencyCode: amount.currencyCode,
     );
     if (kind == RecurringRuleKind.transfer) {
-      // Transfers are never categorized -- same convention as
+      // Transfers are never categorized, and never carry a service
+      // identity either -- same convention as
       // `TransactionRepository.recordTransfer`.
       categoryId = null;
+      serviceIdentityKey = null;
     }
 
     final String id = _uuid.v4();
@@ -216,6 +219,7 @@ class RecurringRuleRepository {
             accountId: accountId,
             destinationAccountId: Value<String?>(destinationAccountId),
             categoryId: Value<String?>(categoryId),
+            serviceIdentityKey: Value<String?>(serviceIdentityKey),
             note: Value<String?>(note),
             frequency: frequency.name,
             interval: Value<int>(interval),
@@ -255,6 +259,7 @@ class RecurringRuleRepository {
     String? accountId,
     Value<String?> destinationAccountId = const Value<String?>.absent(),
     Value<String?> categoryId = const Value<String?>.absent(),
+    Value<String?> serviceIdentityKey = const Value<String?>.absent(),
     Value<String?> note = const Value<String?>.absent(),
     RecurrenceFrequency? frequency,
     int? interval,
@@ -309,6 +314,7 @@ class RecurringRuleRepository {
         accountId: accountId == null ? const Value<String>.absent() : Value<String>(accountId),
         destinationAccountId: destinationAccountId,
         categoryId: categoryId,
+        serviceIdentityKey: serviceIdentityKey,
         note: note,
         frequency:
             frequency == null ? const Value<String>.absent() : Value<String>(frequency.name),

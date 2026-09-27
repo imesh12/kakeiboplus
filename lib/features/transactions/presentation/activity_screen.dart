@@ -14,6 +14,7 @@ import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_filter_chip.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_providers.dart';
+import '../../services/domain/service_identity_catalog.dart';
 import '../domain/activity_date_group.dart';
 import '../domain/activity_filter.dart';
 import 'activity_filter_provider.dart';
@@ -604,9 +605,20 @@ class _TransactionRow extends StatelessWidget {
       _ => l10n.transactionTypeExpense,
     };
 
+    // Checkpoint U2 (Service / Merchant Identity Integration): a service
+    // identity, when present, takes title's place over the category
+    // name -- the hierarchy this checkpoint establishes app-wide is
+    // service identity > category identity > plain type word. Never
+    // resolved for a transfer (a transfer never carries a service
+    // identity, mirroring `categoryIconName` above).
+    final ServiceIdentityDefinition? serviceDefinition =
+        isTransfer ? null : serviceIdentityDefinitionFor(tx.serviceIdentityKey);
+    final String? serviceDisplayName =
+        serviceDefinition != null ? serviceIdentityDisplayName(l10n, serviceDefinition) : null;
+
     final String title = switch (tx.type) {
       'transfer' => '$accountName → ${destinationAccountName ?? '—'}',
-      _ => category?.name ?? typeWord,
+      _ => serviceDisplayName ?? category?.name ?? typeWord,
     };
     // Date is intentionally NOT repeated here -- it's now conveyed by
     // the section header above this row.
@@ -622,6 +634,12 @@ class _TransactionRow extends StatelessWidget {
     final String subtitle = <String?>[
       if (!isTransfer) accountName,
       if (!isTransfer && sourceAccountClosed) l10n.accountClosedLabel,
+      // Checkpoint U2: when a service identity took over `title` above,
+      // the category name is not lost -- it moves here, as supporting
+      // metadata alongside the account name, preserving "category
+      // remains authoritative/visible" even though a service identity
+      // is presentationally more prominent.
+      if (!isTransfer && serviceDisplayName != null) category?.name,
       if (tx.note != null && tx.note!.isNotEmpty) tx.note,
     ].nonNulls.join(' · ');
 
@@ -650,6 +668,7 @@ class _TransactionRow extends StatelessWidget {
         type: tx.type,
         color: amountColor,
         categoryIconName: isTransfer ? null : category?.icon,
+        serviceIdentityKey: isTransfer ? null : tx.serviceIdentityKey,
       ),
     );
 

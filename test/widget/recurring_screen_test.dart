@@ -1742,4 +1742,122 @@ void main() {
       expect(transactions, isEmpty);
     },
   );
+
+  group('Checkpoint U2 -- service identity on a recurring rule', () {
+    testWidgets(
+      'choosing "Netflix" in the create dialog persists it, and the pending-item tile’s '
+      'subtitle includes the service display name',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byKey(const Key('recurringNameField')), 'Netflix subscription');
+        await tester.tap(find.byKey(const Key('recurringAccountDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('${accounts.first.name} (JPY)').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('serviceIdentityDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Netflix').last);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byKey(const Key('recurringAmountField')), '1500');
+        await tester.tap(find.byKey(const Key('saveRecurringRule')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('New recurring rule'), findsNothing); // dialog closed
+        expect(tester.takeException(), isNull);
+
+        final RecurringRuleRow saved = await db.select(db.recurringRules).getSingle();
+        expect(saved.serviceIdentityKey, 'netflix');
+        expect(find.textContaining('Netflix'), findsWidgets); // the pending item's subtitle
+      },
+    );
+
+    testWidgets(
+      'editing an existing rule prefills the service dropdown from serviceIdentityKey, and '
+      'changing it back to None persists a null serviceIdentityKey',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, String profileId, List<AccountRow> accounts) = await seededDb();
+        final String ruleId = await RecurringRuleRepository(db, AccountRepository(db)).createRule(
+          profileId: profileId,
+          kind: RecurringRuleKind.expense,
+          name: 'Netflix subscription',
+          amount: Money.fromMinorUnits(1500, 'JPY'),
+          accountId: accounts.first.id,
+          serviceIdentityKey: 'netflix',
+          frequency: RecurrenceFrequency.monthly,
+          interval: 1,
+          startDate: DateTime.now().toUtc(),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(Key('editRule_$ruleId')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit recurring rule'), findsOneWidget);
+        expect(find.text('Netflix'), findsOneWidget); // prefilled from serviceIdentityKey
+
+        await tester.tap(find.byKey(const Key('serviceIdentityDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('None').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('saveRecurringRule')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Edit recurring rule'), findsNothing); // dialog closed
+        expect(tester.takeException(), isNull);
+        final RecurringRuleRow updated =
+            await (db.select(db.recurringRules)..where((tbl) => tbl.id.equals(ruleId)))
+                .getSingle();
+        expect(updated.serviceIdentityKey, isNull);
+      },
+    );
+
+    testWidgets(
+      'a rule created as a Transfer never offers the service dropdown, matching its existing '
+      'category exclusion',
+      (tester) async {
+        useTallSurface(tester);
+        final (AppDatabase db, _, List<AccountRow> accounts) = await seededDb(
+          accounts: const <_SeedAccount>[
+            _SeedAccount(name: 'JPY Wallet', currencyCode: 'JPY'),
+            _SeedAccount(name: 'JPY Savings', currencyCode: 'JPY'),
+          ],
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRecurring(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addRecurringRuleFab')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('recurringKindDropdown')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Transfer').last);
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('serviceIdentityDropdown')), findsNothing);
+      },
+    );
+  });
 }

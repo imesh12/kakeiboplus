@@ -141,6 +141,25 @@ void main() {
         .any((Semantics s) => s.properties.label == label);
   }
 
+  /// Checkpoint U2 follow-up: with the new "Service" metadata row, a
+  /// transaction with neither a category nor a service legitimately
+  /// shows the same fallback text ("None"/"なし") in TWO separate rows --
+  /// `_DetailRow`'s own "Category"/"Service" rows -- so a bare
+  /// `find.text('None')` (or `'なし'`) no longer scopes to one specific
+  /// row the way it did before this checkpoint. `_DetailRow` itself is
+  /// private to the production file and can't be found by type from
+  /// here, but every row renders its label and value as siblings inside
+  /// one `Row` (see `_DetailRow.build`), so walking up from the row's
+  /// own label text to its nearest `Row` ancestor -- then searching only
+  /// inside that -- scopes the assertion to that one row specifically,
+  /// exactly like the pre-existing account-row assertions above already
+  /// scope a "Closed" badge check to one account's row via
+  /// `find.descendant(of: find.byKey(...), ...)`.
+  Finder detailRowValue(String label, String value) {
+    final Finder row = find.ancestor(of: find.text(label), matching: find.byType(Row)).first;
+    return find.descendant(of: row, matching: find.text(value));
+  }
+
   testWidgets('shows account, category, amount, date, and note for an expense', (tester) async {
     final (AppDatabase db, String profileId, String accountId) = await seededDb();
     final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
@@ -484,7 +503,13 @@ void main() {
     expect(find.byIcon(Icons.remove), findsOneWidget); // TransactionIconBadge's plain fallback
     expect(find.byIcon(Icons.category), findsNothing); // NOT categoryIconFor's fallback
     expect(find.text('Category'), findsOneWidget);
-    expect(find.text('None'), findsOneWidget); // existing fallback text, unchanged
+    // Checkpoint U2: with no category AND no service on this
+    // transaction, "None" legitimately renders in both the Category and
+    // the new Service row -- scope each check to its own row rather
+    // than asserting a single, now-ambiguous global match.
+    expect(find.text('Service'), findsOneWidget);
+    expect(detailRowValue('Category', 'None'), findsOneWidget);
+    expect(detailRowValue('Service', 'None'), findsOneWidget);
   });
 
   testWidgets('accessibility: transaction type and amount both carry spoken semantic labels',
@@ -637,7 +662,14 @@ void main() {
     final String formattedAmount = formatter.format(kwdAmount);
     expect(find.text('-$formattedAmount'), findsOneWidget); // '-' expense prefix, no digits dropped
     expect(hasSemanticsLabel(tester, 'マイナス$formattedAmount'), isTrue); // spokenMinusAmount
-    expect(find.text('なし'), findsOneWidget); // noneOptionLabel -- no category on this transaction
+    // Checkpoint U2: same reasoning as the English-locale fallback test
+    // above -- this transaction has neither a category nor a service, so
+    // "なし" legitimately renders in both metadata rows; scope each
+    // check to its own row.
+    expect(find.text('カテゴリ'), findsOneWidget); // categoryFieldLabel
+    expect(find.text('サービス'), findsOneWidget); // serviceFieldLabel
+    expect(detailRowValue('カテゴリ', 'なし'), findsOneWidget);
+    expect(detailRowValue('サービス', 'なし'), findsOneWidget);
 
     // Storage invariant: the persisted minor-units value is untouched by
     // any of the above presentation-layer localization.
@@ -862,6 +894,109 @@ void main() {
           ),
           findsOneWidget,
         );
+      },
+    );
+  });
+
+  group('Checkpoint U2 -- service identity metadata', () {
+    testWidgets(
+      'a transaction with a service identity shows it in the header (over the category name) '
+      'and in a dedicated "Service" metadata row, with the category row unaffected',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo =
+            TransactionRepository(db, AccountRepository(db));
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(980, 'JPY'),
+          categoryId: 'sys-dining',
+          serviceIdentityKey: 'netflix',
+          occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, txId));
+        await tester.tap(find.text('open detail'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Category'), findsOneWidget);
+        expect(find.text('Dining Out'), findsOneWidget); // category row, unaffected
+        expect(find.text('Service'), findsOneWidget);
+        // Header + Service row both show "Netflix" -- the header takes
+        // over the slot that would otherwise show "Dining Out".
+        expect(find.text('Netflix'), findsNWidgets(2));
+      },
+    );
+
+    testWidgets(
+      'a transaction with no service identity shows "None" in the Service metadata row, and '
+      'the header falls back to the category name exactly as before this checkpoint',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final TransactionRepository txRepo =
+            TransactionRepository(db, AccountRepository(db));
+        final String txId = await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          categoryId: 'sys-dining',
+          occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, txId));
+        await tester.tap(find.text('open detail'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Service'), findsOneWidget);
+        expect(find.text('None'), findsOneWidget); // the Service row's value
+        // Header shows the category name -- there is exactly one
+        // "Dining Out" (the metadata row) plus one more in the header,
+        // for two total.
+        expect(find.text('Dining Out'), findsNWidgets(2));
+      },
+    );
+
+    testWidgets(
+      'a transfer never shows a Service metadata row, matching its existing Category exclusion',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String destinationId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Savings',
+          type: 'cash',
+          currencyCode: 'JPY',
+        );
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        final String txId = await txRepo.recordTransfer(
+          profileId: profileId,
+          sourceAccountId: accountId,
+          destinationAccountId: destinationId,
+          amount: Money.fromMinorUnits(3000, 'JPY'),
+          occurredAtUtc: DateTime.utc(2026, 3, 15, 8, 0),
+        );
+
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, txId));
+        await tester.tap(find.text('open detail'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Category'), findsNothing); // pre-existing transfer exclusion
+        expect(find.text('Service'), findsNothing); // same exclusion, extended to Service
       },
     );
   });

@@ -16,6 +16,7 @@ import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_identity_icon.dart';
 import '../../categories/presentation/category_providers.dart';
+import '../../services/presentation/service_identity_picker.dart';
 import 'transaction_icon_badge.dart';
 import '../../../l10n/generated/app_localizations.dart';
 
@@ -102,6 +103,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   String? _accountId;
   String? _destinationAccountId;
   String? _categoryId;
+  String? _serviceIdentityKey;
   String? _note;
   Money? _amount;
   DateTime _occurredAt = DateTime.now();
@@ -137,6 +139,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       _accountId = existing.accountId;
       _destinationAccountId = existing.destinationAccountId;
       _categoryId = existing.categoryId;
+      _serviceIdentityKey = existing.serviceIdentityKey;
       _note = existing.note;
       _amount = Money.fromMinorUnits(existing.amountMinorUnits, existing.currencyCode);
       _initialAmountText = _amount!.toMajorUnitsString();
@@ -385,6 +388,20 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                             type: _type,
                             value: _categoryId,
                             onChanged: (String? id) => setState(() => _categoryId = id),
+                          ),
+                          const SizedBox(height: 12),
+                          // Checkpoint U2: category identity ("what kind
+                          // of spending is this") and service identity
+                          // ("who/what is this payment associated with")
+                          // are independent, optional selections -- see
+                          // `docs/14_DECISION_LOG.md`'s U2 ADR. Never
+                          // shown for a transfer, same convention as the
+                          // category dropdown immediately above (a
+                          // transfer is never categorized OR
+                          // service-identified).
+                          ServiceIdentityDropdown(
+                            value: _serviceIdentityKey,
+                            onChanged: (String? key) => setState(() => _serviceIdentityKey = key),
                           ),
                         ],
                       ],
@@ -658,6 +675,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               accountId: _accountId!,
               amount: _amount!,
               categoryId: _categoryId,
+              serviceIdentityKey: _serviceIdentityKey,
               note: _note,
               occurredAtUtc: occurredAtUtc,
             );
@@ -667,6 +685,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               accountId: _accountId!,
               amount: _amount!,
               categoryId: _categoryId,
+              serviceIdentityKey: _serviceIdentityKey,
               note: _note,
               occurredAtUtc: occurredAtUtc,
             );
@@ -691,6 +710,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               accountId: _accountId!,
               amount: _amount!,
               categoryId: _categoryId,
+              serviceIdentityKey: _serviceIdentityKey,
               note: _note,
               occurredAtUtc: occurredAtUtc,
             );
@@ -700,6 +720,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
               accountId: _accountId!,
               amount: _amount!,
               categoryId: _categoryId,
+              serviceIdentityKey: _serviceIdentityKey,
               note: _note,
               occurredAtUtc: occurredAtUtc,
             );

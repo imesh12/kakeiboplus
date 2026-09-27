@@ -302,6 +302,12 @@ abstract class AppLocalizations {
   /// **'Category (optional)'**
   String get categoryOptionalLabel;
 
+  /// No description provided for @serviceOptionalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Service (optional)'**
+  String get serviceOptionalLabel;
+
   /// No description provided for @noteOptionalLabel.
   ///
   /// In en, this message translates to:
@@ -979,6 +985,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Category'**
   String get categoryFieldLabel;
+
+  /// No description provided for @serviceFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Service'**
+  String get serviceFieldLabel;
+
+  /// No description provided for @serviceFamilyStreamingGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming service'**
+  String get serviceFamilyStreamingGenericLabel;
+
+  /// No description provided for @serviceFamilyMusicGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Music service'**
+  String get serviceFamilyMusicGenericLabel;
+
+  /// No description provided for @serviceFamilyCloudStorageGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud storage'**
+  String get serviceFamilyCloudStorageGenericLabel;
+
+  /// No description provided for @serviceFamilyCloudInfrastructureGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud infrastructure'**
+  String get serviceFamilyCloudInfrastructureGenericLabel;
+
+  /// No description provided for @serviceFamilyAiGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'AI service'**
+  String get serviceFamilyAiGenericLabel;
+
+  /// No description provided for @serviceFamilyProductivityGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Productivity tool'**
+  String get serviceFamilyProductivityGenericLabel;
+
+  /// No description provided for @serviceFamilyGamingGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Gaming service'**
+  String get serviceFamilyGamingGenericLabel;
+
+  /// No description provided for @serviceFamilyOtherGenericLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Other service'**
+  String get serviceFamilyOtherGenericLabel;
 
   /// No description provided for @chooseCategoryMessage.
   ///

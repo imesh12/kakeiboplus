@@ -10,6 +10,7 @@ import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
 import 'package:ai_financial_coach/features/budgets/presentation/budget_providers.dart';
 import 'package:ai_financial_coach/features/budgets/presentation/budgets_screen.dart';
 import 'package:ai_financial_coach/features/categories/presentation/category_providers.dart';
+import 'package:ai_financial_coach/shared/widgets/currency_badge.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -1751,5 +1752,70 @@ void main() {
       expect(find.byKey(const Key('overallBudgetTile_JPY')), findsNothing);
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('Checkpoint U2 -- CurrencyBadge audit: the overall/category budget currency dropdowns', () {
+    testWidgets(
+      'the overall-budget dialog’s currency dropdown item renders through CurrencyBadge, '
+      'not a bare Text, and the round trip still works',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithBudgets(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addBudgetFab')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('addOverallBudgetOption')));
+        await tester.pumpAndSettle();
+
+        // The dropdown button's own closed state already renders the
+        // currently-selected item's child widget -- a `CurrencyBadge`,
+        // per this checkpoint's change -- rather than only building it
+        // once the menu is opened.
+        expect(find.byType(CurrencyBadge), findsWidgets);
+
+        await tester.enterText(find.byKey(const Key('overallBudgetAmountField')), '60000');
+        await tester.tap(find.byKey(const Key('saveOverallBudget')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('¥60,000'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'the category-budget dialog’s currency dropdown item also renders through CurrencyBadge',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb(withCategories: true);
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        final ProviderSubscription<AsyncValue<List<CategoryRow>>> categoriesSubscription = container
+            .listen<AsyncValue<List<CategoryRow>>>(categoriesForTypeProvider('expense'), (_, __) {});
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+          categoriesSubscription.close();
+          await tester.pumpAndSettle();
+          container.dispose();
+          await tester.pumpAndSettle();
+          await db.close();
+        });
+
+        await tester.pumpWidget(appWithBudgets(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('addBudgetFab')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('addCategoryBudgetOption')));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(CurrencyBadge), findsWidgets);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

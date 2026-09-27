@@ -16,6 +16,7 @@ import '../../../shared/widgets/app_icon_tile.dart';
 import '../../../shared/widgets/app_money_text.dart';
 import '../../../shared/widgets/app_progress_bar.dart';
 import '../../../shared/widgets/app_section_header.dart';
+import '../../../shared/widgets/currency_badge.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../categories/presentation/category_identity_icon.dart';
 import '../../categories/presentation/category_providers.dart';
@@ -718,7 +719,19 @@ class _OverallBudgetDialogState extends ConsumerState<_OverallBudgetDialog> {
               onChanged: editing ? null : (String? v) => setState(() => _currencyCode = v ?? _currencyCode),
               items: <DropdownMenuItem<String>>[
                 for (final currency in CurrencyRegistry.seed)
-                  DropdownMenuItem<String>(value: currency.code, child: Text(currency.code)),
+                  DropdownMenuItem<String>(
+                    value: currency.code,
+                    // Checkpoint U2 (CurrencyBadge audit): the same
+                    // small currency-code badge every other bare
+                    // currency-code dropdown item already renders
+                    // through (`add_account_form_screen.dart`) --
+                    // currency remains the authoritative identifier,
+                    // the region monogram is purely secondary
+                    // decoration (see `CurrencyBadge`'s own doc
+                    // comment on why EUR/shared currencies never
+                    // imply a single country).
+                    child: CurrencyBadge(currencyCode: currency.code, showRegionIndicator: true),
+                  ),
               ],
             ),
             MoneyTextField(
@@ -846,7 +859,19 @@ class _CategoryBudgetDialogState extends ConsumerState<_CategoryBudgetDialog> {
               onChanged: editing ? null : (String? v) => setState(() => _currencyCode = v ?? _currencyCode),
               items: <DropdownMenuItem<String>>[
                 for (final currency in CurrencyRegistry.seed)
-                  DropdownMenuItem<String>(value: currency.code, child: Text(currency.code)),
+                  DropdownMenuItem<String>(
+                    value: currency.code,
+                    // Checkpoint U2 (CurrencyBadge audit): the same
+                    // small currency-code badge every other bare
+                    // currency-code dropdown item already renders
+                    // through (`add_account_form_screen.dart`) --
+                    // currency remains the authoritative identifier,
+                    // the region monogram is purely secondary
+                    // decoration (see `CurrencyBadge`'s own doc
+                    // comment on why EUR/shared currencies never
+                    // imply a single country).
+                    child: CurrencyBadge(currencyCode: currency.code, showRegionIndicator: true),
+                  ),
               ],
             ),
             MoneyTextField(

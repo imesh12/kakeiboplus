@@ -1831,4 +1831,100 @@ void main() {
       },
     );
   });
+
+  group('Checkpoint U2 -- service identity on a transaction row', () {
+    testWidgets(
+      'a service identity takes over the row title, and the category name moves into the '
+      'subtitle instead of disappearing',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1500, 'JPY'),
+          categoryId: 'sys-dining',
+          serviceIdentityKey: 'netflix',
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        // The service display name ("Netflix") wins the title slot that
+        // would otherwise show "Dining Out" -- but the category name is
+        // not lost, it appears in the subtitle alongside the account
+        // name instead.
+        expect(find.text('Netflix'), findsOneWidget);
+        expect(find.text('Dining Out'), findsNothing); // no longer the title
+        expect(find.textContaining('Dining Out'), findsOneWidget); // now in the subtitle
+      },
+    );
+
+    testWidgets(
+      'a transaction with no service identity is completely unaffected -- the category name '
+      'still wins the title slot, exactly as before this checkpoint',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1200, 'JPY'),
+          categoryId: 'sys-dining',
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Dining Out'), findsOneWidget); // still the title
+      },
+    );
+
+    testWidgets(
+      'tapping through to the detail screen shows a "Service" metadata row alongside the '
+      'existing "Category" row',
+      (tester) async {
+        final (AppDatabase db, String profileId, String accountId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+        await txRepo.recordExpense(
+          profileId: profileId,
+          accountId: accountId,
+          amount: Money.fromMinorUnits(1500, 'JPY'),
+          categoryId: 'sys-dining',
+          serviceIdentityKey: 'netflix',
+          occurredAtUtc: DateTime.now().toUtc(),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Netflix'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Category'), findsOneWidget);
+        expect(find.text('Dining Out'), findsOneWidget); // still shown, in the metadata card
+        expect(find.text('Service'), findsOneWidget);
+        // "Netflix" now appears twice: once in the header (taking the
+        // category-name slot there too), once in the new Service row.
+        expect(find.text('Netflix'), findsNWidgets(2));
+      },
+    );
+  });
 }

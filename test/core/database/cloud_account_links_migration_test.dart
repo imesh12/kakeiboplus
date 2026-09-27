@@ -59,6 +59,14 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 // migration history; only `color_key` was ever added later, by v14).
 // No row is ever inserted into this table; only its existence is
 // needed for the later `ALTER TABLE` to succeed.
+//
+// Checkpoint U2 repair: `recurring_rules` is included below for the
+// identical reason -- Checkpoint U2's `from < 15` branch runs `ALTER
+// TABLE recurring_rules ADD COLUMN service_identity_key ...` whenever
+// `from >= 4` (v7 satisfies that), which fails with "no such table" if
+// the table isn't here. Its shape below is its historically accurate
+// v5+ shape (already including `notifications_enabled`, added well
+// before v7) -- no row is ever inserted into it either.
 void main() {
   test(
     'v7 -> current (v8) upgrade creates cloud_account_links, leaves every existing v7 table '
@@ -144,6 +152,30 @@ void main() {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             deleted_at INTEGER,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_status TEXT NOT NULL DEFAULT 'localOnly',
+            PRIMARY KEY (id)
+          );
+
+          CREATE TABLE recurring_rules (
+            id TEXT NOT NULL,
+            profile_id TEXT NOT NULL REFERENCES profiles (id),
+            kind TEXT NOT NULL,
+            name TEXT NOT NULL,
+            amount_minor_units INTEGER NOT NULL,
+            currency_code TEXT NOT NULL REFERENCES currencies (code),
+            account_id TEXT NOT NULL REFERENCES accounts (id),
+            destination_account_id TEXT REFERENCES accounts (id),
+            category_id TEXT REFERENCES categories (id),
+            note TEXT,
+            frequency TEXT NOT NULL,
+            interval INTEGER NOT NULL DEFAULT 1,
+            start_date INTEGER NOT NULL,
+            end_date INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            deleted_at INTEGER,
+            notifications_enabled INTEGER NOT NULL DEFAULT 0,
             sync_version INTEGER NOT NULL DEFAULT 0,
             sync_status TEXT NOT NULL DEFAULT 'localOnly',
             PRIMARY KEY (id)
@@ -300,6 +332,13 @@ void main() {
       // continued existence is asserted here.
       final List<CategoryRow> categoryRows = await db.select(db.categories).get();
       expect(categoryRows, isEmpty);
+
+      // Checkpoint U2 repair: proves this v7 fixture also survives the
+      // new `from < 15` step -- `recurring_rules` is still present and
+      // queryable, which it would not be if that step's `ALTER TABLE`
+      // had failed.
+      final List<RecurringRuleRow> recurringRuleRows = await db.select(db.recurringRules).get();
+      expect(recurringRuleRows, isEmpty);
     },
   );
 

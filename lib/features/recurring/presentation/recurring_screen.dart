@@ -28,8 +28,13 @@ import '../../../shared/widgets/app_segmented_control.dart';
 import '../../../shared/widgets/app_status_chip.dart';
 import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
+import '../../categories/domain/category_color.dart';
+import '../../categories/domain/category_icon.dart';
 import '../../categories/presentation/category_identity_icon.dart';
 import '../../categories/presentation/category_providers.dart';
+import '../../services/domain/service_identity.dart';
+import '../../services/domain/service_identity_catalog.dart';
+import '../../services/presentation/service_identity_picker.dart';
 import '../domain/recurrence_frequency.dart';
 import '../domain/recurring_rule_kind.dart';
 import 'recurring_providers.dart';
@@ -481,20 +486,70 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
       RecurringItemUrgency.dueToday => (colors.primary, l10n.recurringStatusDueToday),
       RecurringItemUrgency.upcoming => (colors.onSurfaceVariant, l10n.recurringStatusUpcoming),
     };
+    final RecurringRuleKind kind = RecurringRuleKind.values.byName(rule.kind);
+    final bool isTransferRule = kind == RecurringRuleKind.transfer;
     final IconData kindIcon = widget.leadingIconOverride ??
-        switch (RecurringRuleKind.values.byName(rule.kind)) {
+        switch (kind) {
           RecurringRuleKind.expense => Icons.trending_down_rounded,
           RecurringRuleKind.income => Icons.trending_up_rounded,
           RecurringRuleKind.transfer => Icons.swap_horiz_rounded,
         };
 
+    // Checkpoint U2 (Service / Merchant Identity Integration): same
+    // service > category > generic-fallback precedence used everywhere
+    // else in this checkpoint, computed here as a plain (IconData,
+    // Color) pair rather than swapping in a whole identity widget --
+    // `AppFinanceListRow` below already takes `leadingIcon`/
+    // `leadingColor` as bare values, and this tile is reused unchanged
+    // by both the Recurring tab (kind-based `kindIcon`) and the
+    // Subscriptions tab (`leadingIconOverride`), so a service or
+    // category identity, when present, simply outranks whichever of
+    // those two this tile would otherwise have shown -- including for a
+    // subscription row, per the brief's own "subscription/upcoming
+    // occurrence presentation" integration target.
+    //
+    // Unlike `TransactionIconBadge`'s row usage, this tile's leading
+    // icon was never tinted by financial type to begin with (it's
+    // always `colors.onSurfaceVariant` regardless of expense/income/
+    // transfer -- urgency/amount communicate status elsewhere on this
+    // tile), so giving service/category identity its own full color
+    // here does not conflict with any "color = financial type"
+    // invariant.
+    final ServiceIdentityDefinition? serviceDefinition =
+        isTransferRule ? null : serviceIdentityDefinitionFor(rule.serviceIdentityKey);
+    final AsyncValue<CategoryRow>? categoryAsync = (!isTransferRule && rule.categoryId != null)
+        ? ref.watch(categoryByIdProvider(rule.categoryId!))
+        : null;
+    final CategoryRow? category = categoryAsync?.valueOrNull;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final IconData leadingIconData = serviceDefinition != null
+        ? serviceFamilyIconFor(serviceDefinition.family)
+        : category != null
+            ? categoryIconFor(category.icon)
+            : kindIcon;
+    final Color leadingColorValue = serviceDefinition != null
+        ? serviceFamilyColorFor(serviceDefinition.family, isDark: isDark)
+        : category != null
+            ? categoryColorFor(categoryId: category.id, storedColorKey: category.colorKey, isDark: isDark)
+            : colors.onSurfaceVariant;
+
     final String frequencyLabel =
         _frequencyLabel(l10n, RecurrenceFrequency.values.byName(rule.frequency));
     final String dateLabel = DateFormat.yMMMd().format(widget.item.scheduledDateUtc);
     final String? accountName = widget.accountName;
-    final String subtitle = accountName == null
-        ? '$frequencyLabel · $dateLabel'
-        : '$frequencyLabel · $dateLabel · $accountName';
+    // Checkpoint U2: when a service identity is set, its display name
+    // joins this same metadata line -- never replacing
+    // frequency/date/account, just one more segment, matching the
+    // "supporting metadata, not a title replacement" treatment this
+    // tile already gives `accountName`.
+    final String? serviceDisplayName =
+        serviceDefinition != null ? serviceIdentityDisplayName(l10n, serviceDefinition) : null;
+    final String subtitle = <String?>[
+      frequencyLabel,
+      dateLabel,
+      accountName,
+      serviceDisplayName,
+    ].nonNulls.join(' · ');
 
     return AppCard(
       key: Key('pendingItem_${rule.id}_$_dateKey'),
@@ -505,8 +560,8 @@ class _PendingItemTileState extends ConsumerState<_PendingItemTile> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           AppFinanceListRow(
-            leadingIcon: kindIcon,
-            leadingColor: colors.onSurfaceVariant,
+            leadingIcon: leadingIconData,
+            leadingColor: leadingColorValue,
             title: rule.name,
             subtitle: subtitle,
             trailing: Column(
@@ -597,6 +652,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
   String? _accountId;
   String? _destinationAccountId;
   String? _categoryId;
+  String? _serviceIdentityKey;
   Money? _parsedAmount;
   DateTime? _startDate;
   DateTime? _endDate;
@@ -620,6 +676,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
     _accountId = existing?.accountId;
     _destinationAccountId = existing?.destinationAccountId;
     _categoryId = existing?.categoryId;
+    _serviceIdentityKey = existing?.serviceIdentityKey;
     _startDate = existing?.startDate ?? DateTime.now().toUtc();
     _endDate = existing?.endDate;
     _notificationsEnabled = existing?.notificationsEnabled ?? false;
@@ -766,6 +823,9 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
               categoryId: _kind == RecurringRuleKind.transfer
                   ? const Value<String?>(null)
                   : Value<String?>(_categoryId),
+              serviceIdentityKey: _kind == RecurringRuleKind.transfer
+                  ? const Value<String?>(null)
+                  : Value<String?>(_serviceIdentityKey),
               note: Value<String?>(note.isEmpty ? null : note),
               frequency: _frequency,
               interval: interval,
@@ -784,6 +844,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
               accountId: accountId,
               destinationAccountId: _kind == RecurringRuleKind.transfer ? _destinationAccountId : null,
               categoryId: _kind == RecurringRuleKind.transfer ? null : _categoryId,
+              serviceIdentityKey: _kind == RecurringRuleKind.transfer ? null : _serviceIdentityKey,
               note: note.isEmpty ? null : note,
               frequency: _frequency,
               interval: interval,
@@ -904,6 +965,7 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                   onChanged: (RecurringRuleKind? v) => setState(() {
                     _kind = v ?? _kind;
                     _categoryId = null;
+                    _serviceIdentityKey = null;
                     _destinationAccountId = null;
                   }),
                 )
@@ -997,6 +1059,18 @@ class _RuleDialogState extends ConsumerState<_RuleDialog> {
                     onChanged: (String? v) => setState(() => _categoryId = v),
                   ),
                 ),
+              if (_kind != RecurringRuleKind.transfer) ...<Widget>[
+                const SizedBox(height: 12),
+                // Checkpoint U2: category identity and service identity
+                // are independent, optional selections here too --
+                // same convention and same widget as
+                // `add_transaction_screen.dart`'s dropdown, never shown
+                // for a transfer.
+                ServiceIdentityDropdown(
+                  value: _serviceIdentityKey,
+                  onChanged: (String? key) => setState(() => _serviceIdentityKey = key),
+                ),
+              ],
               MoneyTextField(
                 key: const Key('recurringAmountField'),
                 currencyCode: amountCurrency,
