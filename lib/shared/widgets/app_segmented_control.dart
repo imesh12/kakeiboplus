@@ -60,11 +60,20 @@ class AppSegmentedControl<T> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     super.key,
+    this.quietTrack = false,
+    this.selectedGradient,
   });
 
   final List<AppSegmentedControlOption<T>> options;
   final T selected;
+  final bool quietTrack;
   final ValueChanged<T> onChanged;
+
+  /// Recurring UI Upgrade + History Views checkpoint: an optional
+  /// gradient fill for the selected pill, replacing the flat
+  /// [ColorScheme.primary] fill. `null` (the default) is
+  /// pixel-identical to every other call site.
+  final Gradient? selectedGradient;
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +83,7 @@ class AppSegmentedControl<T> extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(tokens.spacing.xxs / 2),
       decoration: BoxDecoration(
-        color: tokens.colors.cardSurface,
+        color: quietTrack ? Colors.transparent : tokens.colors.cardSurface,
         borderRadius: tokens.radii.pillRadius,
       ),
       child: Row(
@@ -86,6 +95,7 @@ class AppSegmentedControl<T> extends StatelessWidget {
                 isSelected: option.value == selected,
                 onChanged: onChanged,
                 selectedColor: colors.primary,
+                selectedGradient: selectedGradient,
                 selectedTextColor: colors.onPrimary,
                 unselectedTextColor: tokens.colors.secondaryText,
                 pillRadius: tokens.radii.pillRadius,
@@ -106,12 +116,14 @@ class _Segment<T> extends StatelessWidget {
     required this.selectedTextColor,
     required this.unselectedTextColor,
     required this.pillRadius,
+    this.selectedGradient,
   });
 
   final AppSegmentedControlOption<T> option;
   final bool isSelected;
   final ValueChanged<T> onChanged;
   final Color selectedColor;
+  final Gradient? selectedGradient;
   final Color selectedTextColor;
   final Color unselectedTextColor;
   final BorderRadius pillRadius;
@@ -134,7 +146,11 @@ class _Segment<T> extends StatelessWidget {
           curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? selectedColor : Colors.transparent,
+            // A transparent paint color would also suppress the shader's alpha.
+            color: isSelected
+                ? (selectedGradient == null ? selectedColor : null)
+                : Colors.transparent,
+            gradient: isSelected ? selectedGradient : null,
             borderRadius: pillRadius,
           ),
           alignment: Alignment.center,

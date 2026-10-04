@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/widgets/app_icon_tile.dart';
 import '../domain/service_identity.dart';
 import '../domain/service_identity_catalog.dart';
+import 'service_icon_asset.dart';
 
 /// Checkpoint U2: renders a persisted `serviceIdentityKey` string (a
 /// `Transactions`/`RecurringRules` column value) through the same shared
@@ -18,6 +19,17 @@ import '../domain/service_identity_catalog.dart';
 /// instead and resolves it itself via `serviceIdentityDefinitionFor` --
 /// exactly [CategoryIdentityIcon]'s own "take the persisted string,
 /// resolve internally, never require the caller to pre-resolve" contract.
+///
+/// # Checkpoint: real branded artwork, same seam `service_identity_catalog.dart`
+/// already documented
+///
+/// When [serviceIconAssetFor] has approved bundled artwork for
+/// [serviceIdentityKey], that artwork is preferred -- rendered through
+/// `AppIconTile.assetPath`, which bypasses the tinted generic-family
+/// circle entirely. Only when no approved artwork exists for this key
+/// does this widget fall back to the generic family icon/color below.
+/// This is the single resolver: no other widget maps a service key to
+/// an asset path directly.
 ///
 /// Total, never throws: `null` and any unrecognized string both resolve
 /// safely (`serviceIdentityDefinitionFor`'s own contract) to a rendered
@@ -35,6 +47,8 @@ class ServiceIdentityIcon extends StatelessWidget {
     this.serviceIdentityKey,
     this.size = AppIconTileSize.medium,
     this.semanticLabel,
+    this.containerSize,
+    this.glyphSize,
   });
 
   /// A `ServiceIdentityDefinition.id`, or `null` to render the safe
@@ -45,6 +59,17 @@ class ServiceIdentityIcon extends StatelessWidget {
 
   final AppIconTileSize size;
   final String? semanticLabel;
+
+  /// Forwarded verbatim to [AppIconTile.containerSize] -- the same
+  /// "override this one tier's container without touching the shared
+  /// tier numbers" seam [AppIconTile] already exposes (see its own doc
+  /// comment). `null` (the default) is pixel-identical to every
+  /// pre-existing call site.
+  final double? containerSize;
+
+  /// Forwarded verbatim to [AppIconTile.glyphSize]. `null` (the
+  /// default) is pixel-identical to every pre-existing call site.
+  final double? glyphSize;
 
   @override
   Widget build(BuildContext context) {
@@ -57,11 +82,15 @@ class ServiceIdentityIcon extends StatelessWidget {
     // the first place (see the class doc comment).
     final ServiceIdentityFamily family =
         serviceIdentityDefinitionFor(serviceIdentityKey)?.family ?? ServiceIdentityFamily.other;
+    final String? asset = serviceIconAssetFor(serviceIdentityKey);
     return AppIconTile(
+      assetPath: asset,
       icon: serviceFamilyIconFor(family),
       color: serviceFamilyColorFor(family, isDark: isDark),
       size: size,
       semanticLabel: semanticLabel,
+      containerSize: containerSize,
+      glyphSize: glyphSize,
     );
   }
 }

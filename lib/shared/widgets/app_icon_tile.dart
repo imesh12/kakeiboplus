@@ -42,9 +42,15 @@ class AppIconTile extends StatelessWidget {
     super.key,
     this.size = AppIconTileSize.medium,
     this.semanticLabel,
+    this.containerSize,
+    this.glyphSize,
+    this.assetPath,
   });
 
   final IconData icon;
+
+  /// Optional multicolor artwork; leaves all glyph-only callers unchanged.
+  final String? assetPath;
 
   /// Tints both the tile's background (at a fixed, restrained 0.14 alpha
   /// -- matching `TransactionIconBadge`'s existing tint) and the icon
@@ -62,14 +68,40 @@ class AppIconTile extends StatelessWidget {
   /// own, exactly like every existing tinted-icon call site today.
   final String? semanticLabel;
 
+  /// Dashboard icon-balance pass: an optional override for the tile's
+  /// own container width/height, replacing whatever [size]'s named
+  /// tier would otherwise give. `null` (the default) is pixel-
+  /// identical to every pre-existing call site -- this only exists so
+  /// one caller (today, Home's 2x2 metric cards) can ask for a
+  /// container size between two named tiers (e.g. 44, between
+  /// [AppIconTileSize.medium]'s 40 and [AppIconTileSize.large]'s 48)
+  /// without changing [AppIconTileSize.large]'s own shared numbers and
+  /// so affecting every OTHER screen that already uses that tier
+  /// (`account_detail_screen.dart`, for one). [size] still selects the
+  /// corner radius either way.
+  final double? containerSize;
+
+  /// Dashboard icon-balance pass: an optional override for the glyph's
+  /// own size, independent of [containerSize]/[size]'s container.
+  /// Different [IconData] glyphs (an arrow-based "trending" icon vs. a
+  /// solid "wallet"/"bar chart" icon) can read as a different visual
+  /// weight at the exact same numerical [Icon.size], so a caller
+  /// rendering several icons side by side for optical balance may need
+  /// to nudge one glyph a point or two without changing its container
+  /// -- `null` (the default) is pixel-identical to every pre-existing
+  /// call site.
+  final double? glyphSize;
+
   @override
   Widget build(BuildContext context) {
     final AppIconSizes sizes = context.appTokens.iconSizes;
-    final (double container, double glyph) = switch (size) {
+    final (double tierContainer, double tierGlyph) = switch (size) {
       AppIconTileSize.small => (sizes.smallContainer, sizes.smallIcon),
       AppIconTileSize.medium => (sizes.mediumContainer, sizes.mediumIcon),
       AppIconTileSize.large => (sizes.largeContainer, sizes.largeIcon),
     };
+    final double container = containerSize ?? tierContainer;
+    final double glyph = glyphSize ?? tierGlyph;
     // Radius scales with container size so the tile's corners stay
     // proportionate at every tier, rather than a single fixed radius
     // looking too sharp on the small tile or too subtle on the large one
@@ -81,6 +113,20 @@ class AppIconTile extends StatelessWidget {
       AppIconTileSize.large => 16,
     };
 
+    if (assetPath != null) {
+      return SizedBox(
+        width: container,
+        height: container,
+        child: Center(
+          child: Image.asset(
+            assetPath!, width: 32, height: 32, fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+            excludeFromSemantics: semanticLabel == null,
+            semanticLabel: semanticLabel,
+          ),
+        ),
+      );
+    }
     return Container(
       width: container,
       height: container,

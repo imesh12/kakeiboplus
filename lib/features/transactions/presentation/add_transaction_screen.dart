@@ -16,7 +16,6 @@ import '../../../shared/widgets/money_text_field.dart';
 import '../../accounts/presentation/account_providers.dart';
 import '../../categories/presentation/category_identity_icon.dart';
 import '../../categories/presentation/category_providers.dart';
-import '../../services/presentation/service_identity_picker.dart';
 import 'transaction_icon_badge.dart';
 import '../../../l10n/generated/app_localizations.dart';
 
@@ -389,20 +388,28 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                             value: _categoryId,
                             onChanged: (String? id) => setState(() => _categoryId = id),
                           ),
-                          const SizedBox(height: 12),
-                          // Checkpoint U2: category identity ("what kind
-                          // of spending is this") and service identity
-                          // ("who/what is this payment associated with")
-                          // are independent, optional selections -- see
-                          // `docs/14_DECISION_LOG.md`'s U2 ADR. Never
-                          // shown for a transfer, same convention as the
-                          // category dropdown immediately above (a
-                          // transfer is never categorized OR
-                          // service-identified).
-                          ServiceIdentityDropdown(
-                            value: _serviceIdentityKey,
-                            onChanged: (String? key) => setState(() => _serviceIdentityKey = key),
-                          ),
+                          // U3 Final Polish Pass: the Service dropdown is
+                          // hidden from this normal Add Income/Expense
+                          // (and edit) form -- it was rendering for BOTH
+                          // expense and income here (never gated to one
+                          // type), and the goal for this everyday flow is
+                          // a simpler form: account, type, amount,
+                          // category, date, note. This is a UI hide only:
+                          // `_serviceIdentityKey` (declared above, still
+                          // seeded from `existing.serviceIdentityKey` in
+                          // edit mode) is still read here and still
+                          // passed to every `serviceIdentityKey:`
+                          // argument in `_submit` below, unchanged --
+                          // editing an older transaction that already
+                          // carries a service identity keeps it exactly
+                          // as-is on save; this form just never offers a
+                          // control to set or change one. Domain/DB
+                          // support (`serviceIdentityKey` on the table,
+                          // model, and repository) is completely
+                          // untouched, and `recurring_screen.dart`'s own,
+                          // separate `ServiceIdentityDropdown` (a
+                          // different call site, its own recurring-rule
+                          // form) is unaffected by this change.
                         ],
                       ],
                     ),
@@ -919,11 +926,16 @@ class _CategoryDropdown extends ConsumerWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
+                    // App Icon Integration checkpoint: same `large`
+                    // bump as `categories_screen.dart`'s row, so a
+                    // category's icon reads identically (same slot/
+                    // artwork size) in the picker as it does in the
+                    // Categories list itself.
                     CategoryIdentityIcon(
                       categoryId: category.id,
                       iconKey: category.icon,
                       colorKey: category.colorKey,
-                      size: AppIconTileSize.small,
+                      size: AppIconTileSize.large,
                     ),
                     const SizedBox(width: 8),
                     Flexible(

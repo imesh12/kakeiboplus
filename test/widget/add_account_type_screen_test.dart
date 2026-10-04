@@ -384,4 +384,85 @@ void main() {
       },
     );
   });
+
+  group('Accounts Icon Pack Full Integration checkpoint: type-chooser rows', () {
+    // Every one of the 6 chooser rows now resolves an icon through
+    // `accountIconAssetFor` -- 5 via the account-specific Accounts pack,
+    // and "Bank account" via the public pool's business-building.png
+    // (the approved Accounts pack has no dedicated bank artwork -- see
+    // `account_icon_asset.dart`'s own doc). None render a blank/broken
+    // Image, and none are left on a bare Material glyph any more.
+    const List<(String rowTitle, String assetPath)> assetMappedRows = <(String, String)>[
+      ('Cash', 'assets/icons/accounts/cash.png'),
+      ('Bank account', 'assets/icons/public/business_building.png'),
+      ('Savings account', 'assets/icons/accounts/savings_account.png'),
+      ('E-money / Wallet', 'assets/icons/accounts/wallet.png'),
+      ('Deposit', 'assets/icons/accounts/deposit.png'),
+      ('Credit card', 'assets/icons/accounts/credit_card.png'),
+    ];
+
+    for (final (String rowTitle, String assetPath) in assetMappedRows) {
+      testWidgets(
+        '"$rowTitle" row renders its curated production asset ($assetPath), with its '
+        'trailing chevron and row-tap behavior unaffected',
+        (tester) async {
+          final AppDatabase db = await seededDb();
+          final ProviderContainer container = ProviderContainer(
+            overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+          );
+          addTearDown(() => disposeInOrder(tester, container, db));
+
+          await tester.pumpWidget(appWithRouter(container));
+          await openChooser(tester);
+
+          expect(tester.takeException(), isNull);
+          final Finder rowTitleText = find.text(rowTitle);
+          final Finder rowCard = find.ancestor(of: rowTitleText, matching: find.byType(InkWell)).first;
+
+          final Image image = tester.widget<Image>(
+            find.descendant(of: rowCard, matching: find.byType(Image)),
+          );
+          expect((image.image as AssetImage).assetName, assetPath);
+
+          // The trailing chevron (the row's only remaining bare Icon)
+          // still renders -- the asset swap only affects the leading
+          // AppIconTile slot.
+          expect(
+            find.descendant(of: rowCard, matching: find.byIcon(Icons.chevron_right)),
+            findsOneWidget,
+          );
+        },
+      );
+    }
+
+    testWidgets(
+      'every row renders without overflow at a narrow 320px width and 1.6x text scale, '
+      'including every curated-artwork row',
+      (tester) async {
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final AppDatabase db = await seededDb();
+        final ProviderContainer container = ProviderContainer(
+          overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container));
+        await openChooser(tester);
+
+        final Object? overflowException = tester.takeException();
+        if (overflowException != null) {
+          fail(
+            'Narrow-screen (320px) + 1.6x text scale type chooser threw an exception:\n\n'
+            '$overflowException',
+          );
+        }
+      },
+    );
+  });
 }

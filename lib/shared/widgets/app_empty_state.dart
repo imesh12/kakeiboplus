@@ -51,11 +51,37 @@ class AppEmptyState extends StatelessWidget {
       children: <Widget>[
         Text(message, style: style),
         SizedBox(height: tokens.spacing.sm),
-        OutlinedButton.icon(
+        // U3 narrow-screen investigation (docs/14): this was the SECOND,
+        // still-unfixed occurrence of the same bug fixed on
+        // `_UpcomingCommitmentsCard`'s warm empty state --
+        // `OutlinedButton.icon(icon:, label:)` never wraps its label in
+        // `Flexible`, so a long `actionLabel` (e.g. "Set a monthly
+        // budget", longer than that other card's "Set up recurring")
+        // can overflow at a high text-scale factor on a narrow screen
+        // even with only this widget's single padding layer. Every test
+        // that leaves the Budget or Savings Goals section unconfigured
+        // hits this shared widget regardless of that test's own nominal
+        // target, which is why the overflow kept appearing after the
+        // other fix landed. Rebuilt by hand with the same `Flexible` +
+        // ellipsis convention used everywhere else -- no visual change
+        // except once space genuinely runs out.
+        OutlinedButton(
           key: actionKey,
           onPressed: onAction,
-          icon: Icon(icon),
-          label: Text(actionLabel),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 18),
+              SizedBox(width: tokens.spacing.xs),
+              Flexible(
+                child: Text(
+                  actionLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

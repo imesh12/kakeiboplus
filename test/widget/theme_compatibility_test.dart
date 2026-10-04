@@ -156,15 +156,19 @@ void main() {
         // isn't silently failing to build under this theme, not just
         // that `Scaffold` itself didn't throw.
         expect(find.byKey(const Key('heroCurrencyCard_JPY')), findsOneWidget);
-        // The Accounts section is the deepest section on Home and is
-        // lazily built inside the screen's ListView -- every other test
-        // in this repo that asserts on an account name scrolls to it
-        // first (see `home_screen_test.dart`'s own account-name
-        // assertions), so this does too instead of assuming it's already
-        // mounted after a single `pumpAndSettle()`.
-        await tester.scrollUntilVisible(find.text('Wallet'), 300.0);
+        // U3 Final Polish Pass (Home presentation cleanup): the
+        // per-account balance list this test used to scroll to and
+        // assert on ("Wallet") no longer renders on Home at all. A
+        // later pass (U3 Final Polish Pass, item 2) also removed the
+        // full Budget detail card (`Key('budgetCard')`) from Home
+        // entirely, so the Savings Goals card (`Key('savingsGoalsCard')`)
+        // is now the deepest section on Home and is lazily built inside
+        // the screen's ListView, so this scrolls to THAT instead of
+        // assuming it's already mounted after a single
+        // `pumpAndSettle()`.
+        await tester.scrollUntilVisible(find.byKey(const Key('savingsGoalsCard')), 300.0);
         await tester.pumpAndSettle();
-        expect(find.text('Wallet'), findsOneWidget);
+        expect(find.byKey(const Key('savingsGoalsCard')), findsOneWidget);
       });
     }
   });

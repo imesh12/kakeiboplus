@@ -1670,4 +1670,324 @@ void main() {
       },
     );
   });
+
+  // U3 Final Polish Pass, item 9 -- "Activity list appears mixed rather
+  // than clearly date-ordered." Root cause: `watchActiveForProfile`'s
+  // `orderBy` sorted by `occurredAt` alone, so any two transactions
+  // sharing the same `occurredAt` (a common case -- many entries carry
+  // no time-of-day) had NO defined relative order and could visibly
+  // reshuffle between rebuilds. The fix adds `createdAt` (desc) then
+  // `id` (asc) as deterministic tie-breakers, in that priority order.
+  // These tests exercise each tie-break level directly, plus prove no
+  // record -- of any type -- is ever dropped by the added ordering.
+  group('U3 Final Polish Pass -- Activity ordering (watchActiveForProfile)', () {
+    late String accountId;
+
+    setUp(() async {
+      accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet',
+        type: 'cash',
+        currencyCode: 'USD',
+      );
+    });
+
+    test('distinct occurredAt dates sort newest-first, regardless of insertion order', () async {
+      final String middle = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(100, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 1, 15),
+      );
+      final String newest = await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(200, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 1, 31),
+      );
+      final String oldest = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(300, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 1, 1),
+      );
+
+      final List<Transaction> active = await transactionRepo.watchActiveForProfile(profileId).first;
+      expect(active.map((Transaction t) => t.id).toList(), <String>[newest, middle, oldest]);
+    });
+
+    test('same occurredAt: the more-recently-created row sorts first (createdAt tie-break)', () async {
+      // Bypasses the repository's own `_insert` (which always stamps
+      // `createdAt` from the real clock) so both rows can share the
+      // exact same `occurredAt` while `createdAt` is set explicitly and
+      // unambiguously ordered -- this is what makes the tie-break
+      // deterministic rather than dependent on real timing.
+      final DateTime sameOccurredAt = DateTime.utc(2026, 3, 10);
+      final DateTime earlierCreatedAt = DateTime.utc(2026, 3, 10, 8);
+      final DateTime laterCreatedAt = DateTime.utc(2026, 3, 10, 9);
+
+      const String createdFirstId = 'ord-created-first';
+      const String createdSecondId = 'ord-created-second';
+
+      await db.into(db.transactions).insert(
+            TransactionsCompanion.insert(
+              id: createdFirstId,
+              profileId: profileId,
+              accountId: accountId,
+              type: 'expense',
+              amountMinorUnits: 100,
+              currencyCode: 'USD',
+              occurredAt: sameOccurredAt,
+              createdAt: earlierCreatedAt,
+              updatedAt: earlierCreatedAt,
+            ),
+          );
+      await db.into(db.transactions).insert(
+            TransactionsCompanion.insert(
+              id: createdSecondId,
+              profileId: profileId,
+              accountId: accountId,
+              type: 'expense',
+              amountMinorUnits: 200,
+              currencyCode: 'USD',
+              occurredAt: sameOccurredAt,
+              createdAt: laterCreatedAt,
+              updatedAt: laterCreatedAt,
+            ),
+          );
+
+      final List<Transaction> active = await transactionRepo.watchActiveForProfile(profileId).first;
+      expect(
+        active.map((Transaction t) => t.id).toList(),
+        <String>[createdSecondId, createdFirstId],
+      );
+    });
+
+    test('same occurredAt AND same createdAt: id is the final deterministic tie-breaker', () async {
+      final DateTime sameOccurredAt = DateTime.utc(2026, 4, 1);
+      final DateTime sameCreatedAt = DateTime.utc(2026, 4, 1, 12);
+
+      // Ascending-id ordering is `OrderingTerm.asc(tbl.id)` in the
+      // implementation, so the lexicographically smaller id ('aaa...')
+      // must win the tie and sort first.
+      const String lexicographicallySmallerId = 'aaa-ordering-tiebreak';
+      const String lexicographicallyLargerId = 'zzz-ordering-tiebreak';
+
+      for (final String id in <String>[lexicographicallyLargerId, lexicographicallySmallerId]) {
+        await db.into(db.transactions).insert(
+              TransactionsCompanion.insert(
+                id: id,
+                profileId: profileId,
+                accountId: accountId,
+                type: 'expense',
+                amountMinorUnits: 100,
+                currencyCode: 'USD',
+                occurredAt: sameOccurredAt,
+                createdAt: sameCreatedAt,
+                updatedAt: sameCreatedAt,
+              ),
+            );
+      }
+
+      final List<Transaction> active = await transactionRepo.watchActiveForProfile(profileId).first;
+      expect(
+        active.map((Transaction t) => t.id).toList(),
+        <String>[lexicographicallySmallerId, lexicographicallyLargerId],
+      );
+    });
+
+    test('income, expense, and transfer records all survive the ordered query -- none dropped', () async {
+      final String expenseId = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 5, 1),
+      );
+      final String incomeId = await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(600, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 5, 1),
+      );
+      final String destinationAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Savings',
+        type: 'savings',
+        currencyCode: 'USD',
+      );
+      final String transferId = await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: accountId,
+        destinationAccountId: destinationAccountId,
+        amount: Money.fromMinorUnits(700, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 5, 1),
+      );
+
+      final List<Transaction> active = await transactionRepo.watchActiveForProfile(profileId).first;
+      expect(
+        active.map((Transaction t) => t.id).toSet(),
+        <String>{expenseId, incomeId, transferId},
+      );
+      expect(active.length, 3);
+    });
+  });
+
+  // Follow-up to the U3 Final Polish Pass ordering fix -- Account
+  // Detail's own "recent activity" query (`watchActiveForAccount`) had
+  // the identical gap and is doc-commented as intentionally matching
+  // `watchActiveForProfile`'s ordering, so it gets the same fix and the
+  // same focused coverage shape as the group above.
+  group('U3 Final Polish Pass -- Activity ordering (watchActiveForAccount)', () {
+    late String accountId;
+    late String otherAccountId;
+
+    setUp(() async {
+      accountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Wallet',
+        type: 'cash',
+        currencyCode: 'USD',
+      );
+      otherAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Unrelated Account',
+        type: 'cash',
+        currencyCode: 'USD',
+      );
+    });
+
+    test('distinct occurredAt dates sort newest-first, regardless of insertion order', () async {
+      final String middle = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(100, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 6, 15),
+      );
+      final String newest = await transactionRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(200, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 6, 30),
+      );
+      final String oldest = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(300, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 6, 1),
+      );
+
+      final List<Transaction> active = await transactionRepo.watchActiveForAccount(accountId).first;
+      expect(active.map((Transaction t) => t.id).toList(), <String>[newest, middle, oldest]);
+    });
+
+    test('same occurredAt: the more-recently-created row sorts first (createdAt tie-break)', () async {
+      // Bypasses the repository's own `_insert` (which always stamps
+      // `createdAt` from the real clock) so both rows can share the
+      // exact same `occurredAt` while `createdAt` is set explicitly and
+      // unambiguously ordered.
+      final DateTime sameOccurredAt = DateTime.utc(2026, 7, 10);
+      final DateTime earlierCreatedAt = DateTime.utc(2026, 7, 10, 8);
+      final DateTime laterCreatedAt = DateTime.utc(2026, 7, 10, 9);
+
+      const String createdFirstId = 'acct-ord-created-first';
+      const String createdSecondId = 'acct-ord-created-second';
+
+      await db.into(db.transactions).insert(
+            TransactionsCompanion.insert(
+              id: createdFirstId,
+              profileId: profileId,
+              accountId: accountId,
+              type: 'expense',
+              amountMinorUnits: 100,
+              currencyCode: 'USD',
+              occurredAt: sameOccurredAt,
+              createdAt: earlierCreatedAt,
+              updatedAt: earlierCreatedAt,
+            ),
+          );
+      await db.into(db.transactions).insert(
+            TransactionsCompanion.insert(
+              id: createdSecondId,
+              profileId: profileId,
+              accountId: accountId,
+              type: 'expense',
+              amountMinorUnits: 200,
+              currencyCode: 'USD',
+              occurredAt: sameOccurredAt,
+              createdAt: laterCreatedAt,
+              updatedAt: laterCreatedAt,
+            ),
+          );
+
+      final List<Transaction> active = await transactionRepo.watchActiveForAccount(accountId).first;
+      expect(
+        active.map((Transaction t) => t.id).toList(),
+        <String>[createdSecondId, createdFirstId],
+      );
+    });
+
+    test('same occurredAt AND same createdAt: id is the final deterministic tie-breaker', () async {
+      final DateTime sameOccurredAt = DateTime.utc(2026, 8, 1);
+      final DateTime sameCreatedAt = DateTime.utc(2026, 8, 1, 12);
+
+      const String lexicographicallySmallerId = 'aaa-acct-ordering-tiebreak';
+      const String lexicographicallyLargerId = 'zzz-acct-ordering-tiebreak';
+
+      for (final String id in <String>[lexicographicallyLargerId, lexicographicallySmallerId]) {
+        await db.into(db.transactions).insert(
+              TransactionsCompanion.insert(
+                id: id,
+                profileId: profileId,
+                accountId: accountId,
+                type: 'expense',
+                amountMinorUnits: 100,
+                currencyCode: 'USD',
+                occurredAt: sameOccurredAt,
+                createdAt: sameCreatedAt,
+                updatedAt: sameCreatedAt,
+              ),
+            );
+      }
+
+      final List<Transaction> active = await transactionRepo.watchActiveForAccount(accountId).first;
+      expect(
+        active.map((Transaction t) => t.id).toList(),
+        <String>[lexicographicallySmallerId, lexicographicallyLargerId],
+      );
+    });
+
+    test(
+        'account filtering still works correctly: only transactions where this account is the '
+        'source, or the destination of a transfer, are returned -- an unrelated account\'s own '
+        'transactions never leak in', () async {
+      final String ownExpenseId = await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(400, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 1),
+      );
+      final String incomingTransferId = await transactionRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: otherAccountId,
+        destinationAccountId: accountId,
+        amount: Money.fromMinorUnits(500, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 2),
+      );
+      // An unrelated account's own expense -- must never appear in
+      // `accountId`'s recent activity.
+      await transactionRepo.recordExpense(
+        profileId: profileId,
+        accountId: otherAccountId,
+        amount: Money.fromMinorUnits(600, 'USD'),
+        occurredAtUtc: DateTime.utc(2026, 9, 3),
+      );
+
+      final List<Transaction> active = await transactionRepo.watchActiveForAccount(accountId).first;
+      expect(
+        active.map((Transaction t) => t.id).toSet(),
+        <String>{ownExpenseId, incomingTransferId},
+      );
+      expect(active.length, 2);
+    });
+  });
 }

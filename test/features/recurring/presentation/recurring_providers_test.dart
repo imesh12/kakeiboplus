@@ -477,4 +477,265 @@ void main() {
       },
     );
   });
+
+  // ADR-049 -- Home "Upcoming" window selector. `selectHomeUpcomingItems`
+  // is a small, pure, non-Riverpod function (same shape as
+  // `selectHomeRecurringItem`/`selectHomeGoalSummary`), so these tests
+  // construct `RecurringRuleRow`/`RecurringPendingItem` fixtures directly
+  // -- no database, no `ProviderContainer`, no async waiting -- and
+  // exercise the function in complete isolation from
+  // `recurringPendingItemsProvider`, which keeps its own, separately
+  // passing coverage above untouched.
+  group('selectHomeUpcomingItems (ADR-049 Home "Upcoming" window)', () {
+    final DateTime fixedToday = DateTime.utc(2026, 6, 15);
+
+    RecurringRuleRow rule({
+      required String id,
+      String name = 'Rule',
+      String kind = 'expense',
+      int amountMinorUnits = 1000,
+      String currencyCode = 'JPY',
+    }) {
+      return RecurringRuleRow(
+        id: id,
+        profileId: 'profile-1',
+        kind: kind,
+        name: name,
+        amountMinorUnits: amountMinorUnits,
+        currencyCode: currencyCode,
+        accountId: 'account-1',
+        frequency: 'daily',
+        interval: 1,
+        startDate: fixedToday,
+        createdAt: fixedToday,
+        updatedAt: fixedToday,
+        notificationsEnabled: false,
+        syncVersion: 0,
+        syncStatus: 'localOnly',
+      );
+    }
+
+    RecurringPendingItem item({
+      required String ruleId,
+      required DateTime scheduledDateUtc,
+      required RecurringItemUrgency urgency,
+      String currencyCode = 'JPY',
+    }) {
+      return RecurringPendingItem(
+        rule: rule(id: ruleId, currencyCode: currencyCode),
+        scheduledDateUtc: scheduledDateUtc,
+        urgency: urgency,
+      );
+    }
+
+    test('empty input -- empty output, not an error', () {
+      expect(selectHomeUpcomingItems(const <RecurringPendingItem>[], fixedToday), isEmpty);
+    });
+
+    test('a single upcoming item within the window passes through', () {
+      final RecurringPendingItem i = item(
+        ruleId: 'r1',
+        scheduledDateUtc: fixedToday.add(const Duration(days: 2)),
+        urgency: RecurringItemUrgency.upcoming,
+      );
+      expect(selectHomeUpcomingItems(<RecurringPendingItem>[i], fixedToday), <RecurringPendingItem>[i]);
+    });
+
+    test('multiple upcoming items all within the window all pass through', () {
+      final List<RecurringPendingItem> items = <RecurringPendingItem>[
+        item(
+          ruleId: 'r1',
+          scheduledDateUtc: fixedToday.add(const Duration(days: 1)),
+          urgency: RecurringItemUrgency.upcoming,
+        ),
+        item(
+          ruleId: 'r2',
+          scheduledDateUtc: fixedToday.add(const Duration(days: 3)),
+          urgency: RecurringItemUrgency.upcoming,
+        ),
+      ];
+      expect(selectHomeUpcomingItems(items, fixedToday), items);
+    });
+
+    test('a due-today item passes through unconditionally', () {
+      final RecurringPendingItem i = item(
+        ruleId: 'r1',
+        scheduledDateUtc: fixedToday,
+        urgency: RecurringItemUrgency.dueToday,
+      );
+      expect(selectHomeUpcomingItems(<RecurringPendingItem>[i], fixedToday), <RecurringPendingItem>[i]);
+    });
+
+    test('an upcoming item exactly on the +7-day boundary is INCLUDED (inclusive)', () {
+      final RecurringPendingItem i = item(
+        ruleId: 'r1',
+        scheduledDateUtc: fixedToday.add(const Duration(days: kHomeUpcomingWindowDays)),
+        urgency: RecurringItemUrgency.upcoming,
+      );
+      expect(selectHomeUpcomingItems(<RecurringPendingItem>[i], fixedToday), <RecurringPendingItem>[i]);
+    });
+
+    test('an upcoming item one day past the +7-day boundary is EXCLUDED', () {
+      final RecurringPendingItem i = item(
+        ruleId: 'r1',
+        scheduledDateUtc: fixedToday.add(const Duration(days: kHomeUpcomingWindowDays + 1)),
+        urgency: RecurringItemUrgency.upcoming,
+      );
+      expect(selectHomeUpcomingItems(<RecurringPendingItem>[i], fixedToday), isEmpty);
+    });
+
+    test('an overdue item passes through unconditionally, no matter how far in the past', () {
+      final RecurringPendingItem i = item(
+        ruleId: 'r1',
+        scheduledDateUtc: fixedToday.subtract(const Duration(days: 40)),
+        urgency: RecurringItemUrgency.overdue,
+      );
+      expect(selectHomeUpcomingItems(<RecurringPendingItem>[i], fixedToday), <RecurringPendingItem>[i]);
+    });
+
+    test('multiple overdue items from different missed periods all pass through', () {
+      final List<RecurringPendingItem> items = <RecurringPendingItem>[
+        item(
+          ruleId: 'r1',
+          scheduledDateUtc: fixedToday.subtract(const Duration(days: 1)),
+          urgency: RecurringItemUrgency.overdue,
+        ),
+        item(
+          ruleId: 'r2',
+          scheduledDateUtc: fixedToday.subtract(const Duration(days: 10)),
+          urgency: RecurringItemUrgency.overdue,
+        ),
+        item(
+          ruleId: 'r3',
+          scheduledDateUtc: fixedToday.subtract(const Duration(days: 30)),
+          urgency: RecurringItemUrgency.overdue,
+        ),
+      ];
+      expect(selectHomeUpcomingItems(items, fixedToday), items);
+    });
+
+    test(
+      'overdue-before-due-today-before-upcoming ordering is preserved verbatim -- the '
+      'selector never re-sorts',
+      () {
+        final List<RecurringPendingItem> items = <RecurringPendingItem>[
+          item(
+            ruleId: 'overdue',
+            scheduledDateUtc: fixedToday.subtract(const Duration(days: 2)),
+            urgency: RecurringItemUrgency.overdue,
+          ),
+          item(ruleId: 'today', scheduledDateUtc: fixedToday, urgency: RecurringItemUrgency.dueToday),
+          item(
+            ruleId: 'upcoming',
+            scheduledDateUtc: fixedToday.add(const Duration(days: 1)),
+            urgency: RecurringItemUrgency.upcoming,
+          ),
+        ];
+        final List<RecurringPendingItem> result = selectHomeUpcomingItems(items, fixedToday);
+        expect(result.map((i) => i.rule.id), <String>['overdue', 'today', 'upcoming']);
+      },
+    );
+
+    test(
+      'an existing rule-name tie-break order (as produced by '
+      'recurringPendingItemsProvider) is preserved verbatim',
+      () {
+        final List<RecurringPendingItem> items = <RecurringPendingItem>[
+          item(
+            ruleId: 'a',
+            scheduledDateUtc: fixedToday.subtract(const Duration(days: 1)),
+            urgency: RecurringItemUrgency.overdue,
+          ),
+          item(
+            ruleId: 'b',
+            scheduledDateUtc: fixedToday.subtract(const Duration(days: 1)),
+            urgency: RecurringItemUrgency.overdue,
+          ),
+        ];
+        final List<RecurringPendingItem> result = selectHomeUpcomingItems(items, fixedToday);
+        expect(result.map((i) => i.rule.id), <String>['a', 'b']);
+      },
+    );
+
+    test(
+      'the row cap (maxRows) is applied LAST, after filtering -- 3+ overdue items consume '
+      'every visible row rather than yielding to a future item',
+      () {
+        final List<RecurringPendingItem> items = <RecurringPendingItem>[
+          item(
+            ruleId: 'overdue1',
+            scheduledDateUtc: fixedToday.subtract(const Duration(days: 1)),
+            urgency: RecurringItemUrgency.overdue,
+          ),
+          item(
+            ruleId: 'overdue2',
+            scheduledDateUtc: fixedToday.subtract(const Duration(days: 2)),
+            urgency: RecurringItemUrgency.overdue,
+          ),
+          item(
+            ruleId: 'overdue3',
+            scheduledDateUtc: fixedToday.subtract(const Duration(days: 3)),
+            urgency: RecurringItemUrgency.overdue,
+          ),
+          item(
+            ruleId: 'upcoming',
+            scheduledDateUtc: fixedToday.add(const Duration(days: 1)),
+            urgency: RecurringItemUrgency.upcoming,
+          ),
+        ];
+        final List<RecurringPendingItem> result = selectHomeUpcomingItems(items, fixedToday);
+        expect(result, hasLength(kHomeUpcomingMaxRows));
+        expect(result.map((i) => i.rule.id), <String>['overdue1', 'overdue2', 'overdue3']);
+      },
+    );
+
+    test('a custom maxRows is honored', () {
+      final List<RecurringPendingItem> items = <RecurringPendingItem>[
+        item(ruleId: 'r1', scheduledDateUtc: fixedToday, urgency: RecurringItemUrgency.dueToday),
+        item(
+          ruleId: 'r2',
+          scheduledDateUtc: fixedToday.add(const Duration(days: 1)),
+          urgency: RecurringItemUrgency.upcoming,
+        ),
+        item(
+          ruleId: 'r3',
+          scheduledDateUtc: fixedToday.add(const Duration(days: 2)),
+          urgency: RecurringItemUrgency.upcoming,
+        ),
+      ];
+      expect(selectHomeUpcomingItems(items, fixedToday, maxRows: 1), hasLength(1));
+    });
+
+    test(
+      "already-handled occurrences never appear -- the selector only ever returns items "
+      "drawn from its own input, since exclusion itself is already "
+      "recurringPendingItemsProvider's job (see that provider's own tests above)",
+      () {
+        final List<RecurringPendingItem> items = <RecurringPendingItem>[
+          item(ruleId: 'r1', scheduledDateUtc: fixedToday, urgency: RecurringItemUrgency.dueToday),
+        ];
+        final List<RecurringPendingItem> result = selectHomeUpcomingItems(items, fixedToday);
+        expect(result.every(items.contains), isTrue);
+      },
+    );
+
+    test('mixed currencies are preserved independently per row -- never summed', () {
+      final List<RecurringPendingItem> items = <RecurringPendingItem>[
+        item(
+          ruleId: 'jpy',
+          scheduledDateUtc: fixedToday,
+          urgency: RecurringItemUrgency.dueToday,
+          currencyCode: 'JPY',
+        ),
+        item(
+          ruleId: 'usd',
+          scheduledDateUtc: fixedToday.add(const Duration(days: 1)),
+          urgency: RecurringItemUrgency.upcoming,
+          currencyCode: 'USD',
+        ),
+      ];
+      final List<RecurringPendingItem> result = selectHomeUpcomingItems(items, fixedToday);
+      expect(result.map((i) => i.rule.currencyCode), <String>['JPY', 'USD']);
+    });
+  });
 }

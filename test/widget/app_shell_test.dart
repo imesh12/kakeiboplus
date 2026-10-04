@@ -1,4 +1,6 @@
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_theme.dart';
+import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
 import 'package:ai_financial_coach/shared/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,7 +31,7 @@ void main() {
   // its own MaterialApp. `{Locale locale = const Locale('en')}` keeps
   // every pre-existing call site passing (English is still the default),
   // while the Japanese-proof tests pass `locale: const Locale('ja')`.
-  Widget buildApp({bool rtl = false, Locale locale = const Locale('en')}) {
+  Widget buildApp({bool rtl = false, Locale locale = const Locale('en'), ThemeData? theme}) {
     final GoRouter router = GoRouter(
       initialLocation: '/home',
       routes: <RouteBase>[
@@ -46,6 +48,7 @@ void main() {
     );
     return MaterialApp.router(
       routerConfig: router,
+      theme: theme,
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -109,11 +112,11 @@ void main() {
     await tester.tap(find.widgetWithText(NavigationDestination, 'Add'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ListTile, 'Expense'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Income'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Transfer'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Receipt'), findsNothing);
-    expect(find.widgetWithText(ListTile, 'Goal Contribution'), findsNothing);
+    expect(find.text('Expense'), findsOneWidget);
+    expect(find.text('Income'), findsOneWidget);
+    expect(find.text('Transfer'), findsOneWidget);
+    expect(find.text('Receipt'), findsNothing);
+    expect(find.text('Goal Contribution'), findsNothing);
   });
 
   // -- Add stays NavigationDestination index 2 and stays an ACTION -- these
@@ -141,9 +144,9 @@ void main() {
     // already relies on.
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ListTile, 'Expense'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Income'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Transfer'), findsOneWidget);
+    expect(find.text('Expense'), findsOneWidget);
+    expect(find.text('Income'), findsOneWidget);
+    expect(find.text('Transfer'), findsOneWidget);
     // The sheet is modal, layered above the shell -- the underlying
     // NavigationBar is still mounted, unchanged, proving Add never became
     // the "current" destination and no route was ever pushed for it.
@@ -164,9 +167,9 @@ void main() {
     await tester.tap(find.widgetWithText(NavigationDestination, 'Add'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ListTile, 'Expense'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Income'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Transfer'), findsOneWidget);
+    expect(find.text('Expense'), findsOneWidget);
+    expect(find.text('Income'), findsOneWidget);
+    expect(find.text('Transfer'), findsOneWidget);
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 3);
   });
 
@@ -281,9 +284,9 @@ void main() {
     await tester.tap(find.widgetWithText(NavigationDestination, 'Add'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ListTile, 'Expense'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Income'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Transfer'), findsOneWidget);
+    expect(find.text('Expense'), findsOneWidget);
+    expect(find.text('Income'), findsOneWidget);
+    expect(find.text('Transfer'), findsOneWidget);
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
     expect(tester.takeException(), isNull);
   });
@@ -336,7 +339,7 @@ void main() {
 
     await tester.tap(find.widgetWithText(NavigationDestination, 'Add'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ListTile, 'Expense'), findsOneWidget);
+    expect(find.text('Expense'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -444,9 +447,9 @@ void main() {
     await tester.tap(find.widgetWithText(NavigationDestination, 'Add'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ListTile, 'Expense'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Income'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Transfer'), findsOneWidget);
+    expect(find.text('Expense'), findsOneWidget);
+    expect(find.text('Income'), findsOneWidget);
+    expect(find.text('Transfer'), findsOneWidget);
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
     expect(tester.takeException(), isNull);
   });
@@ -567,9 +570,9 @@ void main() {
 
     await tester.tap(find.widgetWithText(NavigationDestination, '追加'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ListTile, '支出'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, '収入'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, '振替'), findsOneWidget);
+    expect(find.text('支出'), findsOneWidget);
+    expect(find.text('収入'), findsOneWidget);
+    expect(find.text('振替'), findsOneWidget);
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
     expect(tester.takeException(), isNull);
   });
@@ -617,9 +620,9 @@ void main() {
 
     await tester.tap(find.widgetWithText(NavigationDestination, '追加'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ListTile, '支出'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, '収入'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, '振替'), findsOneWidget);
+    expect(find.text('支出'), findsOneWidget);
+    expect(find.text('収入'), findsOneWidget);
+    expect(find.text('振替'), findsOneWidget);
     expect(tester.takeException(), isNull);
     handle.dispose();
   });
@@ -696,5 +699,88 @@ void main() {
     expect(find.text('Activity body'), findsOneWidget);
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  // ---------------------------------------------------------------------
+  // U3 Final Polish Pass, item 10: "Current selected bottom-nav color
+  // looks gray. Change the selected-state visual treatment to
+  // KakeiboPlus light green/mint." -- see `AppShell.build()`'s own doc
+  // comment and `AppSemanticColors.navSelectedColor`'s doc comment for
+  // the full root-cause/fix explanation. Every test above this point
+  // uses `buildApp()` with no `theme:` -- proving those pre-existing
+  // 30 tests are completely unaffected by this pass, since the new
+  // `theme` parameter defaults to `null`, byte-for-byte identical to
+  // every one of those call sites before this pass added the parameter.
+  // ---------------------------------------------------------------------
+
+  group('bottom-nav selected-state color (item 10)', () {
+    testWidgets(
+        "under the real KakeiboPlus Light theme, the selected destination's icon/label "
+        'read the theme\'s teal/emerald navSelectedColor token, and the indicator pill is '
+        'a soft mint tint derived from that same color -- not the plain gray '
+        'secondaryContainer this bar used before this pass', (tester) async {
+      final ThemeData light = AppTheme.light();
+      final Color navSelected = light.extension<AppTokens>()!.colors.navSelectedColor!;
+
+      await tester.pumpWidget(buildApp(theme: light));
+      await tester.pumpAndSettle();
+
+      final NavigationBarThemeData navTheme =
+          Theme.of(tester.element(find.byType(NavigationBar))).navigationBarTheme;
+
+      expect(navTheme.iconTheme!.resolve(<WidgetState>{WidgetState.selected})!.color, navSelected);
+      expect(
+        navTheme.labelTextStyle!.resolve(<WidgetState>{WidgetState.selected})!.color,
+        navSelected,
+      );
+
+      // Unselected keeps the same muted gray-blue Material 3 already
+      // used for the unselected state before this pass -- only the
+      // SELECTED treatment changed.
+      final Color onSurfaceVariant = light.colorScheme.onSurfaceVariant;
+      expect(navTheme.iconTheme!.resolve(<WidgetState>{})!.color, onSurfaceVariant);
+      expect(navTheme.labelTextStyle!.resolve(<WidgetState>{})!.color, onSurfaceVariant);
+
+      // The pill/indicator behind the selected icon is DERIVED from
+      // `navSelected` (the same tinted-background idiom `AppIconTile`
+      // already uses elsewhere), not the plain
+      // `colorScheme.secondaryContainer` this bar fell back to before
+      // this pass.
+      expect(navTheme.indicatorColor, navSelected.withValues(alpha: 0.16));
+      expect(navTheme.indicatorColor, isNot(light.colorScheme.secondaryContainer));
+    });
+
+    testWidgets(
+        'without the KakeiboPlus theme (no navSelectedColor token available), the bar '
+        'renders with its original, unwrapped NavigationBarThemeData -- proving this '
+        'pass never forces the new colors onto a theme that does not opt in',
+        (tester) async {
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      final NavigationBarThemeData navTheme =
+          Theme.of(tester.element(find.byType(NavigationBar))).navigationBarTheme;
+
+      // No local override was installed -- iconTheme/labelTextStyle are
+      // whatever the ambient (here, Flutter's own default) ThemeData
+      // already provides, never the KakeiboPlus teal/emerald token.
+      expect(navTheme.iconTheme, isNull);
+      expect(navTheme.labelTextStyle, isNull);
+    });
+
+    testWidgets(
+        'the KakeiboPlus-themed bar still selects/navigates correctly -- the color '
+        'change is purely a paint layer, not a behavior change', (tester) async {
+      await tester.pumpWidget(buildApp(theme: AppTheme.light()));
+      await tester.pumpAndSettle();
+      expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Accounts'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Accounts body'), findsOneWidget);
+      expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 3);
+      expect(tester.takeException(), isNull);
+    });
   });
 }

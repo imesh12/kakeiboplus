@@ -1,4 +1,6 @@
 {
+  "recurringNextDateLabel": "Next: {date}",
+  "@recurringNextDateLabel": {"placeholders": {"date": {"type": "String"}}},
   "@@locale": "en",
   "brandName": "KakeiboPlus",
   "@brandName": {
@@ -101,6 +103,53 @@
       }
     }
   },
+  "homeGreetingMorning": "Good morning, {name}!",
+  "@homeGreetingMorning": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time before 12:00.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeGreetingAfternoon": "Good afternoon, {name}!",
+  "@homeGreetingAfternoon": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time 12:00-17:59.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeGreetingEvening": "Good evening, {name}!",
+  "@homeGreetingEvening": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time 18:00 or later.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeGreetingSupportingLine": "Small steps make a brighter future.",
+  "@homeGreetingSupportingLine": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): the Dashboard greeting's one short supporting line -- supportive, concise, not motivational-poster/sales-like."
+  },
+  "dashboardThisMonthLabel": "THIS MONTH",
+  "@dashboardThisMonthLabel": {
+    "description": "Checkpoint U3 (docs/23 SS4.3): the hero card's small eyebrow label above the monthly-remaining headline."
+  },
+  "dashboardRemainingLabel": "remaining",
+  "@dashboardRemainingLabel": {
+    "description": "Checkpoint U3 (docs/23 SS5.2/SS5.5): the caption under the hero headline for a zero-or-positive this-month-remaining amount."
+  },
+  "dashboardOverspentLabel": "Over this month's income",
+  "@dashboardOverspentLabel": {
+    "description": "Checkpoint U3 (docs/23 SS5.5): the caption under the hero headline when this month's expense has exceeded this month's income."
+  },
+  "dashboardTotalBalanceLabel": "TOTAL BALANCE",
+  "@dashboardTotalBalanceLabel": {
+    "description": "Design Reversal Checkpoint (KakeiboPlus header reference): the hero card's single eyebrow label above its one primary balance figure (CurrencyDashboardSummary.availableBalance), replacing the per-currency code + Living/Home currency badge and the THIS MONTH/remaining pair that used to occupy this space. Presentation relabel only -- no new calculation; totalAvailableBalance still describes the same figure on secondary currency cards."
+  },
   "accountsSectionTitle": "Accounts",
   "manage": "Manage",
   "couldNotLoadBalances": "Could not load your balances: {error}",
@@ -122,10 +171,10 @@
     }
   },
   "totalAvailableBalance": "Total available balance",
-  "incomeThisMonth": "Income this month",
-  "spentThisMonth": "Spent this month",
-  "dailySpendingPace": "Daily spending pace",
-  "dailySpendingPaceDetail": "Average spend per day so far this month",
+  "incomeThisMonth": "Monthly Income",
+  "spentThisMonth": "Monthly Spending",
+  "dailySpendingPace": "Daily Spending Pace",
+  "dailySpendingPaceDetail": "Daily average so far",
   "remainingMonthlyBudget": "Remaining monthly budget",
   "noBudgetSetMessage": "You haven't set a monthly budget yet. Set one to see how much you have left to spend.",
   "setMonthlyBudgetButton": "Set a monthly budget",
@@ -170,6 +219,47 @@
   "setUpRecurringButton": "Set up recurring",
   "recurringStatusDueToday": "Due today",
   "recurringStatusUpcoming": "Upcoming",
+  "homeUpcomingCommitmentsTitle": "Upcoming",
+  "homeUpcomingInDaysLabel": "In {days} days",
+  "@homeUpcomingInDaysLabel": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "homeUpcomingEmptyTitle": "No upcoming payments",
+  "homeUpcomingEmptySubtitle": "You're all caught up!",
+  "homeUpcomingEmptyDescription": "Recurring bills and reminders will appear here.",
+  "homeSpendingThisMonthTitle": "Spending this month",
+  "homeViewDetails": "View details",
+  "homeSpendingNoDataMessage": "No spending recorded this month yet.",
+  "homeUncategorizedCategoryLabel": "Other",
+  "homeCategoryPercentLabel": "{percent}%",
+  "@homeCategoryPercentLabel": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "homeRemainingBudgetLabel": "Remaining Budget",
+  "homeBudgetDaysLeftLabel": "Left for {days} days",
+  "@homeBudgetDaysLeftLabel": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "homeBudgetTotalLabel": "Budget {amount}",
+  "@homeBudgetTotalLabel": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "couldNotLoadTransactions": "Could not load transactions: {error}",
   "@couldNotLoadTransactions": {
     "placeholders": {
@@ -284,7 +374,7 @@
     }
   },
   "noBudgetsSetThisMonthMessage": "No budgets set for this month yet. Tap + to set an overall monthly budget or a category budget.",
-  "overallBudgetsSectionTitle": "Overall budgets",
+  "overallBudgetsSectionTitle": "Overall Monthly Budgets",
   "categoryBudgetsSectionTitle": "Category budgets",
   "overallMonthlyBudgetOption": "Overall monthly budget",
   "categoryBudgetOption": "Category budget",
@@ -377,6 +467,20 @@
     }
   },
   "noRecurringRulesYetTapMessage": "No recurring rules yet. Tap + to add one.",
+  "recurringSearchLabel": "Search recurring",
+  "recurringSearchHint": "Search by name, category, or service",
+  "searchTooltip": "Search",
+  "closeSearchTooltip": "Close search",
+  "addRecurringRuleTooltip": "Add recurring rule",
+  "recurringFilterAll": "All",
+  "recurringFilterActive": "Active",
+  "recurringFilterExpired": "Expired",
+  "recurringEndedLabel": "Ended",
+  "noActiveRecurringRulesMessage": "No active recurring rules.",
+  "noUpcomingRecurringRulesMessage": "Nothing due soon.",
+  "noExpiredRecurringRulesMessage": "No expired recurring rules.",
+  "noMatchingRecurringRulesMessage": "No matching recurring rules.",
+  "ruleActionsTooltip": "More actions",
   "subscriptionsTitle": "Subscriptions",
   "subscriptionsEstimatedMonthlyTotalLabel": "Est. monthly",
   "subscriptionsEstimatedYearlyTotalLabel": "Est. yearly",
@@ -879,5 +983,40 @@
   "editCreditLimitFieldLabel": "Credit limit",
   "@editCreditLimitFieldLabel": {
     "description": "Checkpoint O: Edit Account's credit-limit input, shown only for a creditCard-subtype account. Deliberately the same wording as addAccountCreditLimitLabel -- same concept, same field, just editable after creation too now."
-  }
+  },
+  "recurringEstimateCardTitle": "Monthly estimated total",
+  "@recurringEstimateCardTitle": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: the restyled summary card's title, replacing subscriptionsEstimatedMonthlyTotalLabel ('Est. monthly') for this one card only -- that older key is left in place/unused-here since recurring_estimate.dart's own doc comment still references it by name."
+  },
+  "recurringEstimateYearlyTotalLabel": "Yearly total",
+  "@recurringEstimateYearlyTotalLabel": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: the restyled summary card's secondary yearly-total line, replacing subscriptionsEstimatedYearlyTotalLabel ('Est. yearly') for this one card only."
+  },
+  "recurringViewHistoryTooltip": "View history",
+  "@recurringViewHistoryTooltip": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: accessibility/tooltip label for a recurring row's dedicated history IconButton (Case 2)."
+  },
+  "recurringHistoryTitle": "Recurring history",
+  "@recurringHistoryTitle": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: app bar title for the all-services year history screen (Case 1), reached by tapping the Recurring screen's summary card."
+  },
+  "recurringServiceHistoryTitle": "{name} history",
+  "@recurringServiceHistoryTitle": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: app bar title for one recurring rule's own history screen (Case 2), where {name} is that rule's name.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "recurringHistoryEmptyMessage": "No history yet.",
+  "@recurringHistoryEmptyMessage": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: empty state shown on either history screen when there are no handled (posted or skipped) occurrences yet."
+  },
+  "recurringHistoryStatusPosted": "Paid",
+  "@recurringHistoryStatusPosted": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: status label/semantic text next to the paid-stamp icon on a posted history row."
+  },
+  "recurringHistoryStatusSkipped": "Skipped",
+  "@recurringHistoryStatusSkipped": {
+    "description": "Recurring UI Upgrade + History Views checkpoint: status label/semantic text on a skipped history row."
+  },
+  "deleteBudgetConfirmTitle": "Remove this budget?",
+  "deleteBudgetConfirmMessage": "The budget will be removed. Your transactions will be kept."
 }

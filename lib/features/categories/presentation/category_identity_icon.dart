@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/widgets/app_icon_tile.dart';
 import '../domain/category_color.dart';
 import '../domain/category_icon.dart';
+import '../domain/category_icon_asset.dart';
 
 /// Checkpoint U1 (Category, Service, Currency & Card Visual Identity
 /// Foundation): the ONE authoritative widget that renders a category's
@@ -68,8 +69,17 @@ class CategoryIdentityIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color color = categoryColorFor(categoryId: categoryId, storedColorKey: colorKey, isDark: isDark);
+    // App Icon Integration checkpoint: a category whose `icon` key has
+    // curated artwork (`category_icon_asset.dart`) renders that PNG via
+    // `AppIconTile.assetPath` instead of the Material glyph -- `icon` is
+    // still always passed so a key with no artwork (or an unrecognized
+    // one) falls back to exactly the same `categoryIconFor` glyph as
+    // before this checkpoint. Never blank, never broken: `assetPath`
+    // null is `AppIconTile`'s own pre-existing "render the Icon instead"
+    // contract.
     return AppIconTile(
       icon: categoryIconFor(iconKey),
+      assetPath: categoryIconAssetFor(iconKey),
       color: color,
       size: size,
       semanticLabel: semanticLabel,

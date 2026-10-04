@@ -142,6 +142,84 @@ void main() {
     });
   });
 
+  group('Checkpoint U3: heroGradient is Light/Dark-only, never a global reseed', () {
+    test('light() has the approved teal hero gradient '
+        '(Dashboard Visual Refresh Pass)', () {
+      final AppTokens tokens = AppTheme.light().extension<AppTokens>()!;
+      expect(tokens.colors.heroGradient, <Color>[
+        const Color(0xFF007F87),
+        const Color(0xFF009B98),
+        const Color(0xFF12C9AE),
+      ]);
+    });
+
+    test('dark() has its own (deepened) hero gradient, distinct from light()', () {
+      final AppTokens lightTokens = AppTheme.light().extension<AppTokens>()!;
+      final AppTokens darkTokens = AppTheme.dark().extension<AppTokens>()!;
+      expect(darkTokens.colors.heroGradient, isNotNull);
+      expect(darkTokens.colors.heroGradient, isNot(lightTokens.colors.heroGradient));
+    });
+
+    test('pink/ocean/forest keep heroGradient null -- their own flat hero fill is unchanged', () {
+      for (final AppThemeStyle style in <AppThemeStyle>[
+        AppThemeStyle.pink,
+        AppThemeStyle.ocean,
+        AppThemeStyle.forest,
+      ]) {
+        final AppTokens tokens = AppTheme.resolve(style).extension<AppTokens>()!;
+        expect(tokens.colors.heroGradient, isNull, reason: '$style should not receive heroGradient');
+      }
+    });
+
+    test("light()'s shared colorScheme.primary is still derived from the Checkpoint 10 blue "
+        'seed via the same ColorScheme.fromSeed pipeline, not reseeded to teal -- heroGradient '
+        'is additive only', () {
+      // Regression guard for the exact conflict this checkpoint's own
+      // implementation notes call out: docs/23's teal palette must
+      // never silently reverse Checkpoint 10 Visual Convergence's
+      // deliberate teal/green -> blue recoloring of the app's shared
+      // ColorScheme.
+      //
+      // Investigation note (this test previously asserted
+      // `colorScheme.primary == Color(0xFF2563EB)` directly, and that
+      // failed -- actual was `0xFF4B5C92`): that assertion's own
+      // premise was wrong, not production. `git show`/`git diff`
+      // against c0523c6 (the U2 commit immediately preceding this
+      // checkpoint) confirm `_seed` and the
+      // `ColorScheme.fromSeed(seedColor: seed, brightness: brightness)`
+      // call in `app_theme.dart` are byte-for-byte unchanged by
+      // heroGradient's addition -- `AppTokens.fromColorScheme` only
+      // ever READS the resulting `colorScheme` to derive semantic
+      // colors, it never replaces or mutates it, and `_build`'s
+      // `ThemeData(colorScheme: colorScheme, ...)` passes it straight
+      // through. Material 3's `ColorScheme.fromSeed` derives `.primary`
+      // as a specific HCT tone of the seed's tonal palette, not the
+      // seed's own raw RGB value -- so `colorScheme.primary == _seed`
+      // was never true, before or after this checkpoint. `0xFF4B5C92`
+      // was already `AppTheme.light().colorScheme.primary` at c0523c6,
+      // unrelated to anything this checkpoint changed.
+      //
+      // Recomputing the same `fromSeed` call independently here (rather
+      // than hardcoding that derived tone as a second magic number)
+      // keeps this test asserting the thing it actually cares about --
+      // "still built from the Checkpoint 10 blue seed" -- regardless of
+      // exactly which tone Flutter's M3 algorithm resolves that to.
+      final Color expectedPrimary = ColorScheme.fromSeed(
+        seedColor: const Color(0xFF2563EB),
+        brightness: Brightness.light,
+      ).primary;
+      expect(AppTheme.light().colorScheme.primary, expectedPrimary);
+
+      // Pinned to the actual, empirically-observed (and now
+      // git-diff-confirmed-unchanged-since-U2) value as a second,
+      // stricter guard: this is expected to break loudly if a future
+      // Flutter SDK upgrade ever changes the M3 tonal-palette algorithm
+      // for this seed -- a deliberate, known-cause failure, not a
+      // silent drift.
+      expect(AppTheme.light().colorScheme.primary, const Color(0xFF4B5C92));
+    });
+  });
+
   group('Smoke: every theme renders a MaterialApp without throwing', () {
     for (final AppThemeStyle style in AppThemeStyle.values) {
       testWidgets('AppThemeStyle.$style renders without exceptions', (tester) async {

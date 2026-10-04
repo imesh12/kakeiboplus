@@ -127,16 +127,46 @@ flutter:
   uses-material-design: true
   generate: true
 
-  # Checkpoint M: only the one branding image actually loaded at
-  # runtime via Image.asset (the More screen's brand header -- see
-  # docs/14_DECISION_LOG.md ADR-036). The other three files in
-  # assets/branding/ are source artwork for the launcher icon
-  # (copied as derived, differently-sized platform resources into
-  # android/.../mipmap-*/ and ios/.../AppIcon.appiconset/, which do
-  # not go through Flutter's asset bundle) and for external/
+  # Checkpoint M: only branding images actually loaded at runtime via
+  # Image.asset are registered here (the More screen's brand header --
+  # see docs/14_DECISION_LOG.md ADR-036 -- plus, as of the Dashboard
+  # Visual Refresh Pass, the Home Dashboard's own brand-header mark).
+  # `kakeiboplus-mark-light.png` is a WHITE-INK crop of the existing
+  # `kakeiboplus-primary-logo.png` "K+" glyph (same mark, not a new
+  # logo) -- generated once so the brand mark has legible contrast on
+  # the Dashboard header's own dark teal gradient fill, exactly the
+  # same "light/dark variant of one mark" idea `kakeiboplus-wordmark
+  # .png` already relies on for its own (light-background) context.
+  # The remaining files in assets/branding/ are source artwork for the
+  # launcher icon (copied as derived, differently-sized platform
+  # resources into android/.../mipmap-*/ and ios/.../AppIcon.appiconset/,
+  # which do not go through Flutter's asset bundle) and for external/
   # marketing use -- neither is loaded by any widget, so neither is
   # registered here. Exact filename casing matters on case-sensitive
   # filesystems; this path has no spaces, unlike this repo's
   # existing docs/design/* reference images.
+  #
+  # Mascot task: assets/branding/pets/ is a deliberate exception to
+  # the "register only the one loaded file" rule just above -- it is
+  # registered as a WHOLE DIRECTORY, not a single file, because this
+  # folder is an explicitly growing family (today: only
+  # kakeiboplus_dog_default.png, loaded by `DashboardMascot` via
+  # `mascotAssetPathFor` in lib/shared/branding/mascot_key.dart) and a
+  # future checkpoint adding alternate mascot characters or
+  # seasonal/theme variants only has to drop the new PNG into this
+  # folder -- no second pubspec edit, no risk of a shipped variant
+  # that forgot its own registration line. A Flutter directory asset
+  # entry (trailing slash) bundles every file directly inside it.
   assets:
+    - assets/icons/budgets/
     - assets/branding/kakeiboplus-wordmark.png
+    - assets/branding/kakeiboplus-mark-light.png
+    - assets/branding/pets/
+    - assets/icons/dashboard/
+    - assets/icons/services/
+    - assets/icons/categories/
+    - assets/icons/more/
+    - assets/icons/activity/
+    - assets/icons/public/
+    - assets/icons/accounts/
+    - assets/icons/recurring/

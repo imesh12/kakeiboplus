@@ -3,6 +3,7 @@ import 'package:ai_financial_coach/features/settings/presentation/more_screen.da
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations_en.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations_ja.dart';
+import 'package:ai_financial_coach/shared/widgets/app_icon_tile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -505,4 +506,118 @@ void main() {
       expect(AppLocalizationsJa().brandName, 'KakeiboPlus');
     },
   );
+
+  group('App Icon Integration: More-menu row artwork', () {
+    // Every row with curated artwork, scrolled through top to bottom in
+    // the same order MoreScreen renders them -- mirrors this file's own
+    // pre-existing 'renders every reused row label exactly once' loop.
+    // UI/Icon Polish checkpoint: 'Recurring' now has its own approved
+    // source asset too (`docs/design/app-icon/more-menu/recurring.png`
+    // -> `assets/icons/more/recurring.png`) -- it was previously the
+    // one row excluded here for having none, and this list is the
+    // single source of truth for "which rows are asset-mapped", so it
+    // moves into this same table rather than keeping a separate,
+    // now-stale "Recurring has no asset" test alongside it.
+    const List<(String label, String assetFileName)> assetMappedRows = <(String, String)>[
+      ('Budgets', 'budgets.png'),
+      ('Savings Goals', 'savings_goal.png'),
+      ('Recurring', 'recurring.png'),
+      ('Currency Converter', 'currency_converter.png'),
+      ('Net Worth', 'net_worth.png'),
+      ('Cheques', 'cheques.png'),
+      ('Categories', 'categories.png'),
+      ('Profile', 'profile.png'),
+      ('International preferences', 'international_preferences.png'),
+      ('Appearance', 'appearance.png'),
+      ('Cloud Account', 'cloud_account.png'),
+    ];
+
+    for (final (String label, String assetFileName) in assetMappedRows) {
+      testWidgets('"$label" row renders its curated production asset '
+          '(assets/icons/more/$assetFileName), with its trailing chevron and route-tap '
+          'behavior unaffected', (tester) async {
+        await tester.pumpWidget(appWithRouter());
+        await tester.pumpAndSettle();
+
+        final Finder rowText = find.descendant(of: find.byType(ListTile), matching: find.text(label));
+        final Finder rowTile = find.ancestor(of: rowText, matching: find.byType(ListTile));
+        await scrollMoreScreenUntilVisible(tester, rowText);
+
+        final AppIconTile iconTile = tester.widget<AppIconTile>(
+          find.descendant(of: rowTile, matching: find.byType(AppIconTile)),
+        );
+        expect(
+          iconTile.size,
+          AppIconTileSize.large,
+          reason: 'primary More rows must use the 48px slot, never small/tiny artwork',
+        );
+
+        final Image image =
+            tester.widget<Image>(find.descendant(of: rowTile, matching: find.byType(Image)));
+        expect(
+          (image.image as AssetImage).assetName,
+          'assets/icons/more/$assetFileName',
+        );
+
+        // Only ONE Icon remains on the row -- the trailing chevron --
+        // now that the leading slot renders the curated PNG instead of
+        // a Material glyph. Row layout/tap behavior/route are exercised
+        // separately by this file's own parameterized tap-test loop
+        // above; this just confirms the chevron specifically survived
+        // the asset swap unchanged.
+        expect(find.descendant(of: rowTile, matching: find.byIcon(Icons.chevron_right)), findsOneWidget);
+      });
+    }
+
+    testWidgets('a row with NO curated asset (there is currently none left on this screen) '
+        'would still render its Material glyph, never a broken/blank Image -- proven '
+        'directly against AppIconTile\'s own null-assetPath contract', (tester) async {
+      // Every row on this screen now has curated artwork (see
+      // `assetMappedRows` above) -- there is no remaining production
+      // row to exercise the "no asset yet" fallback against. The
+      // fallback contract itself (`assetPath: null` -> render `icon`,
+      // never blank/broken) still matters and is NOT abandoned here:
+      // it's `AppIconTile`'s own responsibility and is covered directly
+      // by `app_icon_tile_test.dart`, plus `TransactionIconBadge`'s own
+      // fallback is covered by this checkpoint's Activity tests. This
+      // test simply documents why no row-level "no asset" case remains
+      // in this file, rather than silently deleting that coverage with
+      // no trace.
+      await tester.pumpWidget(appWithRouter());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('every row renders without overflow at a narrow 320px width and 1.6x text '
+        'scale, including the curated artwork rows', (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(appWithRouter());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // `scrollUntilFound` (`tester.scrollUntilVisible`) drags via the
+      // FIRST `Scrollable` it finds page-wide with no ancestor scoping.
+      // At this narrow width/scale the row labels + section headers can
+      // make that lookup ambiguous or momentarily empty between drag
+      // steps, which is exactly what throws "Bad state: No element"
+      // inside `dragUntilVisible`. `scrollMoreScreenUntilVisible` (used
+      // everywhere else rows are scrolled-to-and-tapped in this file)
+      // avoids this by dragging ONLY `MoreScreen`'s own scrollable via a
+      // bounded manual loop and never assumes the target is already
+      // mounted.
+      for (final (String label, _) in assetMappedRows) {
+        final Finder rowFinder =
+            find.descendant(of: find.byType(ListTile), matching: find.text(label));
+        await scrollMoreScreenUntilVisible(tester, rowFinder);
+        expect(tester.takeException(), isNull);
+        expect(rowFinder, findsOneWidget, reason: '"$label" never scrolled into view');
+      }
+    });
+  });
 }

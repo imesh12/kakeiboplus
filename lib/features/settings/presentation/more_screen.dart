@@ -57,14 +57,31 @@ class MoreScreen extends StatelessWidget {
     // Same shared icon-led row idiom `SettingsScreen`'s nav rows used
     // before this checkpoint -- moved here unchanged in shape, only in
     // location.
+    // App Icon Integration checkpoint: `assetPath` is optional and
+    // additive -- `AppIconTile` already falls back to the Material
+    // `icon`/`color` whenever `assetPath` is null (its own pre-existing
+    // contract), so a row with no curated artwork yet (Recurring, which
+    // has no source asset in this checkpoint) renders exactly as
+    // before. Bumped from `small` (32px slot / 16px glyph) to `large`
+    // (48px slot / 24px glyph, or the curated 28-32px artwork when
+    // `assetPath` is set) -- these are primary list rows, which the
+    // "never tiny artwork" sizing spec rules out `small` for. Applied
+    // uniformly to every row (not just the ones with new artwork) so
+    // the whole screen's slot size stays visually consistent.
     Widget navRow({
       required IconData icon,
       required Color color,
       required String title,
       required VoidCallback onTap,
+      String? assetPath,
     }) {
       return ListTile(
-        leading: AppIconTile(icon: icon, color: color, size: AppIconTileSize.small),
+        leading: AppIconTile(
+          icon: icon,
+          assetPath: assetPath,
+          color: color,
+          size: AppIconTileSize.large,
+        ),
         title: Text(title),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
@@ -165,12 +182,14 @@ class MoreScreen extends StatelessWidget {
           navGroup(<Widget>[
             navRow(
               icon: Icons.savings_outlined,
+              assetPath: 'assets/icons/more/budgets.png',
               color: _MoreRowColors.budgets,
               title: l10n.budgetsTitle,
               onTap: () => context.push(AppRoutes.budgets),
             ),
             navRow(
               icon: Icons.flag_outlined,
+              assetPath: 'assets/icons/more/savings_goal.png',
               color: _MoreRowColors.goals,
               title: l10n.savingsGoalsTitle,
               onTap: () => context.push(AppRoutes.goals),
@@ -183,6 +202,12 @@ class MoreScreen extends StatelessWidget {
           navGroup(<Widget>[
             navRow(
               icon: Icons.repeat_outlined,
+              // UI/Icon Polish checkpoint: Recurring now has its own
+              // approved curated artwork (previously the one row on
+              // this screen with no source asset) -- `icon` is still
+              // passed so a future removal of the asset falls back
+              // safely to the exact same Material glyph as before.
+              assetPath: 'assets/icons/more/recurring.png',
               color: _MoreRowColors.recurring,
               title: l10n.recurringTitle,
               onTap: () => context.push(AppRoutes.recurring),
@@ -199,12 +224,14 @@ class MoreScreen extends StatelessWidget {
           navGroup(<Widget>[
             navRow(
               icon: Icons.calculate_outlined,
+              assetPath: 'assets/icons/more/currency_converter.png',
               color: _MoreRowColors.currencyConverter,
               title: l10n.currencyConverterTitle,
               onTap: () => context.push(AppRoutes.currencyConverter),
             ),
             navRow(
               icon: Icons.account_balance_outlined,
+              assetPath: 'assets/icons/more/net_worth.png',
               color: _MoreRowColors.netWorth,
               title: l10n.netWorthTitle,
               onTap: () => context.push(AppRoutes.netWorth),
@@ -216,6 +243,7 @@ class MoreScreen extends StatelessWidget {
             // ARCHITECTURE.md` §13.16).
             navRow(
               icon: Icons.receipt_long_outlined,
+              assetPath: 'assets/icons/more/cheques.png',
               color: _MoreRowColors.cheques,
               title: l10n.chequesTitle,
               onTap: () => context.push(AppRoutes.cheques),
@@ -227,6 +255,7 @@ class MoreScreen extends StatelessWidget {
           navGroup(<Widget>[
             navRow(
               icon: Icons.category_outlined,
+              assetPath: 'assets/icons/more/categories.png',
               color: _MoreRowColors.categories,
               title: l10n.categoriesScreenTitle,
               onTap: () => context.push(AppRoutes.categories),
@@ -239,18 +268,21 @@ class MoreScreen extends StatelessWidget {
           navGroup(<Widget>[
             navRow(
               icon: Icons.person_outline,
+              assetPath: 'assets/icons/more/profile.png',
               color: colors.primary,
               title: l10n.navProfile,
               onTap: () => context.push(AppRoutes.profile),
             ),
             navRow(
               icon: Icons.public,
+              assetPath: 'assets/icons/more/international_preferences.png',
               color: _MoreRowColors.international,
               title: l10n.internationalPreferences,
               onTap: () => context.push(AppRoutes.internationalPreferences),
             ),
             navRow(
               icon: Icons.palette_outlined,
+              assetPath: 'assets/icons/more/appearance.png',
               color: _MoreRowColors.appearance,
               title: l10n.appearanceSectionTitle,
               onTap: () => context.push(AppRoutes.themeCustomization),
@@ -263,6 +295,7 @@ class MoreScreen extends StatelessWidget {
           navGroup(<Widget>[
             navRow(
               icon: Icons.cloud_outlined,
+              assetPath: 'assets/icons/more/cloud_account.png',
               color: _MoreRowColors.cloudAccount,
               title: l10n.cloudAccountSectionTitle,
               onTap: () => context.push(AppRoutes.cloudAccount),

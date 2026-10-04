@@ -316,6 +316,38 @@ class FinanceEngine {
     return total;
   }
 
+  /// Bulk, expense-only sibling of [categoryExpenseTotal] -- Dashboard
+  /// V1 Finalization checkpoint's "Spending this month" breakdown. One
+  /// pass over [transactions] produces every category's expense total
+  /// at once (map key: `categoryId`, nullable -- uncategorized expense
+  /// transactions group under the `null` key, exactly like
+  /// [categoryTotals]) instead of re-scanning the full list once per
+  /// category.
+  ///
+  /// Same exclusions as [categoryExpenseTotal]: only
+  /// [TransactionType.expense] contributes -- never income (even income
+  /// filed under the same category id) and never a transfer, matching
+  /// the budgets release gate this shares its filtering rule with.
+  /// Unlike [categoryTotals] (which nets income against expense per
+  /// category for a general breakdown view), every value here is a
+  /// plain non-negative expense magnitude, ready for a "how is my
+  /// spending distributed" presentation without the caller needing to
+  /// know which categories happen to also receive income.
+  static Map<String?, Money> categoryExpenseTotals(
+    List<LedgerTransaction> transactions, {
+    required String currencyCode,
+    DateTime? fromUtc,
+    DateTime? toUtc,
+  }) {
+    final Map<String?, Money> totals = <String?, Money>{};
+    for (final LedgerTransaction tx in _relevant(transactions, currencyCode, fromUtc, toUtc)) {
+      if (tx.type != TransactionType.expense) continue;
+      final Money running = totals[tx.categoryId] ?? Money.zero(currencyCode);
+      totals[tx.categoryId] = running + tx.amount;
+    }
+    return totals;
+  }
+
   /// Deterministic recommended daily spend for the rest of a budget
   /// period -- the Beta 1 budgets feature's "how much can I spend per day
   /// for the rest of the month" metric. See `docs/14_DECISION_LOG.md`

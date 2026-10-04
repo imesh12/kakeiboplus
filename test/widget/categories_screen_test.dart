@@ -5,6 +5,7 @@ import 'package:ai_financial_coach/core/database/repositories/profile_repository
 import 'package:ai_financial_coach/features/categories/presentation/categories_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
+import 'package:ai_financial_coach/shared/widgets/app_icon_tile.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -639,7 +640,115 @@ void main() {
 
       expect(tester.takeException(), isNull);
       final Finder tile = find.ancestor(of: find.text('Dining Out'), matching: find.byType(ListTile));
-      expect(find.descendant(of: tile, matching: find.byType(Icon)), findsWidgets);
+      // App Icon Integration checkpoint: 'Dining Out' (iconKey 'restaurant')
+      // now has curated artwork (category_icon_asset.dart) and renders via
+      // Image.asset instead of Icon. This test's intent is "exactly one
+      // leading glyph renders, whichever form it takes" -- so it accepts
+      // either Icon (Material fallback) or Image (curated asset) rather
+      // than coupling to today's specific key-to-asset mapping.
+      expect(
+        find.descendant(
+          of: tile,
+          matching: find.byWidgetPredicate((Widget w) => w is Icon || w is Image),
+        ),
+        findsWidgets,
+      );
+    });
+  });
+
+  group('App Icon Integration: category icon size + overflow', () {
+    testWidgets('a mapped system category (Dining Out) renders its AppIconTile at the large '
+        '(48px slot / 32px curated-asset) tier, not small', (tester) async {
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      final Finder tile = find.ancestor(of: find.text('Dining Out'), matching: find.byType(ListTile));
+      final AppIconTile iconTile =
+          tester.widget<AppIconTile>(find.descendant(of: tile, matching: find.byType(AppIconTile)));
+      expect(
+        iconTile.size,
+        AppIconTileSize.large,
+        reason: 'the checkpoint brief explicitly wants medium/clearly visible category icons, '
+            'not small',
+      );
+      // Image.asset's own render branch is hardcoded at 32x32 regardless
+      // of the tile's container tier (see AppIconTile.build) -- 48px
+      // slot / 32px artwork both satisfy the 48-52/32-36 spec at its
+      // boundary.
+      expect(find.descendant(of: tile, matching: find.byType(Image)), findsOneWidget);
+    });
+
+    testWidgets('every seeded system category (mapped and unmapped icon keys alike) renders at '
+        'a narrow 320px width and a 1.6x text scale without throwing', (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      final (AppDatabase db, String profileId) = await seededDb();
+      await CategoryRepository(db).seedSystemCategoriesIfNeeded();
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithCategories(container));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      // `_CategoryList` renders via `ListView(children: [...])`, which
+      // Flutter still backs with a `SliverChildListDelegate` -- even
+      // though every row is supplied eagerly (not `.builder`), the
+      // sliver machinery still only mounts elements within/near its
+      // cache extent. At this narrow width + 1.6x scale, the taller
+      // 48px-icon `AppCard` rows mean fewer rows are mounted up front,
+      // so a row absent from the initial build is "not yet scrolled to
+      // view", not "missing" -- `find.text(...)` must not assume every
+      // seeded row already exists in the Element tree. This mirrors the
+      // exact bounded-drag pattern this file's own CP5.4c 2.0x-scale
+      // test already established for 'Dining Out', generalized to every
+      // expected row and scoped to the Expense tab's own ListView
+      // (always `find.byType(ListView).first` per
+      // `CategoriesScreen`'s fixed `children: [_CategoryList(expense),
+      // _CategoryList(income)]` order).
+      final Finder expenseListView = find.byType(ListView).first;
+      expect(expenseListView, findsOneWidget);
+
+      // Rows are ordered by `sortOrder` then `name` (see
+      // `watchAvailableFor`) -- all seeded system categories tie on
+      // `sortOrder`, so these five expense rows render alphabetically,
+      // not in `_systemCategories`' declared order. Each is checked in
+      // that actual on-screen order so a bounded forward-only drag
+      // loop can reach every one without ever needing to scroll back
+      // up (scrolling back up is exactly what made `dragUntilVisible`
+      // throw "Bad state: No element" elsewhere in this checkpoint).
+      const int maxDragAttemptsPerRow = 15;
+      for (final String label in <String>[
+        'Bills & Utilities',
+        'Dining Out',
+        'Groceries',
+        'Health',
+      ]) {
+        final Finder rowFinder = find.text(label);
+        for (int attempt = 0;
+            attempt < maxDragAttemptsPerRow && rowFinder.evaluate().isEmpty;
+            attempt++) {
+          await tester.drag(expenseListView, const Offset(0, -300));
+          await tester.pump();
+        }
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(rowFinder, findsOneWidget, reason: '"$label" never scrolled into view');
+      }
     });
   });
 }

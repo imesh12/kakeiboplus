@@ -19,6 +19,7 @@ import '../../features/goals/presentation/savings_goals_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/onboarding/presentation/profile_providers.dart';
 import '../../features/recurring/presentation/recurring_screen.dart';
+import '../../features/recurring/presentation/recurring_history_screen.dart';
 import '../../features/settings/presentation/international_preferences_screen.dart';
 import '../../features/settings/presentation/more_screen.dart';
 import '../../features/networth/presentation/net_worth_screen.dart';
@@ -164,6 +165,19 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => GoalDetailScreen(goalId: state.pathParameters['id']!),
       ),
       GoRoute(path: AppRoutes.recurring, builder: (context, state) => const RecurringScreen()),
+      // Recurring UI Upgrade + History Views checkpoint -- the literal
+      // `recurringHistory` path is registered before the parameterized
+      // `recurringRuleHistoryPath` below it, same precaution this file
+      // already uses for `/accounts/add` vs `/accounts/:id`.
+      GoRoute(
+        path: AppRoutes.recurringHistory,
+        builder: (context, state) => const RecurringHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.recurringRuleHistoryPath,
+        builder: (context, state) =>
+            RecurringHistoryScreen(ruleId: state.pathParameters['ruleId']!),
+      ),
       GoRoute(
         path: AppRoutes.internationalPreferences,
         builder: (context, state) => const InternationalPreferencesScreen(),

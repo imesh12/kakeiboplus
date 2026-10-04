@@ -642,6 +642,104 @@ void main() {
     });
   });
 
+  group('FinanceEngine.categoryExpenseTotals', () {
+    test('only expense transactions are included', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 1500, categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.income, minorUnits: 90000, categoryId: 'dining'),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals['dining'], Money.fromMinorUnits(1500, 'USD'));
+    });
+
+    test('income is excluded -- a category with income but no expense never appears in the result', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.income, minorUnits: 90000, categoryId: 'salary'),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals.containsKey('salary'), isFalse);
+      expect(totals, isEmpty);
+    });
+
+    test('transfers are excluded, even one carrying a categoryId', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(
+          id: 't1',
+          accountId: 'a1',
+          destinationAccountId: 'a2',
+          type: TransactionType.transfer,
+          minorUnits: 5000,
+          categoryId: 'dining',
+        ),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals, isEmpty);
+    });
+
+    test('totals are grouped by category correctly, keeping unrelated categories separate', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 1000, categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 2000, categoryId: 'groceries'),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals['dining'], Money.fromMinorUnits(1000, 'USD'));
+      expect(totals['groceries'], Money.fromMinorUnits(2000, 'USD'));
+      expect(totals.length, 2);
+    });
+
+    test('uncategorized expense transactions group under the null key, matching categoryTotals\' own '
+        'uncategorized-key convention', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 800),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals[null], Money.fromMinorUnits(800, 'USD'));
+    });
+
+    test('multiple transactions in the same category are summed, not overwritten', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 500, categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 700, categoryId: 'dining'),
+        _tx(id: 't3', accountId: 'a1', type: TransactionType.expense, minorUnits: 300, categoryId: 'dining'),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals['dining'], Money.fromMinorUnits(1500, 'USD'));
+    });
+
+    test('empty input returns an empty map, never null and never a fabricated entry', () {
+      final Map<String?, Money> totals =
+          FinanceEngine.categoryExpenseTotals(<LedgerTransaction>[], currencyCode: 'USD');
+      expect(totals, isEmpty);
+    });
+
+    test('respects the currency scope -- same-category spend in a different currency is never mixed '
+        'into the requested currency\'s total', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 3000, currency: 'JPY', categoryId: 'dining'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 1000, currency: 'USD', categoryId: 'dining'),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'USD');
+      expect(totals['dining'], Money.fromMinorUnits(1000, 'USD'));
+    });
+
+    test('each entry is plain Money in the requested currency, and agrees exactly with the '
+        'single-category categoryExpenseTotal -- never a second, diverging calculation', () {
+      final List<LedgerTransaction> txs = <LedgerTransaction>[
+        _tx(id: 't1', accountId: 'a1', type: TransactionType.expense, minorUnits: 2500, currency: 'JPY', categoryId: 'transport'),
+        _tx(id: 't2', accountId: 'a1', type: TransactionType.expense, minorUnits: 1500, currency: 'JPY', categoryId: 'transport'),
+      ];
+      final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(txs, currencyCode: 'JPY');
+      final Money bulkTotal = totals['transport']!;
+      final Money singleTotal = FinanceEngine.categoryExpenseTotal(
+        txs,
+        currencyCode: 'JPY',
+        categoryId: 'transport',
+      );
+      expect(bulkTotal, singleTotal);
+      expect(bulkTotal.currencyCode, 'JPY');
+    });
+  });
+
   group('FinanceEngine.recommendedDailySpend', () {
     test('splits a positive remaining evenly across the remaining days, truncating', () {
       final Money rec = FinanceEngine.recommendedDailySpend(

@@ -8,6 +8,7 @@ import '../../../core/finance/financial_account_subtype.dart';
 import '../../../core/finance/ledger_models.dart';
 import '../../../core/money/money.dart';
 import '../../accounts/presentation/account_providers.dart';
+import '../../categories/presentation/category_providers.dart';
 import '../../budgets/domain/budget_calculation.dart';
 import '../../budgets/presentation/budget_providers.dart';
 import '../../onboarding/presentation/profile_providers.dart';
@@ -79,6 +80,26 @@ class CurrencyDashboardSummary {
   /// currency — see `FinanceEngine.dailySpendingPace` for the exact
   /// definition (period, today-inclusion, zero handling, rounding).
   final Money dailyPace;
+
+  /// Checkpoint U3 (docs/23_DASHBOARD_HEADER_BRAND_SPEC.md §5.2): "how
+  /// much of this month's money is left" -- `income - expense`, both
+  /// already this calendar month's deterministic, transfer-excluded
+  /// totals (see [income]/[expense] above, both produced by the SAME
+  /// `FinanceEngine.incomeExpenseTotals` call this class has always
+  /// used). This is purely a composition of two already-authoritative,
+  /// already-tested figures -- it introduces no new financial
+  /// calculation of its own, and [Money.operator-] throws on a
+  /// currency mismatch exactly like [Money.operator+] does, but
+  /// [income] and [expense] are always the same [currencyCode] by
+  /// construction (see `_summaryForCurrency`), so that can never
+  /// actually happen here.
+  ///
+  /// Deliberately NOT [netWorth] or [availableBalance] -- docs/23 §5.1
+  /// is explicit that the Dashboard hero must never expose Net Worth or
+  /// a disguised equivalent, and this is a distinct, narrower monthly
+  /// figure from the liquid balance [availableBalance] already
+  /// represents.
+  Money get remainingThisMonth => income - expense;
 }
 
 /// The "Remaining monthly budget" dashboard tile's data -- a thin
@@ -119,12 +140,15 @@ class MonthlyBudgetSummary {
 /// `HomeScreen` reads.
 ///
 /// A plain (non-autoDispose, synchronous) `Provider`, matching every
-/// other dashboard provider here and preserving `_BudgetCard`'s existing
-/// synchronous read contract: `.valueOrNull` collapses a momentary
+/// other dashboard provider here and preserving `_RemainingBudgetTile`'s
+/// existing synchronous read contract (U3 Final Polish Pass, item 2:
+/// the former second reader, `_BudgetCard`, was removed along with the
+/// Home Budget detail card it belonged to; this provider's own contract
+/// is otherwise unaffected): `.valueOrNull` collapses a momentary
 /// loading state to "not configured" rather than exposing a separate
-/// loading state to the card. This is an intentional, documented
+/// loading state to the tile. This is an intentional, documented
 /// simplification — the rest of the dashboard does not show a
-/// budget-card-specific loading spinner either, and a `null` here is
+/// budget-tile-specific loading spinner either, and a `null` here is
 /// self-correcting the moment the underlying stream resolves.
 final Provider<MonthlyBudgetSummary> monthlyBudgetSummaryProvider =
     Provider<MonthlyBudgetSummary>((ref) {
@@ -329,3 +353,120 @@ List<String> _orderCurrencies(
   ordered.addAll(rest);
   return ordered;
 }
+
+/// One category's slice of [homeCategorySpendingProvider]'s "Spending
+/// this month" breakdown -- Dashboard V1 Finalization checkpoint.
+/// [categoryId] is `null` for uncategorized expense transactions
+/// (grouped together, exactly like [FinanceEngine.categoryExpenseTotals]
+/// itself groups them); [categoryName]/[colorKey] are then also `null`
+/// -- the widget layer supplies the localized "Other"/uncategorized
+/// label and a neutral fallback color for that case, never this
+/// provider (which stays presentation-agnostic, like every other
+/// provider in this file).
+@immutable
+class HomeCategorySpendingSlice {
+  const HomeCategorySpendingSlice({
+    required this.categoryId,
+    required this.categoryName,
+    required this.colorKey,
+    required this.amount,
+  });
+
+  final String? categoryId;
+  final String? categoryName;
+
+  /// Raw `Categories.colorKey` storage value (see
+  /// `lib/features/categories/domain/category_color.dart`'s
+  /// `CategoryColorKey.fromStorageValue`) -- not yet resolved to a
+  /// [Color] here, so this class has no Flutter-widget dependency,
+  /// matching every other provider-owned model in this file.
+  final String? colorKey;
+
+  /// Always a non-negative expense magnitude -- see
+  /// [FinanceEngine.categoryExpenseTotals].
+  final Money amount;
+}
+
+/// The Home dashboard's "Spending this month" category breakdown, for
+/// the profile's living currency and the current calendar month --
+/// Dashboard V1 Finalization checkpoint. Reuses
+/// [FinanceEngine.categoryExpenseTotals] (the same deterministic,
+/// expense-only, transfer-excluded aggregation the budgets feature's
+/// per-category "spent" figure is built from) joined with each
+/// category's own name/colorKey from [categoriesForTypeProvider] --
+/// never a second, independently-derived total. Categories with zero
+/// expense this month are dropped; the result is sorted by amount,
+/// largest first, purely a display ordering choice.
+///
+/// Returns `AsyncValue.loading()` before the profile exists (mirrors
+/// [dashboardCurrencySummariesProvider]'s own convention) and
+/// `AsyncValue.data(<HomeCategorySpendingSlice>[])` once there's a
+/// profile but no expense transactions this month -- the UI renders
+/// that as its own "no spending yet" empty state, never a fabricated
+/// chart.
+final Provider<AsyncValue<List<HomeCategorySpendingSlice>>> homeCategorySpendingProvider =
+    Provider<AsyncValue<List<HomeCategorySpendingSlice>>>((ref) {
+  final AsyncValue<ProfileRow?> profileAsync = ref.watch(activeProfileProvider);
+  final AsyncValue<List<LedgerTransaction>> ledgerAsync = ref.watch(ledgerProvider);
+  final AsyncValue<List<CategoryRow>> categoriesAsync =
+      ref.watch(categoriesForTypeProvider('expense'));
+
+  if (profileAsync.isLoading || ledgerAsync.isLoading || categoriesAsync.isLoading) {
+    return const AsyncValue<List<HomeCategorySpendingSlice>>.loading();
+  }
+  if (profileAsync.hasError) {
+    return AsyncValue<List<HomeCategorySpendingSlice>>.error(
+      profileAsync.error!,
+      profileAsync.stackTrace!,
+    );
+  }
+  if (ledgerAsync.hasError) {
+    return AsyncValue<List<HomeCategorySpendingSlice>>.error(
+      ledgerAsync.error!,
+      ledgerAsync.stackTrace!,
+    );
+  }
+  if (categoriesAsync.hasError) {
+    return AsyncValue<List<HomeCategorySpendingSlice>>.error(
+      categoriesAsync.error!,
+      categoriesAsync.stackTrace!,
+    );
+  }
+
+  final ProfileRow? profile = profileAsync.requireValue;
+  if (profile == null) {
+    return const AsyncValue<List<HomeCategorySpendingSlice>>.loading(); // pre-onboarding
+  }
+
+  final List<LedgerTransaction> ledger = ledgerAsync.requireValue;
+  final List<CategoryRow> categories = categoriesAsync.requireValue;
+  final Map<String, CategoryRow> categoryById = <String, CategoryRow>{
+    for (final CategoryRow category in categories) category.id: category,
+  };
+
+  final DateTime now = DateTime.now().toUtc();
+  final DateTime monthStart = DateTime.utc(now.year, now.month);
+  final DateTime monthEnd =
+      DateTime.utc(now.year, now.month + 1).subtract(const Duration(microseconds: 1));
+
+  final Map<String?, Money> totals = FinanceEngine.categoryExpenseTotals(
+    ledger,
+    currencyCode: profile.livingCurrency,
+    fromUtc: monthStart,
+    toUtc: monthEnd,
+  );
+
+  final List<HomeCategorySpendingSlice> slices = <HomeCategorySpendingSlice>[
+    for (final MapEntry<String?, Money> entry in totals.entries)
+      if (entry.value.minorUnits > 0)
+        HomeCategorySpendingSlice(
+          categoryId: entry.key,
+          categoryName: entry.key == null ? null : categoryById[entry.key]?.name,
+          colorKey: entry.key == null ? null : categoryById[entry.key]?.colorKey,
+          amount: entry.value,
+        ),
+  ]..sort((HomeCategorySpendingSlice a, HomeCategorySpendingSlice b) =>
+      b.amount.minorUnits.compareTo(a.amount.minorUnits));
+
+  return AsyncValue<List<HomeCategorySpendingSlice>>.data(slices);
+});

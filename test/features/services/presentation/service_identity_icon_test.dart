@@ -28,7 +28,9 @@ void main() {
     expect(icon.icon, isNot(serviceFamilyIconFor(ServiceIdentityFamily.other)));
   });
 
-  testWidgets('a named-service key (Netflix) renders through its family\'s icon, never throwing',
+  testWidgets(
+      'a named-service key with approved artwork (Netflix) renders that approved artwork, '
+      'never the generic family icon',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -37,8 +39,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    final Icon icon = tester.widget<Icon>(find.byType(Icon));
-    expect(icon.icon, serviceFamilyIconFor(ServiceIdentityFamily.streaming));
+    // Checkpoint: real branded artwork takes precedence over the generic
+    // family icon/color whenever `serviceIconAssetFor` has an approved
+    // asset for this key -- see `ServiceIdentityIcon`'s own doc comment.
+    expect(find.image(const AssetImage('assets/icons/services/netflix.png')), findsOneWidget);
+    // `AppIconTile`'s `assetPath` branch renders real artwork instead of
+    // the tinted generic glyph -- no `Icon` at all for an artwork-backed
+    // key.
+    expect(find.byType(Icon), findsNothing);
   });
 
   testWidgets('an unrecognized key degrades safely to the generic fallback, never throwing',

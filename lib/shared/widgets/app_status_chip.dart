@@ -24,17 +24,31 @@ import '../theme/app_tokens.dart';
 /// than wrapping the pill or overflowing, matching every existing status
 /// chip on Home.
 class AppStatusChip extends StatelessWidget {
-  const AppStatusChip({required this.label, required this.color, super.key});
+  const AppStatusChip({required this.label, required this.color, super.key, this.gradientColors});
 
   final String label;
   final Color color;
+
+  /// Recurring UI Upgrade + History Views checkpoint: an optional
+  /// gradient fill for a "premium tinted surface" badge, replacing the
+  /// flat `color.withValues(alpha: 0.14)` fill below. `null` (the
+  /// default) is pixel-identical to every pre-existing call site --
+  /// this never changes [label]/[color]'s own text-color role, only
+  /// the background fill.
+  final List<Color>? gradientColors;
 
   @override
   Widget build(BuildContext context) {
     final AppTokens tokens = context.appTokens;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.xs, vertical: 3),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: tokens.radii.pillRadius),
+      decoration: BoxDecoration(
+        color: gradientColors == null ? color.withValues(alpha: 0.14) : null,
+        gradient: gradientColors == null
+            ? null
+            : LinearGradient(colors: gradientColors!, begin: Alignment.centerLeft, end: Alignment.centerRight),
+        borderRadius: tokens.radii.pillRadius,
+      ),
       child: Text(
         label,
         maxLines: 1,

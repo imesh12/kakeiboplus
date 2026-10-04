@@ -28,7 +28,13 @@ void main() {
       'the same categoryId/iconKey/colorKey renders an identical icon+color inside two '
       'differently-structured surrounding widgets', (tester) async {
     const String categoryId = 'cat-groceries';
-    const String iconKey = 'shopping_cart';
+    // App Icon Integration checkpoint: deliberately an icon key with
+    // NO curated asset mapping (category_icon_asset.dart). This test's
+    // whole point is proving Icon-level glyph+color identity across
+    // screens; 'shopping_cart' now resolves to Image.asset instead of
+    // Icon, which would make find.byType(Icon) fail for an unrelated
+    // reason. 'diamond' preserves the original Icon-based intent.
+    const String iconKey = 'diamond';
     const String colorKey = 'green';
 
     // "Screen A": the icon rendered alone, centered.
@@ -110,5 +116,99 @@ void main() {
     final Color dark = tester.widget<Icon>(find.byType(Icon)).color!;
 
     expect(light, isNot(dark));
+  });
+
+  // App Icon Integration checkpoint: proves the additive
+  // `categoryIconAssetFor` wiring inside `build()` -- an icon key with
+  // curated artwork renders the PNG via `Image.asset` instead of the
+  // Material `Icon`, while an unmapped/unrecognized/null key keeps
+  // rendering exactly the same `Icon` as every pre-existing call site.
+  group('App Icon Integration: asset vs. Material-icon fallback', () {
+    testWidgets('an icon key with curated artwork (e.g. "restaurant") renders Image.asset, '
+        'not Icon', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          const CategoryIdentityIcon(
+            categoryId: 'cat-dining',
+            iconKey: 'restaurant',
+            colorKey: 'orange',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byType(Icon), findsNothing);
+      final Image image = tester.widget<Image>(find.byType(Image));
+      final AssetImage assetImage = image.image as AssetImage;
+      expect(assetImage.assetName, 'assets/icons/categories/dining_out.png');
+    });
+
+    testWidgets('shopping_bag (a non-system, explicitly-selectable key) renders '
+        'shopping_bag.png', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          const CategoryIdentityIcon(
+            categoryId: 'cat-custom-shopping',
+            iconKey: 'shopping_bag',
+            colorKey: 'purple',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Image image = tester.widget<Image>(find.byType(Image));
+      expect(
+        (image.image as AssetImage).assetName,
+        'assets/icons/categories/shopping_bag.png',
+      );
+    });
+
+    testWidgets('the "category" key (seeded Other Expense, or user-picked "Other") now '
+        'renders the approved other.png artwork, not the Material Icon', (tester) async {
+      // Category Icon Source Correction checkpoint: `'category'` is no
+      // longer left unmapped in `category_icon_asset.dart` -- see that
+      // file's own doc comment for why this is narrowly scoped to
+      // exactly this key, not every null/unrecognized category (the two
+      // tests below independently cover those).
+      await tester.pumpWidget(
+        _wrap(
+          const CategoryIdentityIcon(
+            categoryId: 'cat-other-expense',
+            iconKey: 'category',
+            colorKey: 'grey',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byType(Icon), findsNothing);
+      final Image image = tester.widget<Image>(find.byType(Image));
+      expect(
+        (image.image as AssetImage).assetName,
+        'assets/icons/categories/other.png',
+      );
+    });
+
+    testWidgets('an unrecognized icon key falls back to the Material icon, not a broken/blank '
+        'render', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          const CategoryIdentityIcon(
+            categoryId: 'cat-future',
+            iconKey: 'some_future_icon_name',
+            colorKey: 'teal',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Icon), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+    });
   });
 }

@@ -107,9 +107,159 @@ class AppTheme {
   /// own `colorScheme.primary` exactly as before.
   static const Color _forestPositiveGreen = Color(0xFF16A34A);
 
-  static ThemeData light() => _build(Brightness.light, seed: _seed);
+  /// Checkpoint U3 (docs/23_DASHBOARD_HEADER_BRAND_SPEC.md §9/§11):
+  /// KakeiboPlus's own fixed hero-card gradient for the LIGHT theme.
+  /// Final U3 Visual Polish Pass: a third, deeper mid-stop was added to
+  /// docs/23 §11's original two approved hex stops (`#0F9E9A ->
+  /// #19B7A5`) for more perceived depth -- still the same teal/mint hue
+  /// family and the same topLeft(darker) -> bottomRight(lighter)
+  /// direction, just less flat/single-tone; deliberately NOT brightened
+  /// or saturated further (that would read as neon, the opposite of
+  /// "premium"). Still a literal, fixed list, not derived from [_seed]
+  /// -- see [AppSemanticColors.heroGradient]'s own doc comment for why
+  /// this does NOT re-seed the app's shared [ColorScheme] (which stays
+  /// [_seed], the Checkpoint 10 blue, for every other color on every
+  /// screen).
+  // Dashboard Visual Refresh Pass (docs/design/dashboard-referancenew.png,
+  // approved 2026-09): the hero/brand-bar gradient's exact stops were
+  // updated to this pass's approved teal target -- still the same hue
+  // family and topLeft(darker) -> bottomRight(lighter) direction as the
+  // prior Final U3 Visual Polish Pass stops it replaces, just recalibrated
+  // to the newly approved reference's exact hex values (a literal design
+  // value, not a derivation -- see [AppSemanticColors.heroGradient]'s own
+  // doc comment for why this does not re-seed the shared ColorScheme).
+  // Light-only, per this pass's explicit "default/light Dashboard only"
+  // scope -- [_kakeiboHeroGradientDark] is deliberately left unchanged.
+  static const List<Color> _kakeiboHeroGradientLight = <Color>[
+    Color(0xFF007F87),
+    Color(0xFF009B98),
+    Color(0xFF12C9AE),
+  ];
 
-  static ThemeData dark() => _build(Brightness.dark, seed: _seed);
+  /// The DARK-theme counterpart to [_kakeiboHeroGradientLight] -- the
+  /// same three stops, each channel scaled down ~30%, keeping the same
+  /// hue/relationship (and the same added mid-stop for depth) just
+  /// darker, so the hero still reads as the same brand gradient in both
+  /// brightnesses.
+  static const List<Color> _kakeiboHeroGradientDark = <Color>[
+    Color(0xFF084D49),
+    Color(0xFF0D6963),
+    Color(0xFF18867A),
+  ];
+
+  /// Dashboard V1 Finalization checkpoint: a fixed warm cream surface/
+  /// border/foreground trio for the Home "Upcoming commitments" card's
+  /// empty ("You're all caught up") state -- a tint of docs/23 §9's
+  /// approved "Sunny Yellow" accent, deliberately warm rather than red
+  /// (this is a positive, calm empty state, not a warning -- see
+  /// `app_tokens.dart`'s [AppSemanticColors.warmCardSurface] doc
+  /// comment). [_kakeiboWarmForegroundLight]/[_kakeiboWarmForegroundDark]
+  /// intentionally match the existing amber [CategoryColorKey] tones
+  /// (`category_color.dart`) rather than inventing a fourth unrelated
+  /// brown -- same warm-amber family already proven accessible on both
+  /// light and dark surfaces elsewhere in this app.
+  // Dashboard Visual Refresh Pass: recalibrated to the newly approved
+  // reference's exact Upcoming-commitments cream/amber/brown trio --
+  // still the same warm, calm (never red) empty-state treatment
+  // [warmCardSurface]'s own doc comment describes, just updated literal
+  // values. Light-only -- [_kakeiboWarmSurfaceDark] and its siblings are
+  // deliberately left unchanged, per this pass's light-only scope.
+  static const Color _kakeiboWarmSurfaceLight = Color(0xFFFFFAEB);
+  static const Color _kakeiboWarmBorderLight = Color(0xFFFFDA83);
+  static const Color _kakeiboWarmForegroundLight = Color(0xFF87430C);
+  static const Color _kakeiboWarmSurfaceDark = Color(0xFF2E2A1C);
+  static const Color _kakeiboWarmBorderDark = Color(0xFF4A421F);
+  static const Color _kakeiboWarmForegroundDark = Color(0xFFE8C449);
+
+  /// Dashboard Visual Refresh Pass: the Home Dashboard's own soft mint
+  /// page background -- see [AppSemanticColors.dashboardPageBackground]'s
+  /// doc comment. Light-only, passed only from [light()]; [dark()] does
+  /// not pass this, so `HomeScreen`'s Scaffold falls back to the
+  /// ordinary `colorScheme.surface` under Dark, exactly as before this
+  /// pass.
+  static const Color _kakeiboDashboardPageBackgroundLight = Color(0xFFF2FCFA);
+
+  /// Dashboard progress-bar gradient refinement: a premium "deep emerald
+  /// -> fresh mint/green" fill for a within-budget/healthy
+  /// [AppProgressBar] on the Dashboard -- deliberately a muted, calm
+  /// green family (not neon/glossy), matching the "avoid ... aggressive
+  /// ... warnings"/"premium, calm" guidance this file's own class doc
+  /// comment already cites. Three stops, same topLeft(darker) ->
+  /// bottomRight(lighter) direction as [_kakeiboHeroGradientLight], for
+  /// visual consistency with the hero card's own gradient treatment.
+  static const List<Color> _kakeiboPositiveGradientLight = <Color>[
+    Color(0xFF0B6E4F),
+    Color(0xFF14926B),
+    Color(0xFF4CC38A),
+  ];
+
+  /// DARK-theme counterpart to [_kakeiboPositiveGradientLight] -- same
+  /// hue relationship, each stop darkened, matching how
+  /// [_kakeiboHeroGradientDark] relates to its light counterpart.
+  static const List<Color> _kakeiboPositiveGradientDark = <Color>[
+    Color(0xFF063A29),
+    Color(0xFF0B5A44),
+    Color(0xFF1F7A5C),
+  ];
+
+  /// Dashboard progress-bar gradient refinement: the companion
+  /// "exceeded/over-budget" fill -- a "deep coral-red -> brighter warm
+  /// red" family, deliberately warm/coral rather than a pure alarm-siren
+  /// crimson, per the same "calm, not alarming" guidance [warmCardSurface]
+  /// already follows for its own (positive) empty state. Same three-stop,
+  /// topLeft -> bottomRight shape as [_kakeiboPositiveGradientLight].
+  static const List<Color> _kakeiboNegativeGradientLight = <Color>[
+    Color(0xFFB3271D),
+    Color(0xFFD6453A),
+    Color(0xFFEF6C61),
+  ];
+
+  /// DARK-theme counterpart to [_kakeiboNegativeGradientLight].
+  static const List<Color> _kakeiboNegativeGradientDark = <Color>[
+    Color(0xFF5C1712),
+    Color(0xFF7A2A22),
+    Color(0xFF9C3F35),
+  ];
+
+  /// U3 Final Polish Pass (item 10): the bottom-navigation bar's
+  /// SELECTED icon/label color -- see
+  /// [AppSemanticColors.navSelectedColor]'s own doc comment for why
+  /// this exists and why it deliberately reuses rather than invents a
+  /// brand color. Same literal as [_kakeiboPositiveGradientLight]'s
+  /// middle "fresh emerald/teal" stop, not a new hex.
+  static const Color _kakeiboNavSelectedLight = Color(0xFF14926B);
+
+  /// DARK-theme counterpart -- the brightest/lightest stop of
+  /// [_kakeiboPositiveGradientDark], for adequate contrast against a
+  /// dark `colorScheme.surface` (the darker stops of that gradient,
+  /// tuned for a large gradient fill, would read too dim for small
+  /// nav-bar text/icon sizes).
+  static const Color _kakeiboNavSelectedDark = Color(0xFF1F7A5C);
+
+  static ThemeData light() => _build(
+        Brightness.light,
+        seed: _seed,
+        heroGradient: _kakeiboHeroGradientLight,
+        warmCardSurface: _kakeiboWarmSurfaceLight,
+        warmCardBorder: _kakeiboWarmBorderLight,
+        warmCardForeground: _kakeiboWarmForegroundLight,
+        dashboardPageBackground: _kakeiboDashboardPageBackgroundLight,
+        positiveGradient: _kakeiboPositiveGradientLight,
+        negativeGradient: _kakeiboNegativeGradientLight,
+        navSelectedColor: _kakeiboNavSelectedLight,
+      );
+
+  static ThemeData dark() => _build(
+        Brightness.dark,
+        seed: _seed,
+        heroGradient: _kakeiboHeroGradientDark,
+        warmCardSurface: _kakeiboWarmSurfaceDark,
+        warmCardBorder: _kakeiboWarmBorderDark,
+        warmCardForeground: _kakeiboWarmForegroundDark,
+        positiveGradient: _kakeiboPositiveGradientDark,
+        negativeGradient: _kakeiboNegativeGradientDark,
+        navSelectedColor: _kakeiboNavSelectedDark,
+      );
 
   /// Pink -- warm, playful, premium. Light-brightness only (per this
   /// checkpoint's locked initial theme family; Pink is not a
@@ -138,11 +288,31 @@ class AppTheme {
     };
   }
 
-  static ThemeData _build(Brightness brightness, {required Color seed, Color? positiveOverride}) {
+  static ThemeData _build(
+    Brightness brightness, {
+    required Color seed,
+    Color? positiveOverride,
+    List<Color>? heroGradient,
+    Color? warmCardSurface,
+    Color? warmCardBorder,
+    Color? warmCardForeground,
+    Color? dashboardPageBackground,
+    List<Color>? positiveGradient,
+    List<Color>? negativeGradient,
+    Color? navSelectedColor,
+  }) {
     final ColorScheme colorScheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
     final AppTokens tokens = AppTokens.fromColorScheme(
       colorScheme,
       positiveOverride: positiveOverride,
+      heroGradient: heroGradient,
+      warmCardSurface: warmCardSurface,
+      warmCardBorder: warmCardBorder,
+      warmCardForeground: warmCardForeground,
+      dashboardPageBackground: dashboardPageBackground,
+      positiveGradient: positiveGradient,
+      negativeGradient: negativeGradient,
+      navSelectedColor: navSelectedColor,
     );
     final BorderRadius smallRadius = tokens.radii.smallRadius;
     final BorderRadius mediumRadius = tokens.radii.mediumRadius;

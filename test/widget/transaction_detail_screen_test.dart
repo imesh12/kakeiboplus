@@ -365,8 +365,16 @@ void main() {
     await tester.pumpAndSettle();
 
     // sys-dining's seeded icon ('restaurant') is represented via
-    // TransactionIconBadge/categoryIconFor.
-    expect(find.byIcon(Icons.restaurant), findsOneWidget);
+    // TransactionIconBadge/categoryIconFor -- UI/Icon Polish checkpoint:
+    // 'restaurant' now has curated artwork, so TransactionIconBadge
+    // renders it as an Image, not the bare Icons.restaurant glyph (see
+    // that widget's own updated doc comment on the new, strictly
+    // additive, lowest-precedence asset rung).
+    expect(find.byIcon(Icons.restaurant), findsNothing);
+    expect(
+      (tester.widget<Image>(find.byType(Image)).image as AssetImage).assetName,
+      'assets/icons/categories/dining_out.png',
+    );
     expect(find.text('-¥1,200'), findsOneWidget);
     expect(hasSemanticsLabel(tester, 'Expense'), isTrue);
   });
@@ -393,7 +401,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('+¥500,000'), findsOneWidget);
-    expect(find.byIcon(Icons.work), findsOneWidget); // sys-salary's seeded icon
+    // sys-salary's seeded icon ('work') also has curated artwork now --
+    // same asset-rung precedence as the 'restaurant' case above.
+    expect(find.byIcon(Icons.work), findsNothing);
+    expect(
+      (tester.widget<Image>(find.byType(Image)).image as AssetImage).assetName,
+      'assets/icons/categories/salary.png',
+    );
     expect(find.text('Salary'), findsWidgets); // header + metadata row, see file-level note
     expect(hasSemanticsLabel(tester, 'Income'), isTrue);
 

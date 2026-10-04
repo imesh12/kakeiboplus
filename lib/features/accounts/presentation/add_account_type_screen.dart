@@ -8,6 +8,7 @@ import '../../../shared/theme/app_typography.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_icon_tile.dart';
 import 'account_creation_kind_presentation.dart';
+import 'account_icon_asset.dart';
 
 /// Checkpoint G (Add Account UX, docs/20 §13.4): the icon-led account
 /// type chooser -- the FIRST step of the new Add Account flow, replacing
@@ -49,7 +50,17 @@ class AddAccountTypeScreen extends StatelessWidget {
               onTap: () => context.push(AppRoutes.addAccountForm(kind.name)),
               child: Row(
                 children: <Widget>[
-                  AppIconTile(icon: accountCreationKindIcon(kind), color: colorScheme.primary),
+                  AppIconTile(
+                    icon: accountCreationKindIcon(kind),
+                    // Accounts Icon Pack Full Integration checkpoint:
+                    // `AccountCreationKind.legacyTypeLabel` is the exact
+                    // same string vocabulary `accountIconAssetFor`
+                    // already keys off of (see that resolver's own doc),
+                    // so the chooser and the detail header always agree
+                    // on which kinds get curated artwork.
+                    assetPath: accountIconAssetFor(kind.legacyTypeLabel),
+                    color: colorScheme.primary,
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(

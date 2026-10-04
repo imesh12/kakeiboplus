@@ -946,10 +946,18 @@ void main() {
     });
   });
 
-  // -- Checkpoint U2 (Service / Merchant Identity Integration) -- the
-  // Add/Edit Transaction form's `ServiceIdentityDropdown`, alongside
-  // (never replacing) the pre-existing `_CategoryDropdown` above.
-  group('Checkpoint U2 -- service identity', () {
+  // -- U3 Final Polish Pass: the Service dropdown (introduced by
+  // Checkpoint U2, "Service / Merchant Identity Integration") is hidden
+  // from this normal Add Income/Expense/Transfer (and edit) form
+  // entirely -- it used to render for both expense and income (never
+  // gated to just one type), and this pass simplifies the everyday
+  // entry form down to account/type/amount/category/date/note. Domain
+  // support is untouched: `serviceIdentityKey` still exists on the
+  // table/model/repository, an existing service-tagged transaction
+  // keeps its tag when edited through this form (there's simply no
+  // control here to change it), and `recurring_screen.dart`'s own,
+  // separate `ServiceIdentityDropdown` call site is unaffected.
+  group('U3 Final Polish Pass -- service dropdown hidden from the normal Add/Edit form', () {
     Future<(AppDatabase, String profileId, String accountId)> seededServiceDb() async {
       final AppDatabase db = AppDatabase.forTesting(NativeDatabase.memory());
       final ProfileRepository profileRepo = ProfileRepository(db);
@@ -980,8 +988,8 @@ void main() {
     }
 
     testWidgets(
-        'the service dropdown defaults to None, and choosing "Netflix" then saving a new '
-        'expense persists it as serviceIdentityKey', (tester) async {
+        'the service dropdown never renders for a NEW expense, and saving persists a null '
+        'serviceIdentityKey -- there is no control on this form to set one', (tester) async {
       final (AppDatabase db, String profileId, String accountId) = await seededServiceDb();
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
@@ -996,16 +1004,8 @@ void main() {
 
       expect(
         find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(find.text('None'), findsWidgets); // the service dropdown's default selection
-
-      await tester.tap(
-        find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Netflix').last);
-      await tester.pumpAndSettle();
 
       // The only account (JPY Wallet) is already selected by default --
       // same convention the pre-existing create-mode tests above rely
@@ -1019,12 +1019,32 @@ void main() {
       expect(find.text('open'), findsOneWidget); // saved and popped
       final List<Transaction> rows = await db.select(db.transactions).get();
       expect(rows, hasLength(1));
-      expect(rows.single.serviceIdentityKey, 'netflix');
+      expect(rows.single.serviceIdentityKey, isNull);
     });
 
     testWidgets(
-        'editing an expense that already has a service identity prefills the dropdown with its '
-        'display name, and changing it back to None persists a null serviceIdentityKey',
+        'the service dropdown never renders for an income either', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededServiceDb();
+      final ProviderContainer container = ProviderContainer(
+        overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(
+        appWithPushedScreen(container, const AddTransactionScreen(initialType: 'income')),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
+        findsNothing,
+      );
+    });
+
+    testWidgets(
+        'editing an expense that already has a service identity shows no service dropdown, '
+        'and saving an unrelated field change preserves its existing serviceIdentityKey',
         (tester) async {
       final (AppDatabase db, String profileId, String accountId) = await seededServiceDb();
       final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
@@ -1050,17 +1070,17 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      // Prefilled with the named service's display name, not the raw
-      // persisted key.
-      expect(find.text('Netflix'), findsOneWidget);
-
-      await tester.tap(
+      // No dropdown, and no visible trace of the raw "netflix" key or
+      // its "Netflix" display name -- this form gives no indication of,
+      // or control over, the existing service identity at all.
+      expect(
         find.widgetWithText(DropdownButtonFormField<String?>, 'Service (optional)'),
+        findsNothing,
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('None').last);
-      await tester.pumpAndSettle();
+      expect(find.text('Netflix'), findsNothing);
 
+      // Change something unrelated (the amount) and save.
+      await tester.enterText(find.byType(TextFormField).first, '2000');
       await scrollToSaveButton(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
@@ -1068,11 +1088,14 @@ void main() {
 
       expect(find.text('open'), findsOneWidget); // saved and popped
       final Transaction updated = await transactionRow(db, txId);
-      expect(updated.serviceIdentityKey, isNull);
-      expect(updated.categoryId, 'sys-dining'); // category untouched by the service change
+      // The service identity this transaction already had is preserved
+      // exactly -- this form has no control to change or clear it.
+      expect(updated.serviceIdentityKey, 'netflix');
+      expect(updated.categoryId, 'sys-dining'); // category untouched too
+      expect(updated.amountMinorUnits, 2000);
     });
 
-    testWidgets('the service dropdown is never shown for a transfer', (tester) async {
+    testWidgets('the service dropdown is never shown for a transfer either', (tester) async {
       final (AppDatabase db, String profileId, String accountId) = await seededServiceDb();
       final ProviderContainer container = ProviderContainer(
         overrides: <Override>[appDatabaseProvider.overrideWithValue(db)],

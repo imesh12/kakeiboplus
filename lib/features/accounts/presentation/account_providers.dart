@@ -161,6 +161,54 @@ final AutoDisposeStreamProviderFamily<CreditFacilityDetailsRow?, String> _credit
   return ref.watch(creditFacilityRepositoryProvider).watchForAccount(accountId);
 });
 
+/// Recurring UI Foundation Audit (Checkpoint 3): active (non-archived)
+/// payment instruments linked to one account, reactively -- a thin
+/// wrapper over [PaymentInstrumentRepository.watchActiveForAccount]
+/// (already oldest-created-first), added so a reactive "which card
+/// pays from this account" display (the redesigned Recurring row's
+/// account segment, and any other list/detail screen that wants the
+/// same thing) has one shared, tested provider to watch rather than
+/// each screen opening its own ad-hoc stream. Collapses loading/error
+/// to an empty list, matching [depositDetailsForAccountProvider]/
+/// [creditFacilityForAccountProvider]'s own "momentary loading is not
+/// worth a separate flicker state" convention on this same file.
+/// Never fabricates an instrument -- an account with none simply
+/// yields an empty list, exactly what [watchActiveForAccount] itself
+/// returns.
+final AutoDisposeProviderFamily<List<PaymentInstrumentRow>, String>
+    paymentInstrumentsForAccountProvider =
+    Provider.autoDispose.family<List<PaymentInstrumentRow>, String>((ref, accountId) {
+  final AsyncValue<List<PaymentInstrumentRow>> instrumentsAsync = ref.watch(
+    _paymentInstrumentsStreamProvider(accountId),
+  );
+  return instrumentsAsync.valueOrNull ?? const <PaymentInstrumentRow>[];
+});
+
+final AutoDisposeStreamProviderFamily<List<PaymentInstrumentRow>, String>
+    _paymentInstrumentsStreamProvider =
+    StreamProvider.autoDispose.family<List<PaymentInstrumentRow>, String>((ref, accountId) {
+  return ref.watch(paymentInstrumentRepositoryProvider).watchActiveForAccount(accountId);
+});
+
+/// The single payment instrument a display surface should show for one
+/// account, given [paymentInstrumentsForAccountProvider]'s list for
+/// that account -- the oldest still-active instrument, matching
+/// [PaymentInstrumentRepository.watchActiveForAccount]'s own
+/// oldest-first ordering (see that method's own doc: "what a future
+/// 'choose a card' picker would watch"). `null` for an account with
+/// no active instrument at all -- an account need not have one (e.g.
+/// a plain cash/bank account never gets a card), and this never
+/// invents one. Pure and directly unit-testable without a
+/// [ProviderContainer], the same precedent every other selector in
+/// this codebase (e.g. `recurring_providers.dart`'s
+/// `selectHomeRecurringItem`) already establishes -- added so a
+/// presentation layer never has to decide for itself which
+/// instrument is canonical when an account happens to have more than
+/// one.
+PaymentInstrumentRow? firstActivePaymentInstrumentFor(List<PaymentInstrumentRow> instruments) {
+  return instruments.isEmpty ? null : instruments.first;
+}
+
 /// Every active financial institution for the current profile --
 /// Checkpoint L. `FinancialInstitutionRepository` has no
 /// single-institution `watchById` (it was only ever built to list a

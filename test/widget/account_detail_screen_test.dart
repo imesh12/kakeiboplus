@@ -1796,4 +1796,201 @@ void main() {
       expect(find.byKey(const Key('creditFacilityDetailsCard')), findsOneWidget);
     });
   });
+
+  group('Accounts Icon Pack Full Integration checkpoint: identity header', () {
+    // All 4 plain-vocabulary legacy types (`classifyLegacyAccountType`'s
+    // fixed 'cash'/'bank'/'wallet'/'card' set) now resolve an icon --
+    // 3 via the account-specific Accounts pack, 'bank' via the public
+    // pool's business-building.png (no dedicated bank artwork exists in
+    // the approved Accounts pack -- see `account_icon_asset.dart`'s own
+    // doc). None render a blank/broken Image any more.
+    const List<(String type, String assetPath)> assetMappedTypes = <(String, String)>[
+      ('cash', 'assets/icons/accounts/cash.png'),
+      ('bank', 'assets/icons/public/business_building.png'),
+      ('wallet', 'assets/icons/accounts/wallet.png'),
+      ('card', 'assets/icons/accounts/credit_card.png'),
+    ];
+
+    for (final (String type, String assetPath) in assetMappedTypes) {
+      testWidgets(
+        'an account of type "$type" renders its curated production asset ($assetPath) in '
+        'the identity header',
+        (tester) async {
+          final (AppDatabase db, String profileId) = await seededDb();
+          final AccountRepository accountRepo = AccountRepository(db);
+          final String accountId = await accountRepo.createAccount(
+            profileId: profileId,
+            name: 'Test Account',
+            type: type,
+            currencyCode: 'USD',
+            openingBalance: Money.fromMinorUnits(0, 'USD'),
+          );
+          final ProviderContainer container =
+              ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+          addTearDown(() => disposeInOrder(tester, container, db));
+
+          await tester.pumpWidget(appWithRouter(container, accountId));
+          await openDetail(tester);
+
+          expect(tester.takeException(), isNull);
+          final Image image = tester.widget<Image>(
+            find.descendant(
+              of: find.byKey(const Key('accountTypeIconTile')),
+              matching: find.byType(Image),
+            ),
+          );
+          expect((image.image as AssetImage).assetName, assetPath);
+        },
+      );
+    }
+
+    testWidgets(
+      'a Savings account (its own persisted subtype, created via createClassifiedAccount) '
+      'renders assets/icons/accounts/savings_account.png in the identity header -- NOT the '
+      'byte-identical Savings GOAL artwork reused elsewhere in the app',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String accountId = await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Nest egg',
+          type: 'savings',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.savings,
+          currencyCode: 'USD',
+          openingBalance: Money.fromMinorUnits(5000, 'USD'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        expect(tester.takeException(), isNull);
+        final Image image = tester.widget<Image>(
+          find.descendant(
+            of: find.byKey(const Key('accountTypeIconTile')),
+            matching: find.byType(Image),
+          ),
+        );
+        expect((image.image as AssetImage).assetName, 'assets/icons/accounts/savings_account.png');
+      },
+    );
+
+    testWidgets(
+      'a fixed deposit account (composite-seeded via DepositRepository.createDetails) renders '
+      'assets/icons/accounts/deposit.png in the identity header',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final DepositRepository depositRepo = DepositRepository(db, accountRepo);
+        final String accountId = await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Fixed Deposit',
+          type: 'deposit',
+          balanceClass: BalanceClass.asset,
+          subtype: FinancialAccountSubtype.deposit,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(100000, 'JPY'),
+        );
+        await depositRepo.createDetails(
+          profileId: profileId,
+          accountId: accountId,
+          depositType: DepositType.fixed,
+          termNumber: 12,
+          termUnit: DepositTermUnit.months,
+          startDateUtc: DateTime.utc(2026, 1, 1),
+          interestRateBasisPoints: 250,
+          interestMethod: DepositInterestMethod.simple,
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        expect(tester.takeException(), isNull);
+        final Image image = tester.widget<Image>(
+          find.descendant(
+            of: find.byKey(const Key('accountTypeIconTile')),
+            matching: find.byType(Image),
+          ),
+        );
+        expect((image.image as AssetImage).assetName, 'assets/icons/accounts/deposit.png');
+      },
+    );
+
+    testWidgets(
+      'a credit card account (composite-seeded via CreditFacilityRepository.createFacility) '
+      'renders assets/icons/accounts/credit_card.png in the identity header',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final CreditFacilityRepository facilityRepo = CreditFacilityRepository(db, accountRepo);
+        final String accountId = await accountRepo.createClassifiedAccount(
+          profileId: profileId,
+          name: 'Test Card',
+          type: 'creditCard',
+          balanceClass: BalanceClass.liability,
+          subtype: FinancialAccountSubtype.creditCard,
+          currencyCode: 'JPY',
+          openingBalance: Money.fromMinorUnits(800000, 'JPY'),
+        );
+        await facilityRepo.createFacility(
+          profileId: profileId,
+          accountId: accountId,
+          creditLimit: Money.fromMinorUnits(5000000, 'JPY'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        expect(tester.takeException(), isNull);
+        final Image image = tester.widget<Image>(
+          find.descendant(
+            of: find.byKey(const Key('accountTypeIconTile')),
+            matching: find.byType(Image),
+          ),
+        );
+        expect((image.image as AssetImage).assetName, 'assets/icons/accounts/credit_card.png');
+      },
+    );
+
+    testWidgets(
+      'an unrecognized legacy type (never produced by any current UI flow) still falls back '
+      'safely to the plain Material glyph in the identity header -- no exception, no blank/'
+      'broken Image',
+      (tester) async {
+        final (AppDatabase db, String profileId) = await seededDb();
+        final AccountRepository accountRepo = AccountRepository(db);
+        final String accountId = await accountRepo.createAccount(
+          profileId: profileId,
+          name: 'Mystery Account',
+          type: 'checking',
+          currencyCode: 'USD',
+          openingBalance: Money.fromMinorUnits(0, 'USD'),
+        );
+        final ProviderContainer container =
+            ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+
+        await tester.pumpWidget(appWithRouter(container, accountId));
+        await openDetail(tester);
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('accountTypeIconTile')),
+            matching: find.byType(Image),
+          ),
+          findsNothing,
+        );
+      },
+    );
+  });
 }

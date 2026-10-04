@@ -29,6 +29,8 @@ class AppProgressBar extends StatelessWidget {
     super.key,
     this.minHeight = 8,
     this.semanticLabel,
+    this.gradient,
+    this.trackKey,
   });
 
   /// Already clamped to `[0.0, 1.0]` by the caller -- this widget performs
@@ -54,17 +56,86 @@ class AppProgressBar extends StatelessWidget {
   /// adjacent text.
   final String? semanticLabel;
 
+  /// Dashboard progress-bar gradient refinement: an optional premium
+  /// fill gradient (e.g. [AppSemanticColors.positiveGradient]/
+  /// [AppSemanticColors.negativeGradient]), painted over the fill
+  /// instead of flat [color] when supplied. `null` (the default)
+  /// preserves every pre-existing call site's exact current appearance
+  /// -- unchanged, since this field simply doesn't exist for them. Not
+  /// a replacement for [color]: [color] still backs the underlying
+  /// [LinearProgressIndicator] this widget renders either way, so a
+  /// theme with no matching gradient token (Pink/Ocean/Forest -- see
+  /// `app_theme.dart`) falls back to the exact same flat-color bar a
+  /// caller already gets today, just by passing `null` here.
+  final Gradient? gradient;
+
+  /// Final card-dimension pass: an optional [Key] applied to the
+  /// OUTER, full-width track container (the [ClipRRect] this widget
+  /// always returns, in both the flat-[color] and [gradient]
+  /// branches) -- added specifically so a regression test can measure
+  /// the real track/container unambiguously by key, instead of by
+  /// widget type or tree shape, which repeatedly proved unreliable for
+  /// telling the full-width track apart from the [gradient] branch's
+  /// own value-scaled fill. `null` (the default) preserves every
+  /// pre-existing call site's behavior exactly -- no key is ever
+  /// attached unless a caller opts in.
+  ///
+  /// There is deliberately no matching `fillKey`: the fractional-fill
+  /// fraction is this widget's own internal implementation detail,
+  /// covered by `app_progress_bar_test.dart`'s own focused component
+  /// test, not something a caller (Home included) needs to reach into
+  /// from the outside.
+  final Key? trackKey;
+
   @override
   Widget build(BuildContext context) {
     final AppTokens tokens = context.appTokens;
+    final Gradient? fillGradient = gradient;
+    if (fillGradient == null) {
+      return ClipRRect(
+        key: trackKey,
+        borderRadius: BorderRadius.circular(minHeight),
+        child: LinearProgressIndicator(
+          value: value,
+          minHeight: minHeight,
+          backgroundColor: tokens.colors.elevatedSurface,
+          color: color,
+          semanticsLabel: semanticLabel,
+        ),
+      );
+    }
+    // Gradient path: `LinearProgressIndicator.color` can only ever paint
+    // a flat color, never a `Gradient` -- so the indicator itself stays
+    // mounted with `color: Colors.transparent` purely to keep its exact
+    // existing `Semantics`/`value` contract (screen readers announce the
+    // same percentage either way), while a `FractionallySizedBox`
+    // painted on top supplies the actual gradient-filled visual, sized
+    // to the SAME [value] fraction. The neutral track is unchanged --
+    // still `tokens.colors.elevatedSurface`, painted by the (still very
+    // much real, just invisibly-filled) `LinearProgressIndicator` below.
     return ClipRRect(
+      key: trackKey,
       borderRadius: BorderRadius.circular(minHeight),
-      child: LinearProgressIndicator(
-        value: value,
-        minHeight: minHeight,
-        backgroundColor: tokens.colors.elevatedSurface,
-        color: color,
-        semanticsLabel: semanticLabel,
+      child: SizedBox(
+        height: minHeight,
+        child: Stack(
+          children: <Widget>[
+            LinearProgressIndicator(
+              value: value,
+              minHeight: minHeight,
+              backgroundColor: tokens.colors.elevatedSurface,
+              color: Colors.transparent,
+              semanticsLabel: semanticLabel,
+            ),
+            Positioned.fill(
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: value,
+                child: DecoratedBox(decoration: BoxDecoration(gradient: fillGradient)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

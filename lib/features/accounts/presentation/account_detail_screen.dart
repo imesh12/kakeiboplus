@@ -27,6 +27,7 @@ import '../../categories/presentation/category_providers.dart';
 import 'credit_facility_presentation.dart';
 import '../../categories/domain/category_icon.dart';
 import '../../transactions/presentation/transaction_providers.dart';
+import 'account_icon_asset.dart';
 import 'account_providers.dart';
 import 'account_type_presentation.dart';
 
@@ -265,7 +266,13 @@ class _AccountDetailBody extends ConsumerWidget {
         Row(
           children: <Widget>[
             AppIconTile(
+              key: const Key('accountTypeIconTile'),
               icon: accountTypeIcon(account.type),
+              // Accounts Icon Pack Full Integration checkpoint: the
+              // centralized resolver already walks account-specific ->
+              // public -> null (render the Material glyph above
+              // unchanged) -- see `account_icon_asset.dart`'s own doc.
+              assetPath: accountIconAssetFor(account.type),
               color: colors.primary,
               size: AppIconTileSize.large,
             ),

@@ -170,6 +170,63 @@ void main() {
     expect(card.shadowColor, colors.shadow.withValues(alpha: 0.16));
   });
 
+  testWidgets(
+    'Checkpoint U3: an explicit gradient paints instead of color, via a Container/DecoratedBox '
+    'rather than a Card (so the flat Card.color path is never used for it)',
+    (tester) async {
+      const Gradient gradient = LinearGradient(
+        colors: <Color>[Color(0xFF0F9E9A), Color(0xFF19B7A5)],
+      );
+      await tester.pumpWidget(
+        buildApp(const AppCard(color: Colors.purple, gradient: gradient, child: Text('content'))),
+      );
+
+      // The gradient branch renders no Card at all -- color (even
+      // though explicitly passed here) is documented as ignored
+      // whenever gradient is non-null.
+      expect(find.byType(Card), findsNothing);
+
+      final Container container = tester.widget<Container>(
+        find.ancestor(of: find.text('content'), matching: find.byType(Container)).first,
+      );
+      final BoxDecoration decoration = container.decoration! as BoxDecoration;
+      expect(decoration.gradient, gradient);
+    },
+  );
+
+  testWidgets(
+    'Checkpoint U3: a gradient AppCard still clips to its rounded shape and still wraps an '
+    'onTap in a working InkWell',
+    (tester) async {
+      const Gradient gradient = LinearGradient(
+        colors: <Color>[Color(0xFF0F9E9A), Color(0xFF19B7A5)],
+      );
+      bool tapped = false;
+      await tester.pumpWidget(
+        buildApp(
+          AppCard(
+            gradient: gradient,
+            radius: 24,
+            onTap: () => tapped = true,
+            child: const Text('content'),
+          ),
+        ),
+      );
+
+      final Container container = tester.widget<Container>(
+        find.ancestor(of: find.text('content'), matching: find.byType(Container)).first,
+      );
+      expect(container.clipBehavior, Clip.antiAlias);
+      final BoxDecoration decoration = container.decoration! as BoxDecoration;
+      final BorderRadius radius = decoration.borderRadius! as BorderRadius;
+      expect(radius, BorderRadius.circular(24));
+
+      await tester.tap(find.text('content'));
+      await tester.pumpAndSettle();
+      expect(tapped, isTrue);
+    },
+  );
+
   testWidgets('renders without exceptions at a narrow 320px width', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);

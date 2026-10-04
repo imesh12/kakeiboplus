@@ -349,6 +349,25 @@ class RecurringRuleRepository {
     return query.watch().map((rows) => rows.map(_withUtcDateTimes).toList());
   }
 
+  /// Every rule for [profileId], reactively -- active AND soft-deleted
+  /// alike. Recurring History Final Corrections checkpoint: the
+  /// all-services year history (Case 1 of the Recurring History Views
+  /// checkpoint) must keep showing a soft-deleted rule's own already-
+  /// handled occurrences, which [watchActiveRules] alone can never
+  /// supply (it deliberately excludes deleted rules, correctly, for
+  /// every ACTIVE/upcoming-facing provider -- that is unchanged here).
+  /// Read-only: never used to populate anything a user can act on
+  /// (post/skip/edit), only to resolve a handled occurrence's own
+  /// historical display metadata (name/service/category/account),
+  /// which [RecurringRuleRepository.softDelete]'s own doc comment
+  /// already guarantees stays untouched on the row itself.
+  Stream<List<RecurringRuleRow>> watchAllRules(String profileId) {
+    final query = _db.select(_db.recurringRules)
+      ..where((tbl) => tbl.profileId.equals(profileId))
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.createdAt)]);
+    return query.watch().map((rows) => rows.map(_withUtcDateTimes).toList());
+  }
+
   /// The rule with id [id], reactively -- `null` if it doesn't exist OR
   /// has been soft-deleted.
   Stream<RecurringRuleRow?> watchById(String id) {

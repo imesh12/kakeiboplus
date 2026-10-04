@@ -552,7 +552,28 @@ class _TransactionRow extends StatelessWidget {
   /// The fixed size of [TransactionIconBadge] -- reproduced here (not
   /// imported from it) only because the layout decision below needs to
   /// know it in advance, before that widget is laid out.
-  static const double _leadingWidth = 40;
+  ///
+  /// UI/Icon Polish checkpoint: bumped from [AppIconTileSize.medium]'s
+  /// default 40 to [_leadingIconContainerSize] (44) -- the exact same
+  /// "between medium and large" override Home's own Upcoming row
+  /// already established for this identical widget (see
+  /// `TransactionIconBadge.containerSize`'s own doc comment), reused
+  /// here rather than inventing a new number, so a curated category PNG
+  /// (rendered at [AppIconTile]'s own fixed 32x32 regardless of
+  /// container) reads as clearly visible without the surrounding slot
+  /// crowding the row.
+  static const double _leadingWidth = _leadingIconContainerSize;
+
+  /// See [_leadingWidth]'s own doc comment -- matches
+  /// `home_screen.dart`'s `_UpcomingSection.iconContainerSize`.
+  static const double _leadingIconContainerSize = 44;
+
+  /// The Material-glyph-only fallback size paired with
+  /// [_leadingIconContainerSize] -- matches `home_screen.dart`'s
+  /// `_UpcomingSection.iconGlyphSize`. Never affects a curated category
+  /// PNG, which `AppIconTile`'s own `assetPath` branch always renders
+  /// at a fixed 32x32 independent of this value.
+  static const double _leadingIconGlyphSize = 24;
 
   /// Matches [ListTile]'s own default `horizontalTitleGap` -- the gap
   /// this row reproduces between the leading icon and the description
@@ -669,6 +690,8 @@ class _TransactionRow extends StatelessWidget {
         color: amountColor,
         categoryIconName: isTransfer ? null : category?.icon,
         serviceIdentityKey: isTransfer ? null : tx.serviceIdentityKey,
+        containerSize: _leadingIconContainerSize,
+        glyphSize: _leadingIconGlyphSize,
       ),
     );
 
@@ -721,10 +744,52 @@ class _TransactionRow extends StatelessWidget {
     // surrounding LayoutBuilder decision below (not this widget) that
     // guarantees there is always enough width for it to render at its
     // natural size.
+    // UI/Icon Polish checkpoint: a premium gradient fill for the
+    // Income/Expense amount text, reusing the exact same
+    // `AppSemanticColors.positiveGradient`/`negativeGradient` tokens and
+    // `LinearGradient(begin: topLeft, end: bottomRight, colors: stops)`
+    // construction `home_screen.dart`'s own `_dashboardProgressGradient`
+    // already establishes for the Dashboard budget/goal progress bars --
+    // no new gradient definition, just the same recipe applied to text.
+    // Deliberately gated OUT for a transfer (no Income-green/Expense-red
+    // applied there -- transfers stay on their existing neutral
+    // `colorScheme.onSurfaceVariant` amountColor, per this checkpoint's
+    // explicit instruction not to invent a transfer gradient semantic).
+    // A theme with no matching gradient token (Pink/Ocean/Forest -- see
+    // `app_theme.dart`) safely falls back to the flat `amountColor` text
+    // already used before this checkpoint, exactly like
+    // `AppProgressBar.gradient`'s own null-falls-back-to-flat contract.
+    final List<Color>? amountGradientStops = switch (tx.type) {
+      'income' => context.appTokens.colors.positiveGradient,
+      'transfer' => null,
+      _ => context.appTokens.colors.negativeGradient,
+    };
+    final Widget amountTextContent = Text(
+      amountString,
+      maxLines: 1,
+      softWrap: false,
+      style: amountStyle,
+    );
+    // `ShaderMask` + `BlendMode.srcIn` paints the gradient using the
+    // text's own rendered alpha as a mask -- the `Text` above still
+    // measures/lays out identically (this never changes its size), and
+    // `amountStyle`'s own opaque `color` is what supplies that alpha
+    // mask; the gradient's colors are what's actually painted, not
+    // `amountStyle.color`. No shadow, no glow -- just the fill color.
     final Widget amountText = Semantics(
       label: spokenAmount,
       excludeSemantics: true,
-      child: Text(amountString, maxLines: 1, softWrap: false, style: amountStyle),
+      child: amountGradientStops == null
+          ? amountTextContent
+          : ShaderMask(
+              blendMode: BlendMode.srcIn,
+              shaderCallback: (Rect bounds) => LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: amountGradientStops,
+              ).createShader(bounds),
+              child: amountTextContent,
+            ),
     );
 
     // Visual System Convergence Checkpoint 7.3: the raw `Card` +

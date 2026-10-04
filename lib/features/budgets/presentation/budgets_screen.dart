@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -11,6 +12,9 @@ import '../../../core/money/money.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../../shared/theme/app_typography.dart';
+import '../../../shared/theme/app_tokens.dart';
+import '../../../shared/widgets/app_swipe_action_row.dart';
+import '../../../shared/widgets/app_circular_progress.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_icon_tile.dart';
 import '../../../shared/widgets/app_money_text.dart';
@@ -41,109 +45,107 @@ const MoneyFormatter _formatter = MoneyFormatter();
 /// (the separate, always-"now" month the Home dashboard's budget card
 /// reads -- see that provider's own doc comment) and is never touched
 /// by it either.
-class BudgetsScreen extends ConsumerWidget {
+class BudgetsScreen extends ConsumerStatefulWidget {
   const BudgetsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final AsyncValue<List<BudgetRow>> budgetsAsync = ref.watch(budgetsForSelectedMonthProvider);
-    final AsyncValue<List<BudgetMonthSummary>> summariesAsync = ref.watch(budgetMonthSummariesProvider);
-    final BudgetMonth month = ref.watch(selectedBudgetMonthProvider);
+  ConsumerState<BudgetsScreen> createState() => _BudgetsScreenState();
+}
 
-    return Scaffold(
-      // The "YYYY-MM" month key itself is left exactly as
-      // `BudgetMonth.toKey()` already produces it -- see that method's
-      // doc comment; only the surrounding "Budgets ·" word is
-      // localized text. Tracks the *selected* month (not necessarily
-      // "now") so the title never disagrees with the month the body
-      // below is actually showing.
-      appBar: AppBar(title: Text(l10n.budgetsScreenTitle(month.toKey()))),
-      body: Column(
-        children: <Widget>[
-          // Checkpoint Q Section C: month navigation stays visible
-          // regardless of loading/empty/error state below -- a month
-          // with nothing in it is still a month the user can navigate
-          // away from (Section L).
-          _MonthNavigator(month: month),
-          const Divider(height: 1),
-          Expanded(
-            child: budgetsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (Object e, StackTrace st) =>
-                  Center(child: Text(l10n.couldNotLoadBudgets(e.toString()))),
-              data: (List<BudgetRow> budgets) {
-                final List<BudgetRow> overall =
-                    budgets.where((BudgetRow b) => b.categoryId == null).toList();
-                final List<BudgetRow> category =
-                    budgets.where((BudgetRow b) => b.categoryId != null).toList();
+class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
+  String? _openBudgetId;
 
-                // Flattened budgetId -> CategoryBudgetProgress lookup so
-                // each `_CategoryBudgetTile` can show its own spend/
-                // remaining/percentage/progress bar without every tile
-                // re-deriving the same arithmetic independently (Section
-                // M). `summariesAsync` not yet settled (or errored) simply
-                // means no progress numbers are shown yet -- the budget
-                // list itself (from `budgetsAsync`, already settled here)
-                // is never blocked on it.
-                final Map<String, CategoryBudgetProgress> progressByBudgetId =
-                    <String, CategoryBudgetProgress>{};
-                for (final BudgetMonthSummary summary in summariesAsync.valueOrNull ?? const <BudgetMonthSummary>[]) {
-                  for (final CategoryBudgetProgress p in summary.categoryProgress) {
-                    progressByBudgetId[p.budgetId] = p;
-                  }
-                }
-
-                if (budgets.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        l10n.noBudgetsSetThisMonthMessage,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-
-                return ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: <Widget>[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: AppSectionHeader(title: l10n.monthSummarySectionTitle, eyebrow: true),
-                    ),
-                    _MonthSummarySection(summariesAsync: summariesAsync),
-                    if (overall.isNotEmpty) ...<Widget>[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: AppSectionHeader(title: l10n.overallBudgetsSectionTitle, eyebrow: true),
-                      ),
-                      for (final BudgetRow row in overall) _OverallBudgetTile(row: row),
-                    ],
-                    if (category.isNotEmpty) ...<Widget>[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: AppSectionHeader(title: l10n.categoryBudgetsSectionTitle, eyebrow: true),
-                      ),
-                      for (final BudgetRow row in category)
-                        _CategoryBudgetTile(row: row, progress: progressByBudgetId[row.id]),
-                    ],
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        key: const Key('addBudgetFab'),
-        onPressed: () => _showAddBudgetSheet(context),
-        child: const Icon(Icons.add),
-      ),
-    );
+  void _closeRow() {
+    if (_openBudgetId != null) setState(() => _openBudgetId = null);
   }
 
+  Future<void> _confirmDelete(BudgetRow row) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: Text(l10n.deleteBudgetConfirmTitle),
+      content: Text(l10n.deleteBudgetConfirmMessage),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.cancel)),
+        FilledButton(key: const Key('confirmDeleteBudget'),
+          onPressed: () => Navigator.pop(context, true), child: Text(l10n.removeTooltip)),
+      ],
+    ));
+    if (confirmed == true && mounted) {
+      await ref.read(budgetRepositoryProvider).softDelete(row.id);
+    }
+  }
+
+  Widget _managedRow(BudgetRow row, Widget child) {
+    final l10n = AppLocalizations.of(context);
+    void edit() => showDialog<void>(context: context, builder: (_) => row.categoryId == null
+        ? _OverallBudgetDialog(existing: row) : _CategoryBudgetDialog(existing: row));
+    void remove() => unawaited(_confirmDelete(row));
+    return KeyedSubtree(key: ValueKey(row.id), child: AppSwipeActionRow(
+      isOpen: _openBudgetId == row.id,
+      onOpenRequested: () => setState(() => _openBudgetId = row.id),
+      onCloseRequested: _closeRow,
+      onInteractionStart: () { if (_openBudgetId != row.id) _closeRow(); },
+      onEdit: edit, onDelete: remove,
+      editLabel: l10n.editTooltip, deleteLabel: l10n.removeTooltip,
+      editActionKey: Key(row.categoryId == null ? 'editOverallBudget_${row.currencyCode}' : 'editCategoryBudget_${row.id}'),
+      deleteActionKey: Key(row.categoryId == null ? 'deleteOverallBudget_${row.currencyCode}' : 'deleteCategoryBudget_${row.id}'),
+      margin: const EdgeInsets.fromLTRB(12, 3, 12, 3),
+      child: Semantics(key: Key('budgetActions_${row.id}'), container: true,
+        customSemanticsActions: {
+          CustomSemanticsAction(label: l10n.editTooltip): edit,
+          CustomSemanticsAction(label: l10n.removeTooltip): remove,
+        }, child: child),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final budgetsAsync = ref.watch(budgetsForSelectedMonthProvider);
+    final summariesAsync = ref.watch(budgetMonthSummariesProvider);
+    final month = ref.watch(selectedBudgetMonthProvider);
+    ref.listen(selectedBudgetMonthProvider, (_, next) => _closeRow());
+    Widget stateBody(Widget child) => Column(children: [
+      _MonthNavigator(month: month), Expanded(child: Center(child: child)),
+    ]);
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.budgetsTitle)),
+      body: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _closeRow,
+        child: budgetsAsync.when(
+          loading: () => stateBody(const CircularProgressIndicator()),
+          error: (e, st) => stateBody(Text(l10n.couldNotLoadBudgets(e.toString()))),
+          data: (budgets) {
+            if (budgets.isEmpty) { return stateBody(Padding(padding: const EdgeInsets.all(24),
+              child: Text(l10n.noBudgetsSetThisMonthMessage, textAlign: TextAlign.center))); }
+            final overall = budgets.where((b) => b.categoryId == null);
+            final category = budgets.where((b) => b.categoryId != null);
+            final progress = <String, CategoryBudgetProgress>{
+              for (final summary in summariesAsync.valueOrNull ?? <BudgetMonthSummary>[])
+                for (final item in summary.categoryProgress) item.budgetId: item,
+            };
+            return ListView(padding: const EdgeInsets.only(top: 8, bottom: 88), children: [
+              AppCard(bordered: true, softShadow: true, margin: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.all(12), child: Column(children: [
+                  _MonthNavigator(month: month), const Divider(height: 1),
+                  _MonthSummarySection(summariesAsync: summariesAsync),
+                ])),
+              if (overall.isNotEmpty) ...[
+                Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+                  child: AppSectionHeader(title: l10n.overallBudgetsSectionTitle)),
+                for (final row in overall) _managedRow(row, _OverallBudgetTile(row: row)),
+              ],
+              if (category.isNotEmpty) ...[
+                Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+                  child: AppSectionHeader(title: l10n.categoryBudgetsSectionTitle)),
+                for (final row in category) _managedRow(row, _CategoryBudgetTile(row: row, progress: progress[row.id])),
+              ],
+            ]);
+          },
+        )),
+      floatingActionButton: FloatingActionButton(key: const Key('addBudgetFab'),
+        onPressed: () => _showAddBudgetSheet(context), child: const Icon(Icons.add)),
+    );
+  }
   Future<void> _showAddBudgetSheet(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return showModalBottomSheet<void>(
@@ -289,357 +291,134 @@ class _MonthSummarySection extends StatelessWidget {
 
 class _MonthSummaryCard extends StatelessWidget {
   const _MonthSummaryCard({required this.summary});
-
   final BudgetMonthSummary summary;
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final bool overBudget = summary.isOverBudget;
-    // Checkpoint Q Section F: text is always the true, uncapped ratio
-    // (e.g. "125% used" for a 1.25 ratio); only the progress bar's fill
-    // fraction clamps to 1.0, because `LinearProgressIndicator` cannot
-    // render past full. Section G: overspending is represented in words
-    // ("¥2,500 over budget"), never a misleadingly-normal positive
-    // "remaining" figure -- so the state is legible without relying on
-    // color alone.
-    final int percentUsed = (summary.usedRatio * 100).round();
-    final Color barColor = overBudget ? colors.error : colors.primary;
-
-    return AppCard(
-      key: Key('monthSummaryCard_${summary.currencyCode}'),
-      bordered: true,
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              Text(summary.currencyCode, style: context.appTypography.cardTitle),
-              Flexible(
-                child: Text(
-                  l10n.percentUsedLabel('$percentUsed'),
-                  key: Key('monthSummaryPercentUsed_${summary.currencyCode}'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: context.appTypography.secondaryBody?.copyWith(
-                    color: overBudget ? colors.error : colors.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _StatRow(
-            label: l10n.totalBudgetLabel,
-            value: _formatter.format(summary.totalBudget),
-            valueKey: Key('monthSummaryTotalBudget_${summary.currencyCode}'),
-          ),
-          _StatRow(
-            label: l10n.spentLabel,
-            value: _formatter.format(summary.spent),
-            valueKey: Key('monthSummarySpent_${summary.currencyCode}'),
-          ),
-          _StatRow(
-            label: overBudget ? null : l10n.remainingLabel,
-            value: overBudget
-                ? l10n.overBudgetByAmountLabel(_formatter.format(summary.remaining.abs()))
-                : _formatter.format(summary.remaining),
-            valueKey: Key('monthSummaryRemaining_${summary.currencyCode}'),
-            valueColor: overBudget ? colors.error : null,
-          ),
-          const SizedBox(height: 10),
-          AppProgressBar(
-            value: summary.usedRatio.clamp(0.0, 1.0),
-            color: barColor,
-            semanticLabel: l10n.percentUsedLabel('$percentUsed'),
-          ),
-        ],
-      ),
+    final l10n = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final tokens = context.appTokens;
+    // Zero is not persisted by the repository. Keep a defensive display guard.
+    final ratio = summary.totalBudget.minorUnits > 0 ? summary.usedRatio : 0.0;
+    final percent = (ratio * 100).round();
+    final over = summary.isOverBudget;
+    final gradient = over ? tokens.colors.negativeGradient : tokens.colors.positiveGradient;
+    Widget stat(String label, String value, String key, {Color? color}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: context.appTypography.caption?.copyWith(fontWeight: FontWeight.w600)),
+        Text(value, key: Key(key), style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700, color: color)),
+      ]),
+    );
+    final values = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(summary.currencyCode, style: context.appTypography.caption),
+      stat(l10n.totalBudgetLabel, _formatter.format(summary.totalBudget), 'monthSummaryTotalBudget_${summary.currencyCode}'),
+      stat(l10n.spentLabel, _formatter.format(summary.spent), 'monthSummarySpent_${summary.currencyCode}',
+        color: over ? colors.error : null),
+      stat(l10n.remainingLabel, over
+        ? l10n.overBudgetByAmountLabel(_formatter.format(summary.remaining.abs()))
+        : _formatter.format(summary.remaining), 'monthSummaryRemaining_${summary.currencyCode}',
+        color: over ? colors.error : tokens.colors.positive),
+    ]);
+    final ring = AppCircularProgress(value: ratio,
+      gradientColors: gradient ?? [over ? colors.error : colors.primary, over ? colors.error : colors.primary],
+      semanticLabel: l10n.percentUsedLabel('$percent'),
+      child: Text('$percent%', key: Key('monthSummaryPercentUsed_${summary.currencyCode}'),
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700,
+          color: over ? colors.error : colors.onSurface)),
+    );
+    return Padding(key: Key('monthSummaryCard_${summary.currencyCode}'),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: LayoutBuilder(builder: (context, constraints) {
+        if (constraints.maxWidth < 300 && MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Center(child: ring), const SizedBox(height: 12), values]);
+        }
+        return Row(children: [ring, const SizedBox(width: 20), Expanded(child: values)]);
+      }),
     );
   }
 }
 
-/// A compact label/value pair, narrow-width-safe: [label] and [value]
-/// each get a flexible share of the row so a longer translation or a
-/// large formatted amount wraps/ellipsizes instead of overflowing --
-/// same convention `_DetailRow` already establishes on
-/// `goal_detail_screen.dart` for the same kind of row. [label] is
-/// omitted entirely (only [value] renders, full-width) when the caller
-/// has already folded the label into [value] itself -- see the
-/// over-budget case on [_MonthSummaryCard] and [_CategoryBudgetTile],
-/// where `l10n.overBudgetByAmountLabel(...)` already reads as a full
-/// sentence fragment.
-class _StatRow extends StatelessWidget {
-  const _StatRow({required this.value, this.label, this.valueKey, this.valueColor});
-
-  final String? label;
-  final String value;
-  final Key? valueKey;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextStyle? valueStyle = context.appTypography.secondaryBody?.copyWith(
-      fontWeight: FontWeight.w600,
-      color: valueColor,
-    );
-    if (label == null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Text(value, key: valueKey, style: valueStyle),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: <Widget>[
-          Flexible(child: Text(label!, style: context.appTypography.secondaryBody)),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(value, key: valueKey, style: valueStyle, textAlign: TextAlign.right),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OverallBudgetTile extends ConsumerWidget {
+class _OverallBudgetTile extends StatelessWidget {
   const _OverallBudgetTile({required this.row});
   final BudgetRow row;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final Money amount = Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode);
-    return AppCard(
-      bordered: true,
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      padding: EdgeInsets.zero,
-      child: ListTile(
-        key: Key('overallBudgetTile_${row.currencyCode}'),
-        leading: const Icon(Icons.savings_outlined),
-        title: Text(row.currencyCode),
-        subtitle: AppMoneyText(_formatter.format(amount), emphasis: AppMoneyEmphasis.secondary),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            IconButton(
-              key: Key('editOverallBudget_${row.currencyCode}'),
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: l10n.editTooltip,
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => _OverallBudgetDialog(existing: row),
-              ),
-            ),
-            IconButton(
-              key: Key('deleteOverallBudget_${row.currencyCode}'),
-              icon: const Icon(Icons.delete_outline),
-              tooltip: l10n.removeTooltip,
-              onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget build(BuildContext context) {
+    return AppCard(bordered: true, padding: const EdgeInsets.all(12),
+      child: Row(key: Key('overallBudgetTile_${row.currencyCode}'), children: [
+        AppIconTile(assetPath: 'assets/icons/budgets/budget_main.png',
+          icon: Icons.savings_outlined, color: Theme.of(context).colorScheme.primary,
+          size: AppIconTileSize.large),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(row.currencyCode, style: context.appTypography.caption),
+          AppMoneyText(_formatter.format(Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode)),
+            emphasis: AppMoneyEmphasis.secondary),
+        ])),
+      ]));
   }
 }
 
 class _CategoryBudgetTile extends ConsumerWidget {
   const _CategoryBudgetTile({required this.row, this.progress});
   final BudgetRow row;
-
-  /// Checkpoint Q: this budget's evaluated spend/remaining/percentage
-  /// for the selected month, from [budgetMonthSummariesProvider] --
-  /// `null` only while that provider is still settling or has errored
-  /// (the row itself, from [budgetsForSelectedMonthProvider], is shown
-  /// either way; only the progress details are momentarily absent).
   final CategoryBudgetProgress? progress;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final Money amount = Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode);
-    final AsyncValue<CategoryRow> categoryAsync = ref.watch(categoryByIdProvider(row.categoryId!));
-    final CategoryBudgetProgress? progress = this.progress;
-
-    return AppCard(
-      bordered: true,
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      padding: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            ListTile(
-              key: Key('categoryBudgetTile_${row.categoryId}_${row.currencyCode}'),
-              // Checkpoint U1: was a fixed generic
-              // `Icons.category_outlined` for every category budget
-              // regardless of which category it tracked -- now the same
-              // `CategoryIdentityIcon` every other category surface
-              // renders through, so a budget tile visually matches its
-              // category everywhere else it appears. Falls back to the
-              // same pre-existing generic icon while [categoryAsync] is
-              // still loading/has errored -- this tile's title text
-              // already has its own loading/error fallback right below,
-              // so the icon simply mirrors that rather than blocking on
-              // it.
-              leading: categoryAsync.when(
-                data: (CategoryRow c) => CategoryIdentityIcon(
-                  categoryId: c.id,
-                  iconKey: c.icon,
-                  colorKey: c.colorKey,
-                  size: AppIconTileSize.small,
-                ),
-                loading: () => const Icon(Icons.category_outlined),
-                error: (Object e, StackTrace st) => const Icon(Icons.category_outlined),
-              ),
-              title: Text(
-                // `CategoryRow.name` is persisted content (a system category's
-                // seeded English name, or a profile's own custom category) --
-                // CP6.6 leaves it untouched exactly like every other screen
-                // that already displays it (e.g. Activity). The loading
-                // ellipsis and the categoryId fallback on error are not
-                // translatable copy either -- a placeholder glyph and a raw
-                // identifier, respectively.
-                categoryAsync.when(
-                  data: (CategoryRow c) => c.name,
-                  loading: () => '…',
-                  error: (Object e, StackTrace st) => row.categoryId!,
-                ),
-                style: context.appTypography.cardTitle,
-                // CP7.9: a long custom category name would otherwise wrap next
-                // to the trailing edit/delete icons -- ellipsize instead,
-                // matching how every other long, user-entered name (e.g. the
-                // account/category dropdown items) is already protected.
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                '${row.currencyCode} · ${_formatter.format(amount)}',
-                style: context.appTypography.secondaryBody?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  IconButton(
-                    key: Key('editCategoryBudget_${row.id}'),
-                    icon: const Icon(Icons.edit_outlined),
-                    tooltip: l10n.editTooltip,
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => _CategoryBudgetDialog(existing: row),
-                    ),
-                  ),
-                  IconButton(
-                    key: Key('deleteCategoryBudget_${row.id}'),
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: l10n.removeTooltip,
-                    onPressed: () => unawaited(ref.read(budgetRepositoryProvider).softDelete(row.id)),
-                  ),
-                ],
-              ),
-            ),
-            if (progress != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: _CategoryProgressDetails(progress: progress),
-              ),
+    final l10n = AppLocalizations.of(context);
+    final category = ref.watch(categoryByIdProvider(row.categoryId!));
+    final colors = Theme.of(context).colorScheme;
+    final tokens = context.appTokens;
+    final p = progress;
+    final over = p?.isOverBudget ?? false;
+    final percent = p == null ? null : (p.usedRatio * 100).round();
+    final amount = _formatter.format(Money.fromMinorUnits(row.amountMinorUnits, row.currencyCode));
+    final gradient = over ? tokens.colors.negativeGradient : tokens.colors.positiveGradient;
+    final remaining = p == null ? null : (over
+      ? l10n.overBudgetByAmountLabel(_formatter.format(p.calculation.remaining.abs()))
+      : '${l10n.remainingLabel}: ${_formatter.format(p.calculation.remaining)}');
+    return AppCard(bordered: true, padding: const EdgeInsets.all(12), child: Row(
+      key: Key('categoryBudgetTile_${row.categoryId}_${row.currencyCode}'),
+      crossAxisAlignment: CrossAxisAlignment.start, children: [
+        category.when(data: (c) => CategoryIdentityIcon(categoryId: c.id,
+          iconKey: c.icon, colorKey: c.colorKey, size: AppIconTileSize.large),
+          loading: () => const Icon(Icons.category_outlined),
+          error: (e, st) => const Icon(Icons.category_outlined)),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Text(category.when(data: (c) => c.name, loading: () => '…',
+              error: (e, st) => row.categoryId!), style: context.appTypography.cardTitle)),
+            if (percent != null) ...[
+              const SizedBox(width: 8),
+              Text('$percent%', key: Key('categoryProgressPercentUsed_${row.id}'),
+                style: context.appTypography.caption?.copyWith(fontWeight: FontWeight.w600,
+                  color: over ? colors.error : colors.onSurfaceVariant)),
+            ],
+          ]),
+          const SizedBox(height: 3),
+          Text(p == null ? '${row.currencyCode} · $amount'
+            : '${_formatter.format(p.calculation.spent)} / $amount',
+            key: Key('categoryProgressSpentOfBudget_${row.id}'),
+            style: context.appTypography.secondaryBody),
+          if (p != null) ...[
+            const SizedBox(height: 8),
+            Semantics(key: Key('categoryProgressRemaining_${row.id}'), label: remaining,
+              child: AppProgressBar(value: p.usedRatio.clamp(0.0, 1.0), minHeight: 6,
+                color: over ? colors.error : colors.primary,
+                gradient: LinearGradient(colors: gradient ?? [over ? colors.error : colors.primary,
+                  over ? colors.error : colors.primary]),
+                semanticLabel: l10n.percentUsedLabel('$percent'))),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Checkpoint Q Section E/F/G: one category budget's spent/remaining/
-/// percentage-used and progress bar, appended below its existing
-/// `_CategoryBudgetTile` row rather than replacing any of that row's
-/// existing content (name/amount/edit/delete all stay exactly as they
-/// were).
-class _CategoryProgressDetails extends StatelessWidget {
-  const _CategoryProgressDetails({required this.progress});
-
-  final CategoryBudgetProgress progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final bool overBudget = progress.isOverBudget;
-    final int percentUsed = (progress.usedRatio * 100).round();
-    final Color barColor = overBudget ? colors.error : colors.primary;
-    final Money remaining = progress.calculation.remaining;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Flexible(
-              child: Text(
-                // Same "spent of budgeted" idiom the dashboard's overall
-                // budget card and the savings goal card already use
-                // (`_AdaptiveAmountLine`'s `secondaryText: l10n.ofAmount(...)`
-                // on `home_screen.dart`) -- e.g. "¥30,000 of ¥50,000".
-                '${_formatter.format(progress.calculation.spent)} '
-                '${l10n.ofAmount(_formatter.format(progress.calculation.budgeted))}',
-                key: Key('categoryProgressSpentOfBudget_${progress.budgetId}'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.appTypography.secondaryBody,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                l10n.percentUsedLabel('$percentUsed'),
-                key: Key('categoryProgressPercentUsed_${progress.budgetId}'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: context.appTypography.secondaryBody?.copyWith(
-                  color: overBudget ? colors.error : colors.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        AppProgressBar(
-          value: progress.usedRatio.clamp(0.0, 1.0),
-          color: barColor,
-          minHeight: 6,
-          semanticLabel: l10n.percentUsedLabel('$percentUsed'),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          overBudget
-              ? l10n.overBudgetByAmountLabel(_formatter.format(remaining.abs()))
-              : '${l10n.remainingLabel}: ${_formatter.format(remaining)}',
-          key: Key('categoryProgressRemaining_${progress.budgetId}'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: context.appTypography.secondaryBody?.copyWith(
-            color: overBudget ? colors.error : colors.onSurfaceVariant,
-          ),
-        ),
+        ])),
       ],
-    );
+    ));
   }
 }
-
 class _OverallBudgetDialog extends ConsumerStatefulWidget {
   const _OverallBudgetDialog({this.existing});
   final BudgetRow? existing;

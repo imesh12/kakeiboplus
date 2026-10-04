@@ -157,4 +157,27 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+  testWidgets('selected gradient stays opaque and contrasts with its label', (tester) async {
+    final theme = AppTheme.light();
+    final gradient = LinearGradient(colors: [theme.colorScheme.primary,
+      Color.lerp(theme.colorScheme.primary, theme.colorScheme.secondary, 0.35)!]);
+    await tester.pumpWidget(buildApp(AppSegmentedControl<String>(
+      options: options, selected: 'all', quietTrack: true,
+      selectedGradient: gradient, onChanged: (_) {},
+    )));
+    await tester.pumpAndSettle();
+    final label = find.text('All');
+    final pill = tester.widget<AnimatedContainer>(find.ancestor(
+      of: label, matching: find.byType(AnimatedContainer)));
+    final decoration = pill.decoration! as BoxDecoration;
+    expect(decoration.color, isNull); // No transparent paint suppressing the shader.
+    expect(decoration.gradient, gradient);
+    final foreground = tester.widget<Text>(label).style!.color!;
+    for (final background in gradient.colors) {
+      expect(background.a, 1);
+      final a = foreground.computeLuminance();
+      final b = background.computeLuminance();
+      expect(((a > b ? a : b) + 0.05) / ((a > b ? b : a) + 0.05), greaterThanOrEqualTo(4.5));
+    }
+  });
 }

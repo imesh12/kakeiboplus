@@ -69,6 +69,42 @@ void main() {
     expect(indicator.semanticsLabel, 'Food & Dining budget');
   });
 
+  testWidgets(
+    'Test-bug fix (round 3): when a gradient is supplied, the internal fill fraction '
+    'matches the real value -- a 0.30 value fills exactly 30% of the track, never '
+    'artificially widened or narrowed, and never coupled to the track\'s own pixel width',
+    (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          const AppProgressBar(
+            value: 0.3,
+            color: Colors.green,
+            gradient: LinearGradient(colors: <Color>[Colors.green, Colors.teal]),
+          ),
+        ),
+      );
+
+      // The gradient branch paints its fill via a `FractionallySizedBox`
+      // sized to `widthFactor: value` (see `AppProgressBar`'s own doc
+      // comment on its gradient path) -- there is exactly one in the
+      // tree for a single `AppProgressBar`, so `find.byType` is
+      // unambiguous here, unlike in a full screen with many widgets.
+      final FractionallySizedBox fill = tester.widget<FractionallySizedBox>(
+        find.byType(FractionallySizedBox),
+      );
+      expect(fill.widthFactor, 0.3);
+
+      // The underlying `LinearProgressIndicator` still carries the same
+      // real value too (kept transparent, purely for its `Semantics`
+      // contract -- see that same doc comment), so both halves of the
+      // gradient branch agree on the one real value.
+      final LinearProgressIndicator indicator = tester.widget<LinearProgressIndicator>(
+        find.byType(LinearProgressIndicator),
+      );
+      expect(indicator.value, 0.3);
+    },
+  );
+
   testWidgets('renders without exceptions under every theme', (tester) async {
     for (final ThemeData theme in <ThemeData>[
       AppTheme.light(),

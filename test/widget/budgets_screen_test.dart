@@ -1,3 +1,9 @@
+import 'package:flutter/semantics.dart';
+import 'package:ai_financial_coach/shared/theme/app_theme.dart';
+import 'package:ai_financial_coach/shared/widgets/app_progress_bar.dart';
+import 'package:ai_financial_coach/features/categories/presentation/category_identity_icon.dart';
+import 'package:ai_financial_coach/shared/widgets/app_swipe_action_row.dart';
+import 'package:ai_financial_coach/shared/widgets/app_circular_progress.dart';
 import 'package:ai_financial_coach/core/database/app_database.dart';
 import 'package:ai_financial_coach/core/database/providers.dart';
 import 'package:ai_financial_coach/core/database/repositories/account_repository.dart';
@@ -22,6 +28,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 // NOTE: exercises generated Drift code — see CLAUDE_FIRST_CODING_PROMPT.md.
 
+Future<void> tapBudgetAction(WidgetTester tester, Finder action, {bool delete = false}) async {
+  final row = find.ancestor(of: action, matching: find.byType(AppSwipeActionRow));
+  await tester.ensureVisible(row);
+  await tester.drag(row, Offset(delete ? -220 : 220, 0));
+  await tester.pumpAndSettle();
+  expect(action.hitTestable(), findsOneWidget);
+  await tester.tap(action);
+  await tester.pumpAndSettle();
+  if (delete) {
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirmDeleteBudget')));
+    await tester.pumpAndSettle();
+  }
+}
 void main() {
   /// Seeds a profile (and, when [withCategories] is true, the system
   /// category set -- mirroring `lib/app/app.dart`'s own bootstrap call
@@ -47,11 +67,12 @@ void main() {
     return (db, profileId);
   }
 
-  Widget appWithBudgets(ProviderContainer container, {Locale locale = const Locale('en')}) {
+  Widget appWithBudgets(ProviderContainer container, {Locale locale = const Locale('en'), ThemeData? theme}) {
     return UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
         locale: locale,
+        theme: theme,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: const BudgetsScreen(),
@@ -169,7 +190,7 @@ void main() {
 
     expect(find.text('¥100,000'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('editOverallBudget_JPY')));
+    await tapBudgetAction(tester, find.byKey(const Key('editOverallBudget_JPY')));
     await tester.pumpAndSettle();
     expect(find.text('Edit overall monthly budget'), findsOneWidget);
 
@@ -199,7 +220,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('overallBudgetTile_JPY')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('deleteOverallBudget_JPY')));
+    await tapBudgetAction(tester, find.byKey(const Key('deleteOverallBudget_JPY')), delete: true);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('overallBudgetTile_JPY')), findsNothing);
@@ -284,7 +305,7 @@ void main() {
     // 'spent of budgeted' and 'remaining' figures for a freshly-created,
     // zero-spend budget) -- a bare substring match would now find three
     // widgets, not one.
-    expect(find.text('JPY · ¥20,000'), findsOneWidget);
+    expect(find.textContaining('/ ¥20,000'), findsOneWidget);
   });
 
   testWidgets('the budgets screen lays out without overflow on a narrow (320px-wide) screen '
@@ -476,8 +497,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(find.textContaining('予算 ·'), findsOneWidget); // AppBar (budgetsScreenTitle)
-        expect(find.text('全体予算'), findsOneWidget); // overallBudgetsSectionTitle
+        expect(find.text('予算'), findsOneWidget); // AppBar (budgetsScreenTitle)
+        expect(find.text('月間の全体予算'), findsOneWidget); // overallBudgetsSectionTitle
         expect(find.text('JPY'), findsOneWidget); // currency code -- never translated
         expect(find.text('¥120,000'), findsOneWidget);
       },
@@ -635,7 +656,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(find.text('全体予算'), findsOneWidget);
+        expect(find.text('月間の全体予算'), findsOneWidget);
         expect(find.text('カテゴリ予算'), findsOneWidget);
       },
     );
@@ -667,8 +688,10 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(find.text('全体予算'), findsOneWidget);
+        expect(find.text('月間の全体予算'), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('カテゴリ予算'), 120);
         expect(find.text('カテゴリ予算'), findsOneWidget);
+        expect(tester.takeException(), isNull);
       },
     );
 
@@ -714,7 +737,7 @@ void main() {
         // progress details also render 'K9,999,999.99' (as both the
         // 'spent of budgeted' and 'remaining' figures), so an unscoped
         // substring match would now find three widgets, not one.
-        expect(find.text('MMK · K9,999,999.99'), findsOneWidget);
+        expect(find.textContaining('/ K9,999,999.99'), findsOneWidget);
         expect(find.byKey(Key('editCategoryBudget_$budgetId')), findsOneWidget);
         expect(find.byKey(Key('deleteCategoryBudget_$budgetId')), findsOneWidget);
       },
@@ -781,7 +804,7 @@ void main() {
       await tester.pumpWidget(appWithBudgets(container));
       await tester.pumpAndSettle();
 
-      expect(find.text('Overall budgets'), findsOneWidget); // overallBudgetsSectionTitle unchanged
+      expect(find.text('Overall Monthly Budgets'), findsOneWidget); // overallBudgetsSectionTitle unchanged
 
       final Finder tileKey = find.byKey(const Key('overallBudgetTile_JPY'));
       final Card cardWidget = tester.widget<Card>(
@@ -880,7 +903,7 @@ void main() {
 
       container.read(selectedBudgetMonthProvider.notifier).state = BudgetMonth(year: 2026, month: 8);
       await tester.pumpAndSettle();
-      expect(find.text('Budgets · 2026-08'), findsOneWidget);
+      expect(find.text('Budgets'), findsOneWidget);
     });
 
     testWidgets('previous/next controls have localized accessibility tooltips, not icon-only',
@@ -1009,11 +1032,11 @@ void main() {
       // collides with August's unrelated budget amount, not a leak.
       final Finder diningTile = find.byKey(const Key('categoryBudgetTile_sys-dining_JPY'));
       expect(
-        find.descendant(of: diningTile, matching: find.text('JPY · ¥10,000')),
+        find.descendant(of: diningTile, matching: find.textContaining('/ ¥10,000')),
         findsOneWidget,
       ); // August's category budget amount, scoped to its own tile
       expect(
-        find.descendant(of: diningTile, matching: find.text('JPY · ¥40,000')),
+        find.descendant(of: diningTile, matching: find.textContaining('/ ¥40,000')),
         findsNothing,
       ); // September's amount must not leak into August's tile
       // August's ¥4,000 spend legitimately appears twice: once in the
@@ -1032,11 +1055,11 @@ void main() {
       // false failure here: September's own Month Summary "remaining"
       // stat legitimately renders that exact string).
       expect(
-        find.descendant(of: diningTile, matching: find.text('JPY · ¥40,000')),
+        find.descendant(of: diningTile, matching: find.textContaining('/ ¥40,000')),
         findsOneWidget,
       ); // September's category budget amount, scoped to its own tile
       expect(
-        find.descendant(of: diningTile, matching: find.text('JPY · ¥10,000')),
+        find.descendant(of: diningTile, matching: find.textContaining('/ ¥10,000')),
         findsNothing,
       ); // August's amount must not leak into September's tile
       expect(find.textContaining('¥4,000'), findsNothing); // August's spend must not leak in
@@ -1158,7 +1181,7 @@ void main() {
       container.read(selectedBudgetMonthProvider.notifier).state = historical;
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('editOverallBudget_JPY')));
+      await tapBudgetAction(tester, find.byKey(const Key('editOverallBudget_JPY')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('overallBudgetAmountField')), '15000');
       await tester.tap(find.byKey(const Key('saveOverallBudget')));
@@ -1211,7 +1234,7 @@ void main() {
       );
       expect(tester.widget<Text>(find.byKey(const Key('monthSummarySpent_JPY'))).data, '¥13,000');
       expect(tester.widget<Text>(find.byKey(const Key('monthSummaryRemaining_JPY'))).data, '¥7,000');
-      expect(tester.widget<Text>(find.byKey(const Key('monthSummaryPercentUsed_JPY'))).data, '65% used');
+      expect(tester.widget<Text>(find.byKey(const Key('monthSummaryPercentUsed_JPY'))).data, '65%');
     });
 
     testWidgets('an over-budget month shows explicit "over budget" wording, never a misleading '
@@ -1246,7 +1269,7 @@ void main() {
       // Uncapped text: 125%, never hidden behind a false 100%.
       expect(
         tester.widget<Text>(find.byKey(const Key('monthSummaryPercentUsed_JPY'))).data,
-        '125% used',
+        '125%',
       );
       // Explicit over-budget wording, not a plain positive "remaining".
       expect(
@@ -1298,7 +1321,7 @@ void main() {
 
       expect(
         tester.widget<Text>(find.byKey(const Key('monthSummaryPercentUsed_JPY'))).data,
-        '100% used',
+        '100%',
       );
       // Zero remaining, expressed the same way an under-budget month
       // expresses a positive remaining figure -- never "over budget by
@@ -1395,10 +1418,10 @@ void main() {
 
       expect(
         tester.widget<Text>(find.byKey(Key('categoryProgressPercentUsed_$budgetId'))).data,
-        '65% used',
+        '65%',
       );
       expect(
-        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        tester.widget<Semantics>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).properties.label,
         'Remaining: ¥7,000',
       );
     });
@@ -1440,7 +1463,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        tester.widget<Semantics>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).properties.label,
         'Remaining: ¥15,000', // 20000 - 5000 expense only, the 9000 income never subtracted
       );
     });
@@ -1471,10 +1494,10 @@ void main() {
 
       expect(
         tester.widget<Text>(find.byKey(Key('categoryProgressPercentUsed_$budgetId'))).data,
-        '0% used',
+        '0%',
       );
       expect(
-        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        tester.widget<Semantics>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).properties.label,
         'Remaining: ¥20,000',
       );
       // The category progress bar is a sibling of the keyed
@@ -1523,10 +1546,10 @@ void main() {
 
       expect(
         tester.widget<Text>(find.byKey(Key('categoryProgressPercentUsed_$budgetId'))).data,
-        '100% used',
+        '100%',
       );
       expect(
-        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        tester.widget<Semantics>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).properties.label,
         'Remaining: ¥0',
       );
     });
@@ -1563,10 +1586,10 @@ void main() {
 
       expect(
         tester.widget<Text>(find.byKey(Key('categoryProgressPercentUsed_$budgetId'))).data,
-        '125% used', // uncapped -- never hidden behind a false 100%
+        '125%', // uncapped -- never hidden behind a false 100%
       );
       expect(
-        tester.widget<Text>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).data,
+        tester.widget<Semantics>(find.byKey(Key('categoryProgressRemaining_$budgetId'))).properties.label,
         '¥5,000 over budget',
       );
       // Same sibling-not-descendant reasoning as the 0% test above --
@@ -1613,7 +1636,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byTooltip('前の月'), findsOneWidget);
       expect(find.byTooltip('次の月'), findsOneWidget);
-      expect(find.text('月の概要'), findsOneWidget); // monthSummarySectionTitle
+      expect(find.byKey(const Key('monthSummaryCard_JPY')), findsOneWidget); // monthSummarySectionTitle
       expect(find.text('予算総額'), findsOneWidget); // totalBudgetLabel
       expect(find.text('支出済み'), findsOneWidget); // spentLabel
       expect(
@@ -1746,7 +1769,7 @@ void main() {
 
       expect(find.text('¥60,000'), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('deleteOverallBudget_JPY')));
+      await tapBudgetAction(tester, find.byKey(const Key('deleteOverallBudget_JPY')), delete: true);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('overallBudgetTile_JPY')), findsNothing);
@@ -1817,5 +1840,179 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
+  for (final width in <double>[320, 360, 390, 430]) {
+    for (final scale in <double>[1, 1.6]) {
+      testWidgets('premium budget values and progress at $width / $scale', (tester) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final (db, profile) = await seededDb(withCategories: true);
+        final month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+        final repository = BudgetRepository(db);
+        final budget = await repository.setCategoryBudget(profileId: profile, categoryId: 'sys-dining',
+          month: month, amount: Money.fromMinorUnits(10000, 'JPY'));
+        await repository.setOverallBudget(profileId: profile, month: month, amount: Money.fromMinorUnits(90000, 'JPY'));
+        final accounts = AccountRepository(db);
+        final wallet = await accounts.createAccount(profileId: profile, name: 'Wallet', type: 'cash', currencyCode: 'JPY');
+        await TransactionRepository(db, accounts).recordExpense(profileId: profile, accountId: wallet,
+          amount: Money.fromMinorUnits(12500, 'JPY'), occurredAtUtc: month.startUtc, categoryId: 'sys-dining');
+        final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+        addTearDown(() => disposeInOrder(tester, container, db));
+        await tester.pumpWidget(appWithBudgets(container, theme: AppTheme.light()));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.widget<Text>(find.byKey(const Key('monthSummaryTotalBudget_JPY'))).data, '¥10,000');
+        final ring = tester.widget<AppCircularProgress>(find.byType(AppCircularProgress));
+        expect(ring.value, 1.25);
+        expect(ring.paintedValue, 1);
+        expect(ring.gradientColors, AppTheme.light().extension<AppTokens>()!.colors.negativeGradient);
+        expect(find.text('125%'), findsWidgets);
+        final row = find.byKey(const Key('categoryBudgetTile_sys-dining_JPY'));
+        await tester.scrollUntilVisible(row, 120);
+        await tester.pumpAndSettle();
+        expect(find.descendant(of: row, matching: find.byType(CategoryIdentityIcon)), findsOneWidget);
+        expect(find.descendant(of: row, matching: find.text('¥12,500 / ¥10,000')), findsOneWidget);
+        expect(find.byKey(Key('categoryProgressPercentUsed_$budget')).hitTestable(), findsOneWidget);
+        final bar = tester.widget<AppProgressBar>(find.descendant(of: row, matching: find.byType(AppProgressBar)));
+        expect(bar.value, 1);
+        expect(bar.minHeight, 6);
+        expect((bar.gradient! as LinearGradient).colors, ring.gradientColors);
+        expect(tester.takeException(), isNull);
+        final overall = find.byKey(const Key('overallBudgetTile_JPY'));
+        await tester.ensureVisible(overall);
+        expect(find.descendant(of: overall, matching: find.image(const AssetImage('assets/icons/budgets/budget_main.png'))), findsOneWidget);
+        expect(find.descendant(of: overall, matching: find.text('¥90,000')), findsOneWidget);
+      });
+    }
+  }
+
+  testWidgets('budget swipe contract and confirmed deletion preserve persisted data', (tester) async {
+    final (db, profile) = await seededDb();
+    final month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+    final repository = BudgetRepository(db);
+    await repository.setOverallBudget(profileId: profile, month: month, amount: Money.fromMinorUnits(10000, 'JPY'));
+    await repository.setOverallBudget(profileId: profile, month: month, amount: Money.fromMinorUnits(50000, 'USD'));
+    final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+    await tester.pumpWidget(appWithBudgets(container));
+    await tester.pumpAndSettle();
+    Finder row(String currency) => find.byKey(Key('overallBudgetTile_$currency'));
+    Finder action(String currency, String kind) => find.byKey(Key('${kind}OverallBudget_$currency'));
+    void state(String currency, int side) {
+      final edit = action(currency, 'edit');
+      final delete = action(currency, 'delete');
+      expect(edit.hitTestable(), side == 1 ? findsOneWidget : findsNothing);
+      expect(delete.hitTestable(), side == -1 ? findsOneWidget : findsNothing);
+      final swipe = find.ancestor(of: edit, matching: find.byType(AppSwipeActionRow));
+      final moving = tester.widget<AnimatedContainer>(find.descendant(of: swipe, matching: find.byType(AnimatedContainer)));
+      expect(moving.transform!.storage[12], side * AppSwipeActionRow.revealWidth);
+    }
+    Future<void> drag(String currency, double dx) async {
+      final edit = action(currency, 'edit');
+      final clip = find.ancestor(of: edit, matching: find.byType(ClipRRect));
+      final rect = tester.getRect(clip);
+      final contentRect = tester.getRect(row(currency));
+      final visible = rect.intersect(contentRect);
+      await tester.dragFrom(visible.center, Offset(dx, 0));
+      await tester.pumpAndSettle();
+    }
+    state('JPY', 0); state('USD', 0);
+    await drag('JPY', 30); state('JPY', 0);
+    await drag('JPY', 220); state('JPY', 1);
+    await drag('JPY', -320); state('JPY', -1);
+    await drag('USD', 220); state('JPY', 0); state('USD', 1);
+    await tester.tap(find.descendant(of: row('JPY'), matching: find.text('JPY'))); await tester.pumpAndSettle(); state('USD', 0);
+    await drag('JPY', 220);
+    await tester.tap(find.text('Overall Monthly Budgets')); await tester.pumpAndSettle(); state('JPY', 0);
+    await drag('JPY', 220);
+    await tester.tap(action('JPY', 'edit')); await tester.pumpAndSettle();
+    expect(find.text('Edit overall monthly budget'), findsOneWidget);
+    await tester.tap(find.text('Cancel')); await tester.pumpAndSettle();
+    await drag('JPY', -220);
+    await tester.tap(action('JPY', 'delete')); await tester.pumpAndSettle();
+    expect(find.byKey(const Key('confirmDeleteBudget')), findsOneWidget);
+    expect(await readActiveOverallBudget(db, profileId: profile, currencyCode: 'JPY', month: month), isNotNull);
+    await tester.tap(find.text('Cancel')); await tester.pumpAndSettle();
+    expect(row('JPY'), findsOneWidget);
+    await tapBudgetAction(tester, action('JPY', 'delete'), delete: true);
+    expect(row('JPY'), findsNothing);
+    expect(row('USD'), findsOneWidget);
+    expect(await readActiveOverallBudget(db, profileId: profile, currencyCode: 'JPY', month: month), isNull);
+  });
+
+  testWidgets('category budget semantic actions open editor and deletion confirmation', (tester) async {
+    final handle = tester.ensureSemantics();
+    try {
+    final (db, profile) = await seededDb(withCategories: true);
+    final month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+    final id = await BudgetRepository(db).setCategoryBudget(profileId: profile,
+      categoryId: 'sys-dining', month: month, amount: Money.fromMinorUnits(10000, 'JPY'));
+    final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+    await tester.pumpWidget(appWithBudgets(container)); await tester.pumpAndSettle();
+    Future<void> invoke(String label) async {
+      final node = tester.getSemantics(find.byKey(Key('budgetActions_$id')));
+      final action = node.getSemanticsData().customSemanticsActionIds!.singleWhere(
+        (id) => CustomSemanticsAction.getAction(id)!.label == label);
+      node.owner!.performAction(node.id, SemanticsAction.customAction, action);
+      await tester.pumpAndSettle();
+    }
+    await invoke('Edit'); expect(find.text('Edit category budget'), findsOneWidget);
+    await tester.tap(find.text('Cancel')); await tester.pumpAndSettle();
+    await invoke('Remove'); expect(find.byKey(const Key('confirmDeleteBudget')), findsOneWidget);
+    expect(await readActiveCategoryBudget(db, profileId: profile, categoryId: 'sys-dining', currencyCode: 'JPY', month: month), isNotNull);
+    await tester.tap(find.byKey(const Key('confirmDeleteBudget'))); await tester.pumpAndSettle();
+    expect(await readActiveCategoryBudget(db, profileId: profile, categoryId: 'sys-dining', currencyCode: 'JPY', month: month), isNull);
+    } finally { handle.dispose(); }
+  });
+  testWidgets('summary currencies stay separate and exclude independent overall targets', (tester) async {
+    tester.view.physicalSize = const Size(430, 1800); tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize); addTearDown(tester.view.resetDevicePixelRatio);
+    final (db, profile) = await seededDb(withCategories: true);
+    final month = BudgetMonth.fromUtc(DateTime.now().toUtc());
+    final budgets = BudgetRepository(db);
+    final accounts = AccountRepository(db);
+    for (final entry in [('JPY', 10000, 5000), ('USD', 20000, 30000)]) {
+      await budgets.setOverallBudget(profileId: profile, month: month, amount: Money.fromMinorUnits(90000, entry.$1));
+      await budgets.setCategoryBudget(profileId: profile, categoryId: 'sys-dining', month: month,
+        amount: Money.fromMinorUnits(entry.$2, entry.$1));
+      final wallet = await accounts.createAccount(profileId: profile, name: entry.$1, type: 'cash', currencyCode: entry.$1);
+      await TransactionRepository(db, accounts).recordExpense(profileId: profile, accountId: wallet,
+        amount: Money.fromMinorUnits(entry.$3, entry.$1), occurredAtUtc: month.startUtc, categoryId: 'sys-dining');
+    }
+    final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+    await tester.pumpWidget(appWithBudgets(container, theme: AppTheme.light())); await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const Key('monthSummaryTotalBudget_JPY'))).data, '¥10,000');
+    expect(tester.widget<Text>(find.byKey(const Key('monthSummarySpent_JPY'))).data, '¥5,000');
+    expect(tester.widget<Text>(find.byKey(const Key('monthSummaryTotalBudget_USD'))).data, '\$200.00');
+    expect(tester.widget<Text>(find.byKey(const Key('monthSummarySpent_USD'))).data, '\$300.00');
+    for (final currency in ['JPY', 'USD']) {
+      final card = find.byKey(Key('monthSummaryCard_$currency'));
+      final ring = tester.widget<AppCircularProgress>(find.descendant(of: card, matching: find.byType(AppCircularProgress)));
+      expect(ring.value, currency == 'JPY' ? 0.5 : 1.5);
+      expect(ring.paintedValue, currency == 'JPY' ? 0.5 : 1);
+      final colors = AppTheme.light().extension<AppTokens>()!.colors;
+      expect(ring.gradientColors, currency == 'JPY' ? colors.positiveGradient : colors.negativeGradient);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty budgets do not fabricate a zero summary and zero progress paints safely', (tester) async {
+    final (db, _) = await seededDb();
+    final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+    addTearDown(() => disposeInOrder(tester, container, db));
+    await tester.pumpWidget(appWithBudgets(container)); await tester.pumpAndSettle();
+    expect(find.byType(AppCircularProgress), findsNothing);
+    expect(find.textContaining('No budgets set'), findsOneWidget);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: AppCircularProgress(value: 0,
+      gradientColors: AppTheme.light().extension<AppTokens>()!.colors.positiveGradient!,
+      semanticLabel: '0% used', child: const Text('0%')))));
+    expect(tester.widget<AppCircularProgress>(find.byType(AppCircularProgress)).paintedValue, 0);
+    expect(tester.takeException(), isNull);
   });
 }

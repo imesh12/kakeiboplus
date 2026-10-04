@@ -1,3 +1,4 @@
+import 'package:ai_financial_coach/core/finance/finance_engine.dart';
 import 'package:ai_financial_coach/core/money/money.dart';
 import 'package:ai_financial_coach/features/budgets/domain/budget_calculation.dart';
 import 'package:ai_financial_coach/features/budgets/domain/budget_month.dart';
@@ -139,6 +140,115 @@ void main() {
       // budgeted/spent/remaining remain real numbers regardless of period.
       expect(calc.budgeted, Money.fromMinorUnits(3000, 'USD'));
       expect(calc.remaining, Money.fromMinorUnits(3000, 'USD'));
+    });
+  });
+
+  group('BudgetCalculator.evaluate -- remainingDaysInclusive', () {
+    test('normal middle-of-month value: 30-day month, day 10 -> 30 - 10 + 1 = 21', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 9),
+        todayUtc: DateTime.utc(2026, 9, 10),
+        budgeted: Money.fromMinorUnits(3000, 'USD'),
+        spent: Money.fromMinorUnits(1000, 'USD'),
+      );
+      expect(calc.remainingDaysInclusive, 21);
+    });
+
+    test('first day of the month: the whole month is still ahead, including today', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 9), // 30-day month
+        todayUtc: DateTime.utc(2026, 9, 1),
+        budgeted: Money.fromMinorUnits(3000, 'USD'),
+        spent: Money.fromMinorUnits(100, 'USD'),
+      );
+      expect(calc.remainingDaysInclusive, 30);
+    });
+
+    test('last day of the month: only today itself remains, never zero', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 9), // 30-day month
+        todayUtc: DateTime.utc(2026, 9, 30),
+        budgeted: Money.fromMinorUnits(3000, 'USD'),
+        spent: Money.fromMinorUnits(2500, 'USD'),
+      );
+      expect(calc.remainingDaysInclusive, 1);
+    });
+
+    test('a 31-day month (January): first day -> remainingDaysInclusive equals the real 31-day '
+        'length, not a hardcoded 30', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 1),
+        todayUtc: DateTime.utc(2026, 1, 1),
+        budgeted: Money.fromMinorUnits(3100, 'USD'),
+        spent: Money.zero('USD'),
+      );
+      expect(calc.remainingDaysInclusive, 31);
+    });
+
+    test('a non-leap February (28 days): mid-month value is computed against the real 28-day '
+        'length via BudgetMonth.totalDays, not a hardcoded 30/31', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 2), // 2026 is not a leap year
+        todayUtc: DateTime.utc(2026, 2, 14),
+        budgeted: Money.fromMinorUnits(2800, 'USD'),
+        spent: Money.fromMinorUnits(1400, 'USD'),
+      );
+      // 28 - 14 + 1 = 15
+      expect(calc.remainingDaysInclusive, 15);
+    });
+
+    test('a leap February (29 days): last day of the month still leaves exactly 1 day, and the '
+        'leap day itself is honored via BudgetMonth.totalDays', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2028, month: 2), // 2028 is a leap year
+        todayUtc: DateTime.utc(2028, 2, 29),
+        budgeted: Money.fromMinorUnits(2900, 'USD'),
+        spent: Money.fromMinorUnits(2900, 'USD'),
+      );
+      expect(calc.remainingDaysInclusive, 1);
+    });
+
+    test('a historical (fully-elapsed) month resolves to 1, the same fully-elapsed-period value '
+        'dailyRecommendedSpend already divides by -- exposing the field does not change that '
+        'existing math', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 6), // June, entirely in the past
+        todayUtc: DateTime.utc(2026, 9, 10),
+        budgeted: Money.fromMinorUnits(5000, 'USD'),
+        spent: Money.fromMinorUnits(4200, 'USD'),
+      );
+      expect(calc.isFutureMonth, isFalse);
+      expect(calc.remainingDaysInclusive, 1);
+    });
+
+    test('a future month leaves remainingDaysInclusive null, together with dailyRecommendedSpend '
+        'and status -- never a fabricated day count for a period that has not started', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 12),
+        todayUtc: DateTime.utc(2026, 9, 10),
+        budgeted: Money.fromMinorUnits(3000, 'USD'),
+        spent: Money.zero('USD'),
+      );
+      expect(calc.isFutureMonth, isTrue);
+      expect(calc.remainingDaysInclusive, isNull);
+      expect(calc.dailyRecommendedSpend, isNull);
+    });
+
+    test('stays consistent with dailyRecommendedSpend -- recomputing FinanceEngine.recommendedDailySpend '
+        'from remainingDaysInclusive reproduces the exact same figure BudgetCalculator.evaluate already '
+        'returned, never a second, diverging day count', () {
+      final BudgetCalculation calc = BudgetCalculator.evaluate(
+        month: BudgetMonth(year: 2026, month: 9),
+        todayUtc: DateTime.utc(2026, 9, 10),
+        budgeted: Money.fromMinorUnits(3000, 'USD'),
+        spent: Money.fromMinorUnits(1000, 'USD'),
+      );
+      expect(calc.remainingDaysInclusive, isNotNull);
+      final Money recomputed = FinanceEngine.recommendedDailySpend(
+        remaining: calc.remaining,
+        remainingDaysInclusive: calc.remainingDaysInclusive!,
+      );
+      expect(recomputed, calc.dailyRecommendedSpend);
     });
   });
 }

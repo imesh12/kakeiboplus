@@ -56,13 +56,44 @@ class TransactionRepository {
   /// Active (non-deleted) transactions as raw rows, newest first — for
   /// the Activity/history screen, which wants `note`/`categoryId`/etc.
   /// directly rather than the finance-engine-shaped view.
+  ///
+  /// U3 Final Polish Pass: ordering by [Transactions.occurredAt] alone
+  /// left every pair of transactions sharing the exact same timestamp
+  /// (a real, common case -- `occurredAtUtc` frequently carries no
+  /// time-of-day information at all, so an ordinary day with several
+  /// transactions can easily tie) with NO defined relative order --
+  /// SQLite makes no ordering guarantee among tied rows, so the Activity
+  /// screen could visibly reshuffle those rows between rebuilds/refreshes
+  /// even though nothing about them changed, reading as "mixed rather
+  /// than clearly date-ordered." [Transactions.createdAt] (when each row
+  /// was actually entered) now breaks that tie deterministically --
+  /// newest-entered-first among same-`occurredAt` rows, which is also
+  /// the most intuitive reading of "recently added" -- and [Transactions
+  /// .id] (`ORDER BY` requires a total order, and even `createdAt` could
+  /// theoretically tie, e.g. a bulk import) is the final, always-unique
+  /// tie-breaker. Both are additive ORDER BY terms only: a query that
+  /// already had a unique `occurredAt` per row sorts exactly as before.
   Stream<List<Transaction>> watchActiveForProfile(String profileId) {
     final query = _db.select(_db.transactions)
       ..where((tbl) => tbl.profileId.equals(profileId) & tbl.deletedAt.isNull())
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.occurredAt)]);
+      ..orderBy([
+        (tbl) => OrderingTerm.desc(tbl.occurredAt),
+        (tbl) => OrderingTerm.desc(tbl.createdAt),
+        (tbl) => OrderingTerm.asc(tbl.id),
+      ]);
     return query.watch();
   }
 
+  /// Follow-up to the U3 Final Polish Pass ordering fix above -- this
+  /// query had the exact same gap (`occurredAt` alone, no tie-breaker)
+  /// and backs `accountRecentActivityProvider`, which is doc-commented
+  /// as intentionally matching [watchActiveForProfile]'s "newest first"
+  /// ordering (Account Detail's recent activity vs. the Activity
+  /// screen). Same fix, same reasoning, same tie-break priority --
+  /// [Transactions.createdAt] desc, then [Transactions.id] asc -- so
+  /// the two screens can no longer disagree on same-`occurredAt` rows.
+  /// Purely additive; the account-filtering `where` clause above is
+  /// unchanged.
   Stream<List<Transaction>> watchActiveForAccount(String accountId) {
     final query = _db.select(_db.transactions)
       ..where(
@@ -70,7 +101,11 @@ class TransactionRepository {
             (tbl.accountId.equals(accountId) | tbl.destinationAccountId.equals(accountId)) &
             tbl.deletedAt.isNull(),
       )
-      ..orderBy([(tbl) => OrderingTerm.desc(tbl.occurredAt)]);
+      ..orderBy([
+        (tbl) => OrderingTerm.desc(tbl.occurredAt),
+        (tbl) => OrderingTerm.desc(tbl.createdAt),
+        (tbl) => OrderingTerm.asc(tbl.id),
+      ]);
     return query.watch();
   }
 

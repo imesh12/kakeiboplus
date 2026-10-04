@@ -98,6 +98,12 @@ abstract class AppLocalizations {
     Locale('ja')
   ];
 
+  /// No description provided for @recurringNextDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Next: {date}'**
+  String recurringNextDateLabel(String date);
+
   /// Checkpoint M: the product name, used as the accessibility semantic label for the brand wordmark image on the More screen (see docs/14_DECISION_LOG.md ADR-036). This is a proper/brand name -- translators must keep the value exactly 'KakeiboPlus' in every locale, never translate it.
   ///
   /// In en, this message translates to:
@@ -416,6 +422,54 @@ abstract class AppLocalizations {
   /// **'Hi, {name}'**
   String homeGreeting(String name);
 
+  /// Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time before 12:00.
+  ///
+  /// In en, this message translates to:
+  /// **'Good morning, {name}!'**
+  String homeGreetingMorning(String name);
+
+  /// Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time 12:00-17:59.
+  ///
+  /// In en, this message translates to:
+  /// **'Good afternoon, {name}!'**
+  String homeGreetingAfternoon(String name);
+
+  /// Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time 18:00 or later.
+  ///
+  /// In en, this message translates to:
+  /// **'Good evening, {name}!'**
+  String homeGreetingEvening(String name);
+
+  /// Checkpoint U3 (docs/23 SS4.2): the Dashboard greeting's one short supporting line -- supportive, concise, not motivational-poster/sales-like.
+  ///
+  /// In en, this message translates to:
+  /// **'Small steps make a brighter future.'**
+  String get homeGreetingSupportingLine;
+
+  /// Checkpoint U3 (docs/23 SS4.3): the hero card's small eyebrow label above the monthly-remaining headline.
+  ///
+  /// In en, this message translates to:
+  /// **'THIS MONTH'**
+  String get dashboardThisMonthLabel;
+
+  /// Checkpoint U3 (docs/23 SS5.2/SS5.5): the caption under the hero headline for a zero-or-positive this-month-remaining amount.
+  ///
+  /// In en, this message translates to:
+  /// **'remaining'**
+  String get dashboardRemainingLabel;
+
+  /// Checkpoint U3 (docs/23 SS5.5): the caption under the hero headline when this month's expense has exceeded this month's income.
+  ///
+  /// In en, this message translates to:
+  /// **'Over this month\'s income'**
+  String get dashboardOverspentLabel;
+
+  /// Design Reversal Checkpoint (KakeiboPlus header reference): the hero card's single eyebrow label above its one primary balance figure (CurrencyDashboardSummary.availableBalance), replacing the per-currency code + Living/Home currency badge and the THIS MONTH/remaining pair that used to occupy this space. Presentation relabel only -- no new calculation; totalAvailableBalance still describes the same figure on secondary currency cards.
+  ///
+  /// In en, this message translates to:
+  /// **'TOTAL BALANCE'**
+  String get dashboardTotalBalanceLabel;
+
   /// No description provided for @accountsSectionTitle.
   ///
   /// In en, this message translates to:
@@ -461,25 +515,25 @@ abstract class AppLocalizations {
   /// No description provided for @incomeThisMonth.
   ///
   /// In en, this message translates to:
-  /// **'Income this month'**
+  /// **'Monthly Income'**
   String get incomeThisMonth;
 
   /// No description provided for @spentThisMonth.
   ///
   /// In en, this message translates to:
-  /// **'Spent this month'**
+  /// **'Monthly Spending'**
   String get spentThisMonth;
 
   /// No description provided for @dailySpendingPace.
   ///
   /// In en, this message translates to:
-  /// **'Daily spending pace'**
+  /// **'Daily Spending Pace'**
   String get dailySpendingPace;
 
   /// No description provided for @dailySpendingPaceDetail.
   ///
   /// In en, this message translates to:
-  /// **'Average spend per day so far this month'**
+  /// **'Daily average so far'**
   String get dailySpendingPaceDetail;
 
   /// No description provided for @remainingMonthlyBudget.
@@ -619,6 +673,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Upcoming'**
   String get recurringStatusUpcoming;
+
+  /// No description provided for @homeUpcomingCommitmentsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming'**
+  String get homeUpcomingCommitmentsTitle;
+
+  /// No description provided for @homeUpcomingInDaysLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'In {days} days'**
+  String homeUpcomingInDaysLabel(int days);
+
+  /// No description provided for @homeUpcomingEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No upcoming payments'**
+  String get homeUpcomingEmptyTitle;
+
+  /// No description provided for @homeUpcomingEmptySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re all caught up!'**
+  String get homeUpcomingEmptySubtitle;
+
+  /// No description provided for @homeUpcomingEmptyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring bills and reminders will appear here.'**
+  String get homeUpcomingEmptyDescription;
+
+  /// No description provided for @homeSpendingThisMonthTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Spending this month'**
+  String get homeSpendingThisMonthTitle;
+
+  /// No description provided for @homeViewDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'View details'**
+  String get homeViewDetails;
+
+  /// No description provided for @homeSpendingNoDataMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No spending recorded this month yet.'**
+  String get homeSpendingNoDataMessage;
+
+  /// No description provided for @homeUncategorizedCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get homeUncategorizedCategoryLabel;
+
+  /// No description provided for @homeCategoryPercentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String homeCategoryPercentLabel(String percent);
+
+  /// No description provided for @homeRemainingBudgetLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining Budget'**
+  String get homeRemainingBudgetLabel;
+
+  /// No description provided for @homeBudgetDaysLeftLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Left for {days} days'**
+  String homeBudgetDaysLeftLabel(int days);
+
+  /// No description provided for @homeBudgetTotalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Budget {amount}'**
+  String homeBudgetTotalLabel(String amount);
 
   /// No description provided for @couldNotLoadTransactions.
   ///
@@ -929,7 +1061,7 @@ abstract class AppLocalizations {
   /// No description provided for @overallBudgetsSectionTitle.
   ///
   /// In en, this message translates to:
-  /// **'Overall budgets'**
+  /// **'Overall Monthly Budgets'**
   String get overallBudgetsSectionTitle;
 
   /// No description provided for @categoryBudgetsSectionTitle.
@@ -1267,6 +1399,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No recurring rules yet. Tap + to add one.'**
   String get noRecurringRulesYetTapMessage;
+
+  /// No description provided for @recurringSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search recurring'**
+  String get recurringSearchLabel;
+
+  /// No description provided for @recurringSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by name, category, or service'**
+  String get recurringSearchHint;
+
+  /// No description provided for @searchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get searchTooltip;
+
+  /// No description provided for @closeSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Close search'**
+  String get closeSearchTooltip;
+
+  /// No description provided for @addRecurringRuleTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add recurring rule'**
+  String get addRecurringRuleTooltip;
+
+  /// No description provided for @recurringFilterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get recurringFilterAll;
+
+  /// No description provided for @recurringFilterActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get recurringFilterActive;
+
+  /// No description provided for @recurringFilterExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get recurringFilterExpired;
+
+  /// No description provided for @recurringEndedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Ended'**
+  String get recurringEndedLabel;
+
+  /// No description provided for @noActiveRecurringRulesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No active recurring rules.'**
+  String get noActiveRecurringRulesMessage;
+
+  /// No description provided for @noUpcomingRecurringRulesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing due soon.'**
+  String get noUpcomingRecurringRulesMessage;
+
+  /// No description provided for @noExpiredRecurringRulesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No expired recurring rules.'**
+  String get noExpiredRecurringRulesMessage;
+
+  /// No description provided for @noMatchingRecurringRulesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching recurring rules.'**
+  String get noMatchingRecurringRulesMessage;
+
+  /// No description provided for @ruleActionsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get ruleActionsTooltip;
 
   /// No description provided for @subscriptionsTitle.
   ///
@@ -3195,6 +3411,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Credit limit'**
   String get editCreditLimitFieldLabel;
+
+  /// Recurring UI Upgrade + History Views checkpoint: the restyled summary card's title, replacing subscriptionsEstimatedMonthlyTotalLabel ('Est. monthly') for this one card only -- that older key is left in place/unused-here since recurring_estimate.dart's own doc comment still references it by name.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly estimated total'**
+  String get recurringEstimateCardTitle;
+
+  /// Recurring UI Upgrade + History Views checkpoint: the restyled summary card's secondary yearly-total line, replacing subscriptionsEstimatedYearlyTotalLabel ('Est. yearly') for this one card only.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly total'**
+  String get recurringEstimateYearlyTotalLabel;
+
+  /// Recurring UI Upgrade + History Views checkpoint: accessibility/tooltip label for a recurring row's dedicated history IconButton (Case 2).
+  ///
+  /// In en, this message translates to:
+  /// **'View history'**
+  String get recurringViewHistoryTooltip;
+
+  /// Recurring UI Upgrade + History Views checkpoint: app bar title for the all-services year history screen (Case 1), reached by tapping the Recurring screen's summary card.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring history'**
+  String get recurringHistoryTitle;
+
+  /// Recurring UI Upgrade + History Views checkpoint: app bar title for one recurring rule's own history screen (Case 2), where {name} is that rule's name.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} history'**
+  String recurringServiceHistoryTitle(String name);
+
+  /// Recurring UI Upgrade + History Views checkpoint: empty state shown on either history screen when there are no handled (posted or skipped) occurrences yet.
+  ///
+  /// In en, this message translates to:
+  /// **'No history yet.'**
+  String get recurringHistoryEmptyMessage;
+
+  /// Recurring UI Upgrade + History Views checkpoint: status label/semantic text next to the paid-stamp icon on a posted history row.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid'**
+  String get recurringHistoryStatusPosted;
+
+  /// Recurring UI Upgrade + History Views checkpoint: status label/semantic text on a skipped history row.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get recurringHistoryStatusSkipped;
+
+  /// No description provided for @deleteBudgetConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this budget?'**
+  String get deleteBudgetConfirmTitle;
+
+  /// No description provided for @deleteBudgetConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The budget will be removed. Your transactions will be kept.'**
+  String get deleteBudgetConfirmMessage;
 }
 
 class _AppLocalizationsDelegate

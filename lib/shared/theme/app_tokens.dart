@@ -131,6 +131,14 @@ class AppSemanticColors {
     required this.mutedText,
     required this.info,
     required this.ambientGradient,
+    this.heroGradient,
+    this.warmCardSurface,
+    this.warmCardBorder,
+    this.warmCardForeground,
+    this.dashboardPageBackground,
+    this.positiveGradient,
+    this.negativeGradient,
+    this.navSelectedColor,
   });
 
   /// The standard card/surface background — matches
@@ -198,6 +206,127 @@ class AppSemanticColors {
   /// spread across arbitrary surfaces.
   final List<Color> ambientGradient;
 
+  /// Checkpoint U3 (docs/23_DASHBOARD_HEADER_BRAND_SPEC.md §9/§11):
+  /// KakeiboPlus's own fixed brand gradient for the Dashboard hero
+  /// card's background -- `null` for every theme that doesn't
+  /// explicitly opt in (see `app_theme.dart`'s `light()`/`dark()`,
+  /// which pass one; `pink()`/`ocean()`/`forest()` deliberately do
+  /// not).
+  ///
+  /// Unlike [ambientGradient] (always derived from the theme's own
+  /// `colorScheme.primary`/`secondary`, so every theme -- including one
+  /// this checkpoint doesn't know about yet -- produces a tasteful wash
+  /// automatically), this is a small set of FIXED literal brand colors,
+  /// the same architecture the More screen's wordmark already
+  /// established (`more_screen.dart`: "the wordmark PNG's ink is a
+  /// FIXED brand green ... unlike every other color on this screen it
+  /// deliberately does NOT come from `colorScheme`"). docs/23 §9
+  /// specifies exact hex values as "the approved starting palette" --
+  /// values, not a derivation rule -- so deriving them from a seed
+  /// would not reproduce them.
+  ///
+  /// Deliberately scoped to Light/Dark only, not a global reseed:
+  /// `app_theme.dart`'s own history already recorded ONE deliberate
+  /// recoloring of the app's shared seed (Checkpoint 10 Visual
+  /// Convergence, teal/green -> blue) and a SEPARATE deliberate
+  /// decision to move Income/Spending back OUT of the hero card
+  /// (also Checkpoint 10). Re-deriving the global seed from docs/23's
+  /// teal, or moving Income/Expense back into the hero card, would
+  /// silently reverse both of those without ever being told to --
+  /// this field instead adds ONLY a new, additive, optional hero-card
+  /// background treatment, consumed by exactly one widget
+  /// (`_HeroCurrencyCard`), leaving `colorScheme` and every other
+  /// screen completely untouched, exactly like [ambientGradient]'s own
+  /// "consumed by exactly one decorative layer" principle. Pink/Ocean/
+  /// Forest keep their own already-tuned flat `primaryContainer` hero
+  /// fill unchanged (docs/23 §19: custom themes "may alter ... possibly
+  /// hero skin in the future" -- future, not this checkpoint).
+  final List<Color>? heroGradient;
+
+  /// Dashboard V1 Finalization checkpoint (docs/23 §9's "Sunny Yellow"
+  /// accent, Request D's "warm/calm, not alarming" Upcoming Commitments
+  /// empty-state treatment): a fixed warm cream surface for the Home
+  /// "Upcoming commitments" card's empty ("You're all caught up") state
+  /// -- `null` for every theme that doesn't explicitly opt in, exactly
+  /// like [heroGradient]. Deliberately NOT `colorScheme.tertiary`/
+  /// `tertiaryContainer` -- the app-wide seed is still Checkpoint 10's
+  /// blue (see `app_theme.dart`), so a seed-derived tertiary would not
+  /// reliably land on a warm cream/tan hue. Consumed by exactly one
+  /// widget (the Upcoming Commitments card's empty state), never a
+  /// general "warning" color -- [warning] already owns that role.
+  final Color? warmCardSurface;
+
+  /// Border companion to [warmCardSurface]. `null` alongside it.
+  final Color? warmCardBorder;
+
+  /// Foreground/text companion to [warmCardSurface] -- a warm amber-
+  /// brown, never red, per the "calm, not alarming" empty-state
+  /// requirement (this is a *positive* empty state, not a warning).
+  /// `null` alongside [warmCardSurface].
+  final Color? warmCardForeground;
+
+  /// Dashboard Visual Refresh Pass (docs/design/dashboard-referancenew.png):
+  /// a fixed, soft mint page background for the Home Dashboard screen
+  /// specifically -- `null` for every theme that doesn't explicitly opt
+  /// in, exactly like [heroGradient]/[warmCardSurface]. Deliberately NOT
+  /// a change to [ColorScheme.surface]/`scaffoldBackgroundColor` (which
+  /// stays the app-wide default for every other screen) -- consumed by
+  /// exactly one Scaffold (`HomeScreen`'s own), never a global
+  /// re-background, per this pass's "targets the Dashboard only" scope.
+  final Color? dashboardPageBackground;
+
+  /// Dashboard progress-bar gradient refinement: a fixed, premium "deep
+  /// emerald -> fresh mint/green" gradient for a within-budget/healthy
+  /// [AppProgressBar] fill on the Dashboard -- `null` for every theme
+  /// that doesn't explicitly opt in, exactly like [heroGradient]/
+  /// [warmCardSurface]. Deliberately NOT a change to [positive] itself
+  /// (still `colorScheme.primary`, unaffected everywhere else) -- this
+  /// is a second, additive, opt-in gradient consumed by exactly the two
+  /// Dashboard budget-progress-bar call sites that pass it, never a
+  /// redefinition of what "positive" means app-wide. A `null` value
+  /// means the caller falls back to painting [positive] as a flat
+  /// color, exactly as every progress bar already does today.
+  final List<Color>? positiveGradient;
+
+  /// Dashboard progress-bar gradient refinement: the companion
+  /// "exceeded/over-budget" gradient -- a fixed "deep coral-red ->
+  /// brighter warm red" treatment, `null` alongside [positiveGradient]
+  /// for the same reasons and under the same fallback rule ([negative]
+  /// painted flat).
+  final List<Color>? negativeGradient;
+
+  /// U3 Final Polish Pass (item 10 -- "Current selected bottom-nav
+  /// color looks gray"): the fixed KakeiboPlus teal/emerald used for
+  /// the bottom-navigation bar's SELECTED icon and label only -- `null`
+  /// for every theme that doesn't explicitly opt in, exactly like
+  /// [heroGradient]/[dashboardPageBackground]/[positiveGradient].
+  ///
+  /// Root cause this replaces: the nav bar's selected state previously
+  /// had no override at all, so it fell through to Material 3's own
+  /// `NavigationBarThemeData` default (`colorScheme.onSecondaryContainer`
+  /// / the `secondaryContainer` indicator) -- under this app's blue seed
+  /// (`AppTheme._seed`, Checkpoint 10 Visual Convergence), that tonal
+  /// role renders as a desaturated blue-gray, which is exactly what read
+  /// as "looks gray" rather than a deliberate brand color.
+  ///
+  /// Deliberately reuses the SAME literal teal/emerald already vetted
+  /// for [positiveGradient]'s middle stop (Light) / brightest stop
+  /// (Dark) -- see `app_theme.dart`'s `_kakeiboNavSelectedLight`/
+  /// `_kakeiboNavSelectedDark` -- rather than inventing a new brand
+  /// color, per this pass's own "avoid ... random raw colors ... use
+  /// theme/tokens where practical" requirement. The soft mint pill/
+  /// indicator behind the selected icon is DERIVED from this same
+  /// color at a low alpha (see `app_shell.dart`) -- the same
+  /// color-tinted-background idiom [AppIconTile] already uses for
+  /// every other tinted-icon container in the app -- rather than a
+  /// second, separate literal, so there is exactly one new brand color
+  /// to reason about. Pink/Ocean/Forest deliberately do not set this
+  /// (their own nav selected state keeps today's `secondaryContainer`-
+  /// derived behavior, unchanged by this pass), matching how
+  /// [heroGradient]/[dashboardPageBackground] already scope every
+  /// fixed-brand-literal addition to Light/Dark only.
+  final Color? navSelectedColor;
+
   /// [positiveOverride] -- Checkpoint 8.1 addition, optional and
   /// defaulting to `null` (= unchanged behavior: [positive] is
   /// `colorScheme.primary`, exactly as it always was for every theme
@@ -212,7 +341,18 @@ class AppSemanticColors {
   /// Material's seed algorithm derives the error/red tonal palette
   /// independently of the seed hue, so there is no analogous red/
   /// negative-color collision risk to guard against.
-  factory AppSemanticColors.fromColorScheme(ColorScheme colorScheme, {Color? positiveOverride}) {
+  factory AppSemanticColors.fromColorScheme(
+    ColorScheme colorScheme, {
+    Color? positiveOverride,
+    List<Color>? heroGradient,
+    Color? warmCardSurface,
+    Color? warmCardBorder,
+    Color? warmCardForeground,
+    Color? dashboardPageBackground,
+    List<Color>? positiveGradient,
+    List<Color>? negativeGradient,
+    Color? navSelectedColor,
+  }) {
     return AppSemanticColors(
       cardSurface: colorScheme.surfaceContainerHigh,
       elevatedSurface: colorScheme.surfaceContainerHighest,
@@ -228,6 +368,14 @@ class AppSemanticColors {
         colorScheme.secondary.withValues(alpha: 0.06),
         colorScheme.surface.withValues(alpha: 0),
       ],
+      heroGradient: heroGradient,
+      warmCardSurface: warmCardSurface,
+      warmCardBorder: warmCardBorder,
+      warmCardForeground: warmCardForeground,
+      dashboardPageBackground: dashboardPageBackground,
+      positiveGradient: positiveGradient,
+      negativeGradient: negativeGradient,
+      navSelectedColor: navSelectedColor,
     );
   }
 }
@@ -266,11 +414,33 @@ class AppTokens extends ThemeExtension<AppTokens> {
   /// [AppSemanticColors.fromColorScheme] -- see that factory's own doc
   /// comment (Checkpoint 8.1 addition, defaults to `null`/unchanged
   /// behavior).
-  factory AppTokens.fromColorScheme(ColorScheme colorScheme, {Color? positiveOverride}) {
+  factory AppTokens.fromColorScheme(
+    ColorScheme colorScheme, {
+    Color? positiveOverride,
+    List<Color>? heroGradient,
+    Color? warmCardSurface,
+    Color? warmCardBorder,
+    Color? warmCardForeground,
+    Color? dashboardPageBackground,
+    List<Color>? positiveGradient,
+    List<Color>? negativeGradient,
+    Color? navSelectedColor,
+  }) {
     return AppTokens(
       spacing: const AppSpacing(),
       radii: const AppRadii(),
-      colors: AppSemanticColors.fromColorScheme(colorScheme, positiveOverride: positiveOverride),
+      colors: AppSemanticColors.fromColorScheme(
+        colorScheme,
+        positiveOverride: positiveOverride,
+        heroGradient: heroGradient,
+        warmCardSurface: warmCardSurface,
+        warmCardBorder: warmCardBorder,
+        warmCardForeground: warmCardForeground,
+        dashboardPageBackground: dashboardPageBackground,
+        positiveGradient: positiveGradient,
+        negativeGradient: negativeGradient,
+        navSelectedColor: navSelectedColor,
+      ),
       iconSizes: const AppIconSizes(),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/widgets/app_icon_tile.dart';
 import '../../categories/domain/category_icon.dart';
+import '../../categories/domain/category_icon_asset.dart';
 import '../../services/domain/service_identity.dart';
 import '../../services/domain/service_identity_catalog.dart';
 
@@ -55,6 +56,20 @@ import '../../services/domain/service_identity_catalog.dart';
 /// generic "other" family glyph via [serviceIdentityDefinitionFor] --
 /// never a crash, never silently treated as "no service" when a
 /// non-null key was actually stored.
+///
+/// # UI/Icon Polish checkpoint: curated category artwork
+///
+/// When the ladder above resolves to a plain category glyph (no service
+/// identity, not a transfer, a category IS chosen), [categoryIconAssetFor]
+/// -- the exact same resolver `CategoryIdentityIcon` already uses, not a
+/// second map -- may additionally resolve a curated PNG for that same
+/// icon key. When it does, [AppIconTile] renders that PNG instead of the
+/// glyph; when it doesn't (no curated asset, an unrecognized key, or no
+/// category), the glyph computed above renders exactly as before this
+/// checkpoint. This is a strictly ADDITIVE rung at the BOTTOM of the
+/// existing precedence -- service identity > category (asset-or-glyph)
+/// > plain type glyph -- never a new rung above service identity, and
+/// never anything for a transfer (which never carries a category).
 class TransactionIconBadge extends StatelessWidget {
   const TransactionIconBadge({
     required this.type,
@@ -62,6 +77,8 @@ class TransactionIconBadge extends StatelessWidget {
     super.key,
     this.categoryIconName,
     this.serviceIdentityKey,
+    this.containerSize,
+    this.glyphSize,
   });
 
   /// `'expense'` | `'income'` | `'transfer'` -- `Transaction.type`.
@@ -75,6 +92,21 @@ class TransactionIconBadge extends StatelessWidget {
   /// [categoryIconName]).
   final String? serviceIdentityKey;
 
+  /// Dashboard "Upcoming" row pass (docs/14_DECISION_LOG.md ADR-049):
+  /// optional pass-through to [AppIconTile.containerSize] -- `null` (the
+  /// default) is pixel-identical to every pre-existing call site (still
+  /// [AppIconTileSize.medium]'s own 40px). Lets one caller (today, the
+  /// Home Upcoming row) ask for a container between [AppIconTileSize]'s
+  /// named tiers (e.g. 44, between medium's 40 and large's 48) without
+  /// introducing a second icon system or a new size tier that would also
+  /// affect every other existing call site of this widget.
+  final double? containerSize;
+
+  /// Pass-through to [AppIconTile.glyphSize], independent of
+  /// [containerSize] -- `null` (the default) is pixel-identical to every
+  /// pre-existing call site.
+  final double? glyphSize;
+
   @override
   Widget build(BuildContext context) {
     final ServiceIdentityDefinition? serviceDefinition =
@@ -86,6 +118,29 @@ class TransactionIconBadge extends StatelessWidget {
             'income' => categoryIconName != null ? categoryIconFor(categoryIconName) : Icons.add,
             _ => categoryIconName != null ? categoryIconFor(categoryIconName) : Icons.remove,
           };
-    return AppIconTile(icon: icon, color: color, size: AppIconTileSize.medium);
+    // UI/Icon Polish checkpoint: one more, LOWEST-precedence rung below
+    // the glyph ladder above -- a curated category PNG
+    // (`categoryIconAssetFor`, the same resolver `CategoryIdentityIcon`
+    // already uses) renders INSTEAD of the plain category glyph, but
+    // only when nothing higher in the ladder already claimed the icon:
+    // never when a service identity is present (service identity's own
+    // glyph always wins -- this never regresses that precedence), and
+    // never for a transfer (categoryIconName is contractually null
+    // there already, so this is also just defense in depth). A category
+    // with no curated asset, an unrecognized icon key, or no category
+    // at all all resolve `categoryIconAssetFor` to `null` -- AppIconTile
+    // then falls back to the exact same `icon` glyph computed above, so
+    // this can never render blank or throw.
+    final String? categoryAsset = serviceDefinition == null && type != 'transfer'
+        ? categoryIconAssetFor(categoryIconName)
+        : null;
+    return AppIconTile(
+      icon: icon,
+      assetPath: categoryAsset,
+      color: color,
+      size: AppIconTileSize.medium,
+      containerSize: containerSize,
+      glyphSize: glyphSize,
+    );
   }
 }

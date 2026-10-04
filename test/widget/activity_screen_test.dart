@@ -10,7 +10,9 @@ import 'package:ai_financial_coach/core/routing/app_routes.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/activity_screen.dart';
 import 'package:ai_financial_coach/features/transactions/presentation/transaction_detail_screen.dart';
 import 'package:ai_financial_coach/l10n/generated/app_localizations.dart';
+import 'package:ai_financial_coach/shared/theme/app_theme.dart';
 import 'package:ai_financial_coach/shared/theme/app_tokens.dart';
+import 'package:ai_financial_coach/shared/widgets/app_icon_tile.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,6 +139,16 @@ void main() {
     ProviderContainer container, {
     bool rtl = false,
     Locale locale = const Locale('en'),
+    // UI/Icon Polish checkpoint: optional, additive -- `null` (every
+    // pre-existing call site) is pixel-identical to before, since
+    // `MaterialApp.router`'s own `theme` default (a plain `ThemeData()`
+    // with no `AppTokens` extension registered) is exactly what
+    // omitting this parameter already produced. Only a test that
+    // explicitly needs a REAL theme -- i.e. one that registers
+    // `AppTokens.positiveGradient`/`negativeGradient` via
+    // `AppTheme.light()`/`.dark()` (`Pink`/`Ocean`/`Forest` deliberately
+    // leave those two `null`, see `app_theme.dart`) -- passes one.
+    ThemeData? theme,
   }) {
     final GoRouter router = GoRouter(
       initialLocation: AppRoutes.activity,
@@ -152,6 +164,7 @@ void main() {
     return UncontrolledProviderScope(
       container: container,
       child: MaterialApp.router(
+        theme: theme,
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -342,10 +355,33 @@ void main() {
     await tester.pumpWidget(appWithRouter(container));
     await tester.pumpAndSettle();
 
-    // sys-dining's mapped icon.
-    expect(find.byIcon(Icons.restaurant), findsOneWidget);
+    // sys-dining's mapped icon -- UI/Icon Polish checkpoint: 'restaurant'
+    // now has curated artwork (`category_icon_asset.dart`), so this row
+    // renders via `Image.asset` through `TransactionIconBadge`, not the
+    // `Icons.restaurant` glyph directly. This still proves the exact
+    // same thing the test's own name promises ("renders the resolved
+    // category icon") -- just via the new, intentionally-upgraded
+    // rendering path for a mapped key, not a regression in the glyph
+    // resolver itself (which `category_icon_asset_test.dart`/
+    // `category_icon_test.dart` cover directly).
+    expect(find.byIcon(Icons.restaurant), findsNothing);
+    expect(find.byType(Image), findsOneWidget);
+    expect(
+      (tester.widget<Image>(find.byType(Image)).image as AssetImage).assetName,
+      'assets/icons/categories/dining_out.png',
+    );
     // categoryIconFor's own safe fallback for an unrecognized (but
-    // non-null) icon name -- proves that path never throws.
+    // non-null) icon name -- proves that path never throws. This
+    // category's icon is the literal string
+    // 'some_future_icon_name_not_in_the_map', which has no entry in
+    // either `category_icon.dart`'s glyph map or
+    // `category_icon_asset.dart`'s curated asset map, so it stays a
+    // plain Icon rendering the generic `Icons.category` fallback glyph.
+    // (As of the Category Icon Source Correction checkpoint, the
+    // literal string `'category'` itself DOES have curated artwork --
+    // see `category_icon_asset_test.dart` -- but that is a different,
+    // specific key from the genuinely-unrecognized one this row uses,
+    // so it does not affect this assertion.)
     expect(find.byIcon(Icons.category), findsOneWidget);
     // Both "a category with no icon set" and "no category at all" fall
     // back to the same plain expense icon Activity used before this
@@ -1924,6 +1960,323 @@ void main() {
         // "Netflix" now appears twice: once in the header (taking the
         // category-name slot there too), once in the new Service row.
         expect(find.text('Netflix'), findsNWidgets(2));
+      },
+    );
+  });
+
+  // ============================================================
+  // UI/Icon Polish checkpoint: Activity rows show the SELECTED
+  // category's identity (curated PNG when mapped, Material fallback
+  // otherwise) rather than a generic Expense/Income glyph, and the
+  // amount text picks up a premium Income-green/Expense-red gradient
+  // sourced from `AppTokens.colors.positiveGradient`/`negativeGradient`
+  // -- see `TransactionIconBadge`'s and `_TransactionRow.build`'s own
+  // updated doc comments. Every test here that needs the GRADIENT
+  // specifically pumps with `theme: AppTheme.light()` (via
+  // `appWithRouter`'s new optional `theme` param): the file's other,
+  // pre-existing tests all use the default (no theme, no registered
+  // `AppTokens` extension, so `positiveGradient`/`negativeGradient`
+  // fall back to `null`, and the whole gradient branch is skipped) --
+  // which is exactly why none of them needed to change for this
+  // checkpoint.
+  // ============================================================
+  group('UI/Icon Polish: Activity category icons + amount gradients', () {
+    testWidgets('an Expense row with a mapped category shows the curated PNG and a '
+        'negativeGradient-filled amount', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededDb();
+      final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+      await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(1200, 'JPY'),
+        categoryId: 'sys-dining', // icon 'restaurant' -- curated
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, theme: AppTheme.light()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      // The row's own leading identity -- not a generic minus/expense
+      // glyph -- is the selected category's curated artwork.
+      expect(find.byIcon(Icons.remove), findsNothing);
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image as AssetImage).assetName,
+        'assets/icons/categories/dining_out.png',
+      );
+      expect(find.text('-¥1,200'), findsOneWidget);
+      // The amount is painted through a ShaderMask (the gradient-text
+      // recipe) -- light theme defines a real `negativeGradient`, so
+      // this branch is actually exercised, not skipped.
+      expect(find.byType(ShaderMask), findsOneWidget);
+    });
+
+    testWidgets('an Income row with a mapped category shows the curated PNG and a '
+        'positiveGradient-filled amount', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededDb();
+      final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+      await txRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500000, 'JPY'),
+        categoryId: 'sys-salary', // icon 'work' -- curated
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, theme: AppTheme.light()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byIcon(Icons.add), findsNothing);
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image as AssetImage).assetName,
+        'assets/icons/categories/salary.png',
+      );
+      expect(find.text('+¥500,000'), findsOneWidget);
+      expect(find.byType(ShaderMask), findsOneWidget);
+    });
+
+    testWidgets('a category with an unmapped/unrecognized icon key still falls back safely '
+        'to the Material glyph, never a broken asset', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededDb();
+      final CategoryRepository categoryRepo = CategoryRepository(db);
+      final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+      final String mysteryCategoryId = await categoryRepo.createCategory(
+        profileId: profileId,
+        name: 'Mystery Category',
+        type: 'expense',
+        icon: 'some_future_icon_name_not_in_the_map',
+      );
+      await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(900, 'JPY'),
+        categoryId: mysteryCategoryId,
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, theme: AppTheme.light()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byIcon(Icons.category), findsOneWidget); // categoryIconFor's own safe fallback
+      expect(find.byType(Image), findsNothing);
+    });
+
+    testWidgets('a transaction with no category at all still falls back safely to the plain '
+        'type glyph, never a broken asset', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededDb();
+      final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+      await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(900, 'JPY'),
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, theme: AppTheme.light()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byIcon(Icons.remove), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+    });
+
+    testWidgets('an established service identity still takes precedence over a mapped '
+        'category -- this checkpoint never regresses that ladder', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededDb();
+      final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+      await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(1500, 'JPY'),
+        categoryId: 'sys-dining', // icon 'restaurant' -- curated, but...
+        serviceIdentityKey: 'netflix', // ...service identity outranks it.
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, theme: AppTheme.light()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      // Neither the category's Material glyph NOR its curated PNG
+      // render -- the service identity's own glyph wins, exactly as
+      // before this checkpoint (see `TransactionIconBadge`'s ladder).
+      expect(find.byIcon(Icons.restaurant), findsNothing);
+      expect(find.byType(Image), findsNothing);
+      // The amount gradient is still applied (an Expense row is an
+      // Expense row regardless of which icon rung won) -- service
+      // identity only overrides the GLYPH, never the amount's color
+      // (see `TransactionIconBadge`'s own precedence doc comment: the
+      // tinted container's `color` always stays the transaction-type
+      // color, never a service color).
+      expect(find.byType(ShaderMask), findsOneWidget);
+    });
+
+    testWidgets('a Transfer row never gets the Income/Expense gradient treatment -- it keeps '
+        'its existing neutral styling', (tester) async {
+      final (AppDatabase db, String profileId, String accountId) = await seededDb();
+      final AccountRepository accountRepo = AccountRepository(db);
+      final String savingsAccountId = await accountRepo.createAccount(
+        profileId: profileId,
+        name: 'Savings',
+        type: 'savings',
+        currencyCode: 'JPY',
+      );
+      final TransactionRepository txRepo = TransactionRepository(db, accountRepo);
+      await txRepo.recordExpense(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(1200, 'JPY'),
+        categoryId: 'sys-dining',
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+      await txRepo.recordIncome(
+        profileId: profileId,
+        accountId: accountId,
+        amount: Money.fromMinorUnits(500000, 'JPY'),
+        categoryId: 'sys-salary',
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+      await txRepo.recordTransfer(
+        profileId: profileId,
+        sourceAccountId: accountId,
+        destinationAccountId: savingsAccountId,
+        amount: Money.fromMinorUnits(3000, 'JPY'),
+        occurredAtUtc: DateTime.now().toUtc(),
+      );
+
+      final ProviderContainer container =
+          ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(() => disposeInOrder(tester, container, db));
+
+      await tester.pumpWidget(appWithRouter(container, theme: AppTheme.light()));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      // Exactly 2 ShaderMasks on screen -- the Expense and Income rows'
+      // amounts -- never a 3rd for the Transfer row's amount.
+      expect(find.byType(ShaderMask), findsNWidgets(2));
+      expect(find.byIcon(Icons.swap_horiz), findsOneWidget); // transfer's own plain glyph, untouched
+    });
+
+    testWidgets(
+      'a mapped-category Expense row renders without overflow across phone widths '
+      '(320/360/390/430) and a 1.6x text scale, with the amount never pushed offscreen',
+      (tester) async {
+        for (final double width in <double>[320, 360, 390, 430]) {
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          tester.view.physicalSize = Size(width, 700);
+          tester.view.devicePixelRatio = 1.0;
+          tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+          final (AppDatabase db, String profileId, String accountId) = await seededDb();
+          final TransactionRepository txRepo = TransactionRepository(db, AccountRepository(db));
+          await txRepo.recordExpense(
+            profileId: profileId,
+            accountId: accountId,
+            amount: Money.fromMinorUnits(987654321, 'VND'),
+            categoryId: 'sys-dining',
+            note: 'A rather long note to stress narrow-width description content',
+            occurredAtUtc: DateTime.now().toUtc(),
+          );
+
+          final ProviderContainer container =
+              ProviderContainer(overrides: <Override>[appDatabaseProvider.overrideWithValue(db)]);
+
+          await tester.pumpWidget(appWithRouter(container, theme: AppTheme.light()));
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull, reason: 'width=$width');
+          // The medium-sized identity (curated PNG, this checkpoint's
+          // bumped 44px slot) stays mounted and on-screen.
+          final Finder iconTile = find.byType(AppIconTile).first;
+          expect(iconTile, findsOneWidget, reason: 'width=$width');
+          expect(
+            tester.widget<AppIconTile>(iconTile).containerSize,
+            44,
+            reason: 'width=$width',
+          );
+          expect(find.byType(Image), findsOneWidget, reason: 'width=$width');
+          // The amount's full text is present SOMEWHERE on screen --
+          // never clipped/ellipsized (this row's amount Text never sets
+          // `overflow`/`maxLines` beyond 1 with `softWrap: false`, so
+          // "present" here already proves "not truncated") -- whether
+          // the adaptive layout chose the horizontal or stacked
+          // arrangement at this width.
+          expect(find.textContaining('987,654,321'), findsOneWidget, reason: 'width=$width');
+          expect(find.textContaining('Dining Out'), findsOneWidget, reason: 'width=$width');
+
+          // The amount must never render to the LEFT of the icon/title
+          // column -- i.e. never visually "pushed offscreen" to the
+          // left past the row's own leading content -- in EITHER
+          // adaptive arrangement.
+          //
+          // `>=` (not strict `>`) is the correct bound here, not a
+          // weakened one. In the horizontal arrangement the amount
+          // always sits strictly right of the icon (separated by the
+          // description column), so its dx is strictly greater. In the
+          // stacked arrangement (this 320px/1.6x/huge-VND-amount case),
+          // the full amount is placed via
+          // `Align(alignment: Alignment.centerRight, ...)` inside a
+          // full-width, stretched column that starts at the SAME left
+          // inset as the leading icon (both sit `outerPadding(16) +
+          // AppCard.padding(16) = 32px` from the row's left edge -- see
+          // `_TransactionRow`'s own "TOTAL horizontal inset ... 64
+          // total" comment). When the amount's natural width at this
+          // scale is wide enough to exactly fill that available column
+          // width, its right-aligned left edge coincides with -- not
+          // past -- the icon's left edge: flush, never offscreen to the
+          // left. That is the documented contract this test proves, and
+          // exactly-equal dx is a valid instance of it, not a failure of
+          // it.
+          final Finder amountFinder = find.textContaining('987,654,321');
+          final Finder iconFinder = find.byType(AppIconTile).first;
+          expect(
+            tester.getTopLeft(amountFinder).dx,
+            greaterThanOrEqualTo(tester.getTopLeft(iconFinder).dx),
+            reason: 'width=$width',
+          );
+
+          // This test loops over four widths, each building its own
+          // fresh `db`/`container` and `pumpWidget` tree -- unlike
+          // every other test here (one `db`/`container` pair per test,
+          // safely deferred to an `addTearDown`), deferring disposal to
+          // `addTearDown` here would leave EVERY iteration's `db` and
+          // `container` open simultaneously (they only run at the very
+          // end of the test body, not between loop iterations), which
+          // is exactly the "created the database class AppDatabase
+          // multiple times" / "Timer is still pending even after the
+          // widget tree was disposed" failure this masked: the next
+          // iteration's `pumpWidget` call replaces the widget tree
+          // without the previous iteration's Drift streams/container
+          // ever being torn down first. Disposing explicitly, in the
+          // same order `disposeInOrder` always uses, before the next
+          // iteration starts avoids that entirely.
+          await disposeInOrder(tester, container, db);
+        }
       },
     );
   });

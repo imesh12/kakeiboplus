@@ -34,6 +34,7 @@ class AppCard extends StatelessWidget {
     this.onTap,
     this.bordered = false,
     this.softShadow = false,
+    this.gradient,
   });
 
   final Widget child;
@@ -43,7 +44,8 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
 
   /// Defaults to `context.appTokens.colors.cardSurface`
-  /// (`colorScheme.surfaceContainerHigh`).
+  /// (`colorScheme.surfaceContainerHigh`). Ignored when [gradient] is
+  /// non-null -- see that field's own doc comment.
   final Color? color;
 
   /// Defaults to `context.appTokens.radii.medium` (16). Pass
@@ -99,6 +101,18 @@ class AppCard extends StatelessWidget {
   /// bounds, so this is invisible there -- see `app_card_test.dart`'s
   /// dedicated assertion.
 
+  /// Checkpoint U3 (docs/23_DASHBOARD_HEADER_BRAND_SPEC.md §9/§11):
+  /// an optional gradient background, for the one call site (the
+  /// Dashboard hero card) that needs KakeiboPlus's fixed brand
+  /// gradient instead of a flat theme color. `null` (the default) is
+  /// pixel-identical to every pre-existing [AppCard] call site -- this
+  /// param only ever changes the fill, never radius/padding/shape/
+  /// [onTap] behavior. When non-null, [color] is ignored and this
+  /// gradient paints instead; [bordered]/[softShadow] are meaningless
+  /// in combination with a gradient fill and are not currently used
+  /// together with one by any call site.
+  final Gradient? gradient;
+
   @override
   Widget build(BuildContext context) {
     final AppTokens tokens = context.appTokens;
@@ -108,6 +122,25 @@ class AppCard extends StatelessWidget {
       padding: padding ?? EdgeInsets.all(tokens.spacing.md),
       child: child,
     );
+
+    final Widget interactiveContent = onTap == null
+        ? content
+        : InkWell(onTap: onTap, borderRadius: borderRadius, child: content);
+
+    if (gradient != null) {
+      // A flat `Card.color` can't paint a `Gradient` -- this mirrors
+      // the shape/clip/tap behavior of the `Card` branch below exactly
+      // (same `borderRadius`, same `Clip.antiAlias`, same `InkWell`),
+      // just via `DecoratedBox` + `Material` instead of `Card`, since
+      // the surface fill itself is the only thing that needs to
+      // differ.
+      return Container(
+        margin: margin,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(gradient: gradient, borderRadius: borderRadius),
+        child: Material(type: MaterialType.transparency, child: interactiveContent),
+      );
+    }
 
     return Card(
       margin: margin,
@@ -119,9 +152,7 @@ class AppCard extends StatelessWidget {
         borderRadius: borderRadius,
         side: bordered ? BorderSide(color: tokens.colors.subtleBorder) : BorderSide.none,
       ),
-      child: onTap == null
-          ? content
-          : InkWell(onTap: onTap, borderRadius: borderRadius, child: content),
+      child: interactiveContent,
     );
   }
 }

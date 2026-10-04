@@ -30,6 +30,7 @@ class BudgetCalculation {
     required this.dailyRecommendedSpend,
     required this.projectedMonthEndSpend,
     required this.status,
+    required this.remainingDaysInclusive,
   });
 
   final BudgetMonth month;
@@ -44,6 +45,17 @@ class BudgetCalculation {
   final Money? dailyRecommendedSpend;
   final Money? projectedMonthEndSpend;
   final BudgetStatus? status;
+
+  /// The same `remainingDaysInclusive` value [BudgetCalculator.evaluate]
+  /// already computes internally to derive [dailyRecommendedSpend] --
+  /// exposed as its own field (Dashboard V1 Finalization checkpoint) so
+  /// a compact "Remaining Budget" presentation (e.g. a Home summary
+  /// tile) can show "N days left" without recomputing it independently
+  /// or reimplementing the current/historical/future-month period rule
+  /// documented on [BudgetCalculator.evaluate]. `null` under the exact
+  /// same condition [dailyRecommendedSpend]/[status] are `null` -- a
+  /// future month that hasn't started yet, see [isFutureMonth].
+  final int? remainingDaysInclusive;
 
   /// Whether [month] has not started yet relative to the `todayUtc`
   /// passed to [BudgetCalculator.evaluate] -- equivalent to
@@ -111,6 +123,7 @@ class BudgetCalculator {
         dailyRecommendedSpend: null,
         projectedMonthEndSpend: null,
         status: null,
+        remainingDaysInclusive: null,
       );
     }
 
@@ -135,6 +148,7 @@ class BudgetCalculator {
         daysElapsedInclusive: daysElapsedInclusive,
         totalDaysInMonth: totalDays,
       ),
+      remainingDaysInclusive: remainingDaysInclusive,
     );
   }
 }

@@ -9,6 +9,11 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String recurringNextDateLabel(String date) {
+    return 'Next: $date';
+  }
+
+  @override
   String get brandName => 'KakeiboPlus';
 
   @override
@@ -183,6 +188,37 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String homeGreetingMorning(String name) {
+    return 'Good morning, $name!';
+  }
+
+  @override
+  String homeGreetingAfternoon(String name) {
+    return 'Good afternoon, $name!';
+  }
+
+  @override
+  String homeGreetingEvening(String name) {
+    return 'Good evening, $name!';
+  }
+
+  @override
+  String get homeGreetingSupportingLine =>
+      'Small steps make a brighter future.';
+
+  @override
+  String get dashboardThisMonthLabel => 'THIS MONTH';
+
+  @override
+  String get dashboardRemainingLabel => 'remaining';
+
+  @override
+  String get dashboardOverspentLabel => 'Over this month\'s income';
+
+  @override
+  String get dashboardTotalBalanceLabel => 'TOTAL BALANCE';
+
+  @override
   String get accountsSectionTitle => 'Accounts';
 
   @override
@@ -210,17 +246,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get totalAvailableBalance => 'Total available balance';
 
   @override
-  String get incomeThisMonth => 'Income this month';
+  String get incomeThisMonth => 'Monthly Income';
 
   @override
-  String get spentThisMonth => 'Spent this month';
+  String get spentThisMonth => 'Monthly Spending';
 
   @override
-  String get dailySpendingPace => 'Daily spending pace';
+  String get dailySpendingPace => 'Daily Spending Pace';
 
   @override
-  String get dailySpendingPaceDetail =>
-      'Average spend per day so far this month';
+  String get dailySpendingPaceDetail => 'Daily average so far';
 
   @override
   String get remainingMonthlyBudget => 'Remaining monthly budget';
@@ -298,6 +333,55 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recurringStatusUpcoming => 'Upcoming';
+
+  @override
+  String get homeUpcomingCommitmentsTitle => 'Upcoming';
+
+  @override
+  String homeUpcomingInDaysLabel(int days) {
+    return 'In $days days';
+  }
+
+  @override
+  String get homeUpcomingEmptyTitle => 'No upcoming payments';
+
+  @override
+  String get homeUpcomingEmptySubtitle => 'You\'re all caught up!';
+
+  @override
+  String get homeUpcomingEmptyDescription =>
+      'Recurring bills and reminders will appear here.';
+
+  @override
+  String get homeSpendingThisMonthTitle => 'Spending this month';
+
+  @override
+  String get homeViewDetails => 'View details';
+
+  @override
+  String get homeSpendingNoDataMessage =>
+      'No spending recorded this month yet.';
+
+  @override
+  String get homeUncategorizedCategoryLabel => 'Other';
+
+  @override
+  String homeCategoryPercentLabel(String percent) {
+    return '$percent%';
+  }
+
+  @override
+  String get homeRemainingBudgetLabel => 'Remaining Budget';
+
+  @override
+  String homeBudgetDaysLeftLabel(int days) {
+    return 'Left for $days days';
+  }
+
+  @override
+  String homeBudgetTotalLabel(String amount) {
+    return 'Budget $amount';
+  }
 
   @override
   String couldNotLoadTransactions(String error) {
@@ -482,7 +566,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'No budgets set for this month yet. Tap + to set an overall monthly budget or a category budget.';
 
   @override
-  String get overallBudgetsSectionTitle => 'Overall budgets';
+  String get overallBudgetsSectionTitle => 'Overall Monthly Budgets';
 
   @override
   String get categoryBudgetsSectionTitle => 'Category budgets';
@@ -668,6 +752,48 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get noRecurringRulesYetTapMessage =>
       'No recurring rules yet. Tap + to add one.';
+
+  @override
+  String get recurringSearchLabel => 'Search recurring';
+
+  @override
+  String get recurringSearchHint => 'Search by name, category, or service';
+
+  @override
+  String get searchTooltip => 'Search';
+
+  @override
+  String get closeSearchTooltip => 'Close search';
+
+  @override
+  String get addRecurringRuleTooltip => 'Add recurring rule';
+
+  @override
+  String get recurringFilterAll => 'All';
+
+  @override
+  String get recurringFilterActive => 'Active';
+
+  @override
+  String get recurringFilterExpired => 'Expired';
+
+  @override
+  String get recurringEndedLabel => 'Ended';
+
+  @override
+  String get noActiveRecurringRulesMessage => 'No active recurring rules.';
+
+  @override
+  String get noUpcomingRecurringRulesMessage => 'Nothing due soon.';
+
+  @override
+  String get noExpiredRecurringRulesMessage => 'No expired recurring rules.';
+
+  @override
+  String get noMatchingRecurringRulesMessage => 'No matching recurring rules.';
+
+  @override
+  String get ruleActionsTooltip => 'More actions';
 
   @override
   String get subscriptionsTitle => 'Subscriptions';
@@ -1707,4 +1833,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editCreditLimitFieldLabel => 'Credit limit';
+
+  @override
+  String get recurringEstimateCardTitle => 'Monthly estimated total';
+
+  @override
+  String get recurringEstimateYearlyTotalLabel => 'Yearly total';
+
+  @override
+  String get recurringViewHistoryTooltip => 'View history';
+
+  @override
+  String get recurringHistoryTitle => 'Recurring history';
+
+  @override
+  String recurringServiceHistoryTitle(String name) {
+    return '$name history';
+  }
+
+  @override
+  String get recurringHistoryEmptyMessage => 'No history yet.';
+
+  @override
+  String get recurringHistoryStatusPosted => 'Paid';
+
+  @override
+  String get recurringHistoryStatusSkipped => 'Skipped';
+
+  @override
+  String get deleteBudgetConfirmTitle => 'Remove this budget?';
+
+  @override
+  String get deleteBudgetConfirmMessage =>
+      'The budget will be removed. Your transactions will be kept.';
 }

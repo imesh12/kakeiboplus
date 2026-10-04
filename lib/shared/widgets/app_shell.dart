@@ -91,65 +91,133 @@ class AppShell extends StatelessWidget {
     // unchanged by this checkpoint.
     final AppTokens tokens = context.appTokens;
 
+    final Widget navigationBar = NavigationBar(
+      selectedIndex: _currentIndex(context),
+      onDestinationSelected: (int index) {
+        switch (index) {
+          case 0:
+            context.go(AppRoutes.home);
+          case 1:
+            context.go(AppRoutes.activity);
+          case 2:
+            showAddTransactionSheet(context);
+          case 3:
+            context.go(AppRoutes.accounts);
+          case 4:
+            context.go(AppRoutes.more);
+        }
+      },
+      destinations: <NavigationDestination>[
+        NavigationDestination(
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(Icons.home),
+          label: l10n.navHome,
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.receipt_long_outlined),
+          selectedIcon: const Icon(Icons.receipt_long),
+          label: l10n.navActivity,
+        ),
+        NavigationDestination(
+          icon: _addIcon(colors, Icons.add_circle_outline),
+          selectedIcon: _addIcon(colors, Icons.add_circle),
+          label: l10n.navAdd,
+        ),
+        // V1 Navigation Shell Implementation Checkpoint: Accounts
+        // promoted to a primary destination -- same wallet glyph
+        // `SettingsScreen`'s former Accounts row used, so the icon's
+        // meaning carries over rather than being reinvented.
+        NavigationDestination(
+          icon: const Icon(Icons.account_balance_wallet_outlined),
+          selectedIcon: const Icon(Icons.account_balance_wallet),
+          label: l10n.navAccounts,
+        ),
+        // V1 Navigation Shell Implementation Checkpoint: More
+        // replaces Profile's former bottom-nav slot -- the
+        // conventional "more/overflow" glyph, since this
+        // destination is now a tool/settings directory (see
+        // `more_screen.dart`) rather than a single person's profile.
+        NavigationDestination(
+          icon: const Icon(Icons.more_horiz_outlined),
+          selectedIcon: const Icon(Icons.more_horiz),
+          label: l10n.navMore,
+        ),
+      ],
+    );
+
+    // U3 Final Polish Pass (item 10 -- "Current selected bottom-nav
+    // color looks gray. Change the selected-state visual treatment to
+    // KakeiboPlus light green/mint."). `navSelectedColor` is `null` for
+    // every theme that doesn't explicitly opt in (Pink/Ocean/Forest --
+    // see `AppSemanticColors.navSelectedColor`'s own doc comment), so
+    // this bar renders EXACTLY as it did before this pass on those
+    // themes: the plain [navigationBar] above, completely unwrapped,
+    // still reading its selected-state colors from
+    // `AppTheme`'s existing `navigationBarTheme`
+    // (`colorScheme.secondaryContainer`/`onSecondaryContainer`) with no
+    // local override at all.
+    //
+    // On Light/Dark, this wraps ONLY the nav bar (never `body: child`)
+    // in a locally-scoped [Theme] that layers three overrides on top of
+    // the CURRENT effective `navigationBarTheme` (`.copyWith`, not a
+    // fresh `NavigationBarThemeData()` -- so `backgroundColor`/
+    // `surfaceTintColor`/`elevation` stay exactly what `AppTheme`
+    // already set, unchanged):
+    //  - `indicatorColor`: the pill behind the selected icon, a soft
+    //    mint/light-green tint DERIVED from [navSelectedColor] at a low
+    //    alpha -- the same color-tinted-background idiom [AppIconTile]
+    //    already uses for every tinted-icon container in this app,
+    //    rather than a second hard-coded literal.
+    //  - `iconTheme`/`labelTextStyle`: color-only `WidgetStateProperty`s
+    //    -- selected reads [navSelectedColor] (teal/emerald), unselected
+    //    reads `colorScheme.onSurfaceVariant` (the same muted gray-blue
+    //    tone Material 3's own unselected default already used, so
+    //    "inactive icon/text muted gray-blue" is unchanged). Size/weight
+    //    are the standard Material 3 nav-bar values (24 icon / 12sp
+    //    label) and are NOT varied between selected/unselected, so only
+    //    color communicates the selected state, per this pass's own
+    //    literal spec.
+    //
+    // Purely a color/paint change: `_currentIndex`, routing, and the Add
+    // action's own hand-built circle (which already sets an explicit
+    // `color`/`size` on its own `Icon`, so it never reads this ambient
+    // theme at all) are completely untouched.
+    final Color? navSelectedColor = tokens.colors.navSelectedColor;
+    final Widget themedNavigationBar = navSelectedColor == null
+        ? navigationBar
+        : Theme(
+            data: Theme.of(context).copyWith(
+              navigationBarTheme: Theme.of(context).navigationBarTheme.copyWith(
+                indicatorColor: navSelectedColor.withValues(alpha: 0.16),
+                iconTheme: WidgetStateProperty.resolveWith<IconThemeData?>((Set<WidgetState> states) {
+                  return IconThemeData(
+                    size: 24,
+                    color: states.contains(WidgetState.selected)
+                        ? navSelectedColor
+                        : colors.onSurfaceVariant,
+                  );
+                }),
+                labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>((Set<WidgetState> states) {
+                  return TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: states.contains(WidgetState.selected)
+                        ? navSelectedColor
+                        : colors.onSurfaceVariant,
+                  );
+                }),
+              ),
+            ),
+            child: navigationBar,
+          );
+
     return Scaffold(
       body: child,
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: tokens.colors.subtleBorder)),
         ),
-        child: NavigationBar(
-          selectedIndex: _currentIndex(context),
-          onDestinationSelected: (int index) {
-            switch (index) {
-              case 0:
-                context.go(AppRoutes.home);
-              case 1:
-                context.go(AppRoutes.activity);
-              case 2:
-                showAddTransactionSheet(context);
-              case 3:
-                context.go(AppRoutes.accounts);
-              case 4:
-                context.go(AppRoutes.more);
-            }
-          },
-          destinations: <NavigationDestination>[
-            NavigationDestination(
-              icon: const Icon(Icons.home_outlined),
-              selectedIcon: const Icon(Icons.home),
-              label: l10n.navHome,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.receipt_long_outlined),
-              selectedIcon: const Icon(Icons.receipt_long),
-              label: l10n.navActivity,
-            ),
-            NavigationDestination(
-              icon: _addIcon(colors, Icons.add_circle_outline),
-              selectedIcon: _addIcon(colors, Icons.add_circle),
-              label: l10n.navAdd,
-            ),
-            // V1 Navigation Shell Implementation Checkpoint: Accounts
-            // promoted to a primary destination -- same wallet glyph
-            // `SettingsScreen`'s former Accounts row used, so the icon's
-            // meaning carries over rather than being reinvented.
-            NavigationDestination(
-              icon: const Icon(Icons.account_balance_wallet_outlined),
-              selectedIcon: const Icon(Icons.account_balance_wallet),
-              label: l10n.navAccounts,
-            ),
-            // V1 Navigation Shell Implementation Checkpoint: More
-            // replaces Profile's former bottom-nav slot -- the
-            // conventional "more/overflow" glyph, since this
-            // destination is now a tool/settings directory (see
-            // `more_screen.dart`) rather than a single person's profile.
-            NavigationDestination(
-              icon: const Icon(Icons.more_horiz_outlined),
-              selectedIcon: const Icon(Icons.more_horiz),
-              label: l10n.navMore,
-            ),
-          ],
-        ),
+        child: themedNavigationBar,
       ),
     );
   }

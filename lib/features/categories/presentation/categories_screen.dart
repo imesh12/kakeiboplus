@@ -113,11 +113,18 @@ class _CategoryList extends ConsumerWidget {
                   // renders through -- see that widget's own doc comment
                   // for why this guarantees identical rendering, not just
                   // visual similarity, across screens.
+                  // App Icon Integration checkpoint: bumped from
+                  // `small` (32px slot / 16px glyph) to `large` (48px
+                  // slot / 24px glyph, or the curated 32px artwork via
+                  // `CategoryIdentityIcon`'s own new asset lookup) --
+                  // this is a primary app list row, and the 48-52px
+                  // slot / 32-36px artwork spec explicitly rules out a
+                  // tiny icon here.
                   leading: CategoryIdentityIcon(
                     categoryId: category.id,
                     iconKey: category.icon,
                     colorKey: category.colorKey,
-                    size: AppIconTileSize.small,
+                    size: AppIconTileSize.large,
                   ),
                   title: Text(category.name, style: context.appTypography.cardTitle),
                   trailing: Row(

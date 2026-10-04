@@ -1,4 +1,6 @@
 {
+  "recurringNextDateLabel": "次回: {date}",
+  "@recurringNextDateLabel": {"placeholders": {"date": {"type": "String"}}},
   "@@locale": "ja",
   "brandName": "KakeiboPlus",
   "@brandName": {
@@ -101,6 +103,53 @@
       }
     }
   },
+  "homeGreetingMorning": "おはようございます、{name}さん！",
+  "@homeGreetingMorning": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time before 12:00.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeGreetingAfternoon": "こんにちは、{name}さん！",
+  "@homeGreetingAfternoon": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time 12:00-17:59.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeGreetingEvening": "こんばんは、{name}さん！",
+  "@homeGreetingEvening": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): time-aware Dashboard greeting, local device time 18:00 or later.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeGreetingSupportingLine": "小さな一歩が、明るい未来をつくります。",
+  "@homeGreetingSupportingLine": {
+    "description": "Checkpoint U3 (docs/23 SS4.2): the Dashboard greeting's one short supporting line."
+  },
+  "dashboardThisMonthLabel": "今月",
+  "@dashboardThisMonthLabel": {
+    "description": "Checkpoint U3 (docs/23 SS4.3): the hero card's small eyebrow label above the monthly-remaining headline."
+  },
+  "dashboardRemainingLabel": "残り",
+  "@dashboardRemainingLabel": {
+    "description": "Checkpoint U3 (docs/23 SS5.2/SS5.5): the caption under the hero headline for a zero-or-positive this-month-remaining amount."
+  },
+  "dashboardOverspentLabel": "今月の収入を超えています",
+  "@dashboardOverspentLabel": {
+    "description": "Checkpoint U3 (docs/23 SS5.5): the caption under the hero headline when this month's expense has exceeded this month's income."
+  },
+  "dashboardTotalBalanceLabel": "合計残高",
+  "@dashboardTotalBalanceLabel": {
+    "description": "Design Reversal Checkpoint (KakeiboPlus header reference): the hero card's single eyebrow label above its one primary balance figure (CurrencyDashboardSummary.availableBalance), replacing the per-currency code + Living/Home currency badge and the THIS MONTH/remaining pair that used to occupy this space. Presentation relabel only -- no new calculation; totalAvailableBalance still describes the same figure on secondary currency cards."
+  },
   "accountsSectionTitle": "口座",
   "manage": "管理",
   "couldNotLoadBalances": "残高を読み込めませんでした: {error}",
@@ -125,7 +174,7 @@
   "incomeThisMonth": "今月の収入",
   "spentThisMonth": "今月の支出",
   "dailySpendingPace": "1日あたりの支出ペース",
-  "dailySpendingPaceDetail": "今月これまでの1日あたりの平均支出",
+  "dailySpendingPaceDetail": "これまでの1日あたりの平均",
   "remainingMonthlyBudget": "今月の残り予算",
   "noBudgetSetMessage": "まだ今月の予算を設定していません。設定すると、使える残り金額がここに表示されます。",
   "setMonthlyBudgetButton": "今月の予算を設定",
@@ -170,6 +219,26 @@
   "setUpRecurringButton": "定期を設定",
   "recurringStatusDueToday": "今日が期限",
   "recurringStatusUpcoming": "今後の予定",
+  "homeUpcomingCommitmentsTitle": "今後の予定",
+  "homeUpcomingInDaysLabel": "あと{days}日",
+  "@homeUpcomingInDaysLabel": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "homeUpcomingEmptyTitle": "予定されている支払いはありません",
+  "homeUpcomingEmptySubtitle": "すべて完了しています！",
+  "homeUpcomingEmptyDescription": "定期的な支払いやリマインダーがここに表示されます。",
+  "homeSpendingThisMonthTitle": "今月の支出",
+  "homeViewDetails": "詳細を表示",
+  "homeSpendingNoDataMessage": "今月はまだ支出が記録されていません。",
+  "homeUncategorizedCategoryLabel": "その他",
+  "homeCategoryPercentLabel": "{percent}%",
+  "homeRemainingBudgetLabel": "残りの予算",
+  "homeBudgetDaysLeftLabel": "残り{days}日",
+  "homeBudgetTotalLabel": "予算 {amount}",
   "couldNotLoadTransactions": "取引を読み込めませんでした: {error}",
   "@couldNotLoadTransactions": {
     "placeholders": {
@@ -284,7 +353,7 @@
     }
   },
   "noBudgetsSetThisMonthMessage": "今月の予算はまだ設定されていません。+ をタップして全体予算またはカテゴリ予算を設定してください。",
-  "overallBudgetsSectionTitle": "全体予算",
+  "overallBudgetsSectionTitle": "月間の全体予算",
   "categoryBudgetsSectionTitle": "カテゴリ予算",
   "overallMonthlyBudgetOption": "毎月の全体予算",
   "categoryBudgetOption": "カテゴリ予算",
@@ -377,6 +446,20 @@
     }
   },
   "noRecurringRulesYetTapMessage": "定期ルールがまだありません。+ をタップして追加してください。",
+  "recurringSearchLabel": "定期ルールを検索",
+  "recurringSearchHint": "名前、カテゴリ、サービスで検索",
+  "searchTooltip": "検索",
+  "closeSearchTooltip": "検索を閉じる",
+  "addRecurringRuleTooltip": "定期ルールを追加",
+  "recurringFilterAll": "すべて",
+  "recurringFilterActive": "有効",
+  "recurringFilterExpired": "期限切れ",
+  "recurringEndedLabel": "終了済み",
+  "noActiveRecurringRulesMessage": "有効な定期ルールはありません。",
+  "noUpcomingRecurringRulesMessage": "近日中の予定はありません。",
+  "noExpiredRecurringRulesMessage": "期限切れの定期ルールはありません。",
+  "noMatchingRecurringRulesMessage": "一致する定期ルールが見つかりません。",
+  "ruleActionsTooltip": "その他の操作",
   "subscriptionsTitle": "サブスクリプション",
   "subscriptionsEstimatedMonthlyTotalLabel": "推定月額",
   "subscriptionsEstimatedYearlyTotalLabel": "推定年額",
@@ -826,5 +909,15 @@
   "creditFacilityDetailsSectionTitle": "クレジットカードの詳細",
   "availableCreditLabel": "利用可能額",
   "creditUtilizationLabel": "利用率",
-  "editCreditLimitFieldLabel": "利用限度額"
+  "editCreditLimitFieldLabel": "利用限度額",
+  "recurringEstimateCardTitle": "月間見積もり合計",
+  "recurringEstimateYearlyTotalLabel": "年間合計",
+  "recurringViewHistoryTooltip": "履歴を見る",
+  "recurringHistoryTitle": "定期支払いの履歴",
+  "recurringServiceHistoryTitle": "{name}の履歴",
+  "recurringHistoryEmptyMessage": "まだ履歴がありません。",
+  "recurringHistoryStatusPosted": "支払い済み",
+  "recurringHistoryStatusSkipped": "スキップ済み",
+  "deleteBudgetConfirmTitle": "この予算を削除しますか？",
+  "deleteBudgetConfirmMessage": "予算を削除します。取引履歴は保持されます。"
 }

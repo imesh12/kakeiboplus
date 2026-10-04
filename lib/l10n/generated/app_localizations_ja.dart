@@ -9,6 +9,11 @@ class AppLocalizationsJa extends AppLocalizations {
   AppLocalizationsJa([String locale = 'ja']) : super(locale);
 
   @override
+  String recurringNextDateLabel(String date) {
+    return '次回: $date';
+  }
+
+  @override
   String get brandName => 'KakeiboPlus';
 
   @override
@@ -181,6 +186,36 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String homeGreetingMorning(String name) {
+    return 'おはようございます、$nameさん！';
+  }
+
+  @override
+  String homeGreetingAfternoon(String name) {
+    return 'こんにちは、$nameさん！';
+  }
+
+  @override
+  String homeGreetingEvening(String name) {
+    return 'こんばんは、$nameさん！';
+  }
+
+  @override
+  String get homeGreetingSupportingLine => '小さな一歩が、明るい未来をつくります。';
+
+  @override
+  String get dashboardThisMonthLabel => '今月';
+
+  @override
+  String get dashboardRemainingLabel => '残り';
+
+  @override
+  String get dashboardOverspentLabel => '今月の収入を超えています';
+
+  @override
+  String get dashboardTotalBalanceLabel => '合計残高';
+
+  @override
   String get accountsSectionTitle => '口座';
 
   @override
@@ -215,7 +250,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dailySpendingPace => '1日あたりの支出ペース';
 
   @override
-  String get dailySpendingPaceDetail => '今月これまでの1日あたりの平均支出';
+  String get dailySpendingPaceDetail => 'これまでの1日あたりの平均';
 
   @override
   String get remainingMonthlyBudget => '今月の残り予算';
@@ -291,6 +326,53 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recurringStatusUpcoming => '今後の予定';
+
+  @override
+  String get homeUpcomingCommitmentsTitle => '今後の予定';
+
+  @override
+  String homeUpcomingInDaysLabel(int days) {
+    return 'あと$days日';
+  }
+
+  @override
+  String get homeUpcomingEmptyTitle => '予定されている支払いはありません';
+
+  @override
+  String get homeUpcomingEmptySubtitle => 'すべて完了しています！';
+
+  @override
+  String get homeUpcomingEmptyDescription => '定期的な支払いやリマインダーがここに表示されます。';
+
+  @override
+  String get homeSpendingThisMonthTitle => '今月の支出';
+
+  @override
+  String get homeViewDetails => '詳細を表示';
+
+  @override
+  String get homeSpendingNoDataMessage => '今月はまだ支出が記録されていません。';
+
+  @override
+  String get homeUncategorizedCategoryLabel => 'その他';
+
+  @override
+  String homeCategoryPercentLabel(String percent) {
+    return '$percent%';
+  }
+
+  @override
+  String get homeRemainingBudgetLabel => '残りの予算';
+
+  @override
+  String homeBudgetDaysLeftLabel(int days) {
+    return '残り$days日';
+  }
+
+  @override
+  String homeBudgetTotalLabel(String amount) {
+    return '予算 $amount';
+  }
 
   @override
   String couldNotLoadTransactions(String error) {
@@ -469,7 +551,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '今月の予算はまだ設定されていません。+ をタップして全体予算またはカテゴリ予算を設定してください。';
 
   @override
-  String get overallBudgetsSectionTitle => '全体予算';
+  String get overallBudgetsSectionTitle => '月間の全体予算';
 
   @override
   String get categoryBudgetsSectionTitle => 'カテゴリ予算';
@@ -648,6 +730,48 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get noRecurringRulesYetTapMessage => '定期ルールがまだありません。+ をタップして追加してください。';
+
+  @override
+  String get recurringSearchLabel => '定期ルールを検索';
+
+  @override
+  String get recurringSearchHint => '名前、カテゴリ、サービスで検索';
+
+  @override
+  String get searchTooltip => '検索';
+
+  @override
+  String get closeSearchTooltip => '検索を閉じる';
+
+  @override
+  String get addRecurringRuleTooltip => '定期ルールを追加';
+
+  @override
+  String get recurringFilterAll => 'すべて';
+
+  @override
+  String get recurringFilterActive => '有効';
+
+  @override
+  String get recurringFilterExpired => '期限切れ';
+
+  @override
+  String get recurringEndedLabel => '終了済み';
+
+  @override
+  String get noActiveRecurringRulesMessage => '有効な定期ルールはありません。';
+
+  @override
+  String get noUpcomingRecurringRulesMessage => '近日中の予定はありません。';
+
+  @override
+  String get noExpiredRecurringRulesMessage => '期限切れの定期ルールはありません。';
+
+  @override
+  String get noMatchingRecurringRulesMessage => '一致する定期ルールが見つかりません。';
+
+  @override
+  String get ruleActionsTooltip => 'その他の操作';
 
   @override
   String get subscriptionsTitle => 'サブスクリプション';
@@ -1661,4 +1785,36 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get editCreditLimitFieldLabel => '利用限度額';
+
+  @override
+  String get recurringEstimateCardTitle => '月間見積もり合計';
+
+  @override
+  String get recurringEstimateYearlyTotalLabel => '年間合計';
+
+  @override
+  String get recurringViewHistoryTooltip => '履歴を見る';
+
+  @override
+  String get recurringHistoryTitle => '定期支払いの履歴';
+
+  @override
+  String recurringServiceHistoryTitle(String name) {
+    return '$nameの履歴';
+  }
+
+  @override
+  String get recurringHistoryEmptyMessage => 'まだ履歴がありません。';
+
+  @override
+  String get recurringHistoryStatusPosted => '支払い済み';
+
+  @override
+  String get recurringHistoryStatusSkipped => 'スキップ済み';
+
+  @override
+  String get deleteBudgetConfirmTitle => 'この予算を削除しますか？';
+
+  @override
+  String get deleteBudgetConfirmMessage => '予算を削除します。取引履歴は保持されます。';
 }

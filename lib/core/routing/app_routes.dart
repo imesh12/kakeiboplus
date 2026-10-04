@@ -103,6 +103,22 @@ abstract class AppRoutes {
   /// `docs/14_DECISION_LOG.md` ADR-023.
   static const String recurring = '/recurring';
 
+  /// Recurring UI Upgrade + History Views checkpoint: the all-services
+  /// year history (Case 1), reached by tapping the Recurring screen's
+  /// summary card. A literal path, registered before
+  /// [recurringRuleHistoryPath] in `app_router.dart` -- same ordering
+  /// precaution every other literal-before-parameterized pair in this
+  /// file already follows (e.g. `/accounts/add` before `/accounts/:id`).
+  static const String recurringHistory = '/recurring/history';
+
+  /// Path template for [GoRoute] registration -- see [recurringRuleHistory]
+  /// for building an actual navigable path for a specific rule id.
+  static const String recurringRuleHistoryPath = '/recurring/history/:ruleId';
+
+  /// One recurring rule's own history (Case 2), reached from its row on
+  /// the Recurring screen.
+  static String recurringRuleHistory(String ruleId) => '/recurring/history/$ruleId';
+
   /// International preference editing -- International / Localization
   /// Foundation Checkpoint 3B. Reached from the Profile/Settings screen.
   static const String internationalPreferences = '/international-preferences';

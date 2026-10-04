@@ -3412,3 +3412,716 @@ the `ServiceIdentityFamily` rename); `test/features/services/domain
 /service_identity_catalog_test.dart` (new); `test/features/services
 /presentation/service_identity_icon_test.dart` (updated for the
 `serviceIdentityKey`-based API).
+
+## ADR-046 — Checkpoint U3: Dashboard Header & Brand (docs/23) implemented additively, never as a silent reversal of Checkpoint 10
+
+**Status:** Implemented.
+
+**Context:** `docs/23_DASHBOARD_HEADER_BRAND_SPEC.md` was added to the
+repository (untracked, discovered via `git status`, not mentioned in
+the task that introduced it) alongside a new production mascot asset,
+`assets/branding/pets/kakeiboplus_dog_default.png`. It defines a much
+larger "Dashboard V1 Finalization" checkpoint than the task that
+surfaced it: a new hero financial metric, a teal/mint brand color
+system, new typography direction, new greeting copy, a brand top bar,
+and a specific mascot placement (inside the hero card, right side) --
+directly conflicting, in two separate places, with decisions this
+codebase had already made deliberately and documented:
+
+1. `app_theme.dart`'s own header comment records that Checkpoint 10
+   Visual Convergence already recolored the app's shared seed FROM
+   teal/green TO blue, on purpose.
+2. `_MonthlyMetricsSection`'s own doc comment records that Checkpoint
+   10 already moved Income/Spending OUT of the hero card to a sibling
+   section below it, on purpose -- docs/23's mockup puts them back in.
+
+Both conflicts were surfaced to the user before implementation (not
+silently resolved either way), per this project's "if requirements
+genuinely conflict, explain the conflict and ask before an irreversible
+architectural decision" rule. Decisions below reflect the user's
+explicit answers.
+
+**Decision:**
+
+1. **New hero metric, additive, not a Net Worth exposure.**
+   `CurrencyDashboardSummary.remainingThisMonth` (dashboard_providers.dart)
+   is `income - expense` -- a pure composition of two fields this class
+   already computed and already tested (`FinanceEngine
+   .incomeExpenseTotals`, unchanged). It introduces no new financial
+   calculation and is independent of `availableBalance`/`netWorth` (see
+   `currency_dashboard_summary_test.dart`'s dedicated regression test
+   for that independence). docs/23 §5.1's "never expose Net Worth"
+   requirement is unaffected -- `netWorth` still renders nowhere on
+   this screen.
+
+2. **The pre-U3 hero figure (`availableBalance`) is demoted, not
+   removed.** It still renders inside `_HeroCurrencyCard`, as a smaller
+   supporting line, with its own pre-existing negative-balance
+   indicator and `_LivingCurrencyEquivalentLine` completely unchanged.
+   `remainingThisMonth` is a NEW, independent negative state
+   (`isOverspent`) with its own indicator -- the two never share one
+   flag, since they can each be negative independently.
+
+3. **Income/Expense are NOT duplicated inside the hero card.** Per the
+   user's explicit choice, `_MonthlyMetricsSection` (already directly
+   below the hero card since Checkpoint 10) is untouched and remains
+   the one place those two figures render. The hero card gets only the
+   new headline + mascot.
+
+4. **The teal/mint brand gradient is scoped to exactly one widget, on
+   exactly two themes -- never a global reseed.**
+   `AppSemanticColors.heroGradient` (app_tokens.dart) is a new,
+   optional (`null`-by-default) field, following the same "consumed by
+   exactly one decorative layer" principle `ambientGradient` already
+   established, and the same "fixed literal brand color, not
+   theme-derived" precedent the More screen's wordmark already set.
+   `AppTheme.light()`/`dark()` pass docs/23 §11's exact hex stops
+   (`#0F9E9A` → `#19B7A5`, light; a deepened analogue for dark, §18);
+   `pink()`/`ocean()`/`forest()` pass nothing, so those three themes
+   keep their own already-tuned flat `primaryContainer` hero fill,
+   completely unaffected. `ColorScheme.primary` for every theme,
+   including light/dark, is unchanged -- `AppTheme.light().colorScheme
+   .primary` is still Checkpoint 10's blue (`0xFF2563EB`); see
+   `app_theme_test.dart`'s explicit regression test for this.
+   `AppCard` gained a matching optional `gradient` param (`null` by
+   default, so every pre-existing call site is pixel-identical) to
+   paint it without a second, Dashboard-only card primitive.
+
+5. **Mascot lives inside `_HeroCurrencyCard`, as a `Row`/`Expanded`
+   sibling of the headline amount, not a `Stack`/`Positioned` overlay.**
+   This class had an older doc comment anticipating a future mascot via
+   a `Stack` overlay seam; that seam was deliberately NOT used here,
+   because docs/23 §6.3 requires the mascot to "never cover the main
+   amount" / "never cover income/expense labels" -- a `Row` sibling
+   makes that true by construction (Flutter lays out flex siblings
+   without overlap), for any locale/text-scale/amount length, where an
+   absolutely-positioned overlay could not guarantee it short of manual
+   collision math. `DashboardMascot`/`MascotKey`/`mascotAssetPathFor`
+   (introduced earlier this same session, `lib/shared/branding/`) are
+   otherwise unchanged -- only the call site moved, from beside the
+   Dashboard greeting to inside the hero card.
+
+6. **Brand top bar (docs/23 §4.1) implemented as a static identity row,
+   not a new AppBar action.** Reuses the exact `more_screen.dart`
+   precedent (`l10n.brandName` + the already-registered wordmark PNG,
+   `Semantics(image: true)` + `Image.excludeFromSemantics`) rather than
+   adding a second, competing brand surface. Deliberately adds no new
+   icon/action to avoid an unauthorized navigation-architecture change
+   (docs/23 §4.1 itself: "avoid multiple competing actions").
+
+7. **Time-of-day greeting is a pure, testable function, not a new
+   clock service.** `GreetingPeriod`/`GreetingPeriod.forHour`
+   (`lib/features/dashboard/domain/greeting_period.dart`) is a plain,
+   Flutter-free enum; `HomeScreen` calls it with `DateTime.now().hour`
+   (already local device time, the same assumption every "this
+   calendar month" calculation on this screen already makes). Three
+   new localized greeting variants (`homeGreetingMorning/Afternoon
+   /Evening`) plus one supporting-line key were added; the pre-existing
+   `homeGreeting` key is left in place, unused, rather than deleted.
+
+**Deliberately deferred, not implemented this checkpoint (flagged, not
+silently skipped):**
+
+- Custom typography (docs/23 §13: Plus Jakarta Sans/Inter/Noto Sans JP)
+  -- requires sourcing and bundling real font-asset files this sandbox
+  cannot verify; existing typography tokens/hierarchy were reused
+  instead. docs/23 itself frames this as conditional ("if custom fonts
+  are adopted").
+- Pink/Ocean/Forest getting their own hero-card skin -- docs/23 §19
+  itself frames this as "may alter... possibly hero skin in the
+  future," not this checkpoint; those three themes' hero card is
+  unchanged.
+- Pixel-level contrast verification of `colorScheme.error` (the
+  existing negative-balance indicator, left unchanged) against the new
+  teal gradient -- not verifiable without a running app; flagged for a
+  quick visual check.
+
+**Files changed:** `lib/features/dashboard/presentation
+/dashboard_providers.dart` (`remainingThisMonth` getter);
+`lib/shared/theme/app_tokens.dart` (`AppSemanticColors.heroGradient`);
+`lib/shared/theme/app_theme.dart` (light/dark hero gradients);
+`lib/shared/widgets/app_card.dart` (`gradient` param);
+`lib/features/dashboard/presentation/home_screen.dart` (brand row,
+time-aware greeting, `_HeroCurrencyCard` rewrite); `lib/features
+/dashboard/domain/greeting_period.dart` (new); `lib/l10n/app_en.arb`,
+`lib/l10n/app_ja.arb`, and the three generated `app_localizations*.dart`
+files; `test/widget/home_screen_test.dart`; `test/shared/theme
+/app_theme_test.dart`; `test/widget/shared/app_card_test.dart`;
+`test/features/dashboard/domain/greeting_period_test.dart` (new);
+`test/features/dashboard/presentation/currency_dashboard_summary_test.dart`
+(new); `pubspec.yaml` (`assets/branding/pets/` directory registration,
+from the same task that added the mascot asset, earlier this session).
+
+
+## ADR-047 — Design Reversal Checkpoint: hero card simplified to "Total Balance" only, superseding ADR-046's "THIS MONTH" headline
+
+**Status:** Implemented.
+
+**Context:** The user supplied a KakeiboPlus header/dashboard reference
+(`docs/design/dashboard-light.png` / `dashboard-pink.png`, untracked
+mockups added alongside docs/23) and an explicit, detailed instruction
+to bring the hero card closer to it: a single teal/mint premium hero
+card showing only "Total Balance" + one large amount, no currency-code
+label, no "Living currency"/"Home currency" badge, with the mascot on
+its right side -- directly reversing two of ADR-046's own decisions
+(the "THIS MONTH / remaining-this-month" headline, and the hero's
+currency-code + badge row). The user's instruction explicitly named
+this a presentation/style refinement ("do not invent a new financial
+calculation... keep financial truth unchanged") and explicitly scoped
+the badge/currency-code removal to the hero card only.
+
+**Decision:**
+
+1. **Headline metric reverts to `CurrencyDashboardSummary
+   .availableBalance`**, the same figure `_SecondaryCurrencyCard` still
+   shows for every other currency -- not a new calculation, and not
+   `netWorth` (docs/23 §5.1's "never expose Net Worth" ban is
+   unaffected). `remainingThisMonth` (ADR-046, `income - expense`) is
+   NOT deleted -- it is simply no longer displayed in the hero,
+   following this codebase's own "leave an unused-but-harmless getter/
+   key in place rather than delete it" convention (e.g. the pre-U3
+   fixed greeting string). `dashboardThisMonthLabel`/
+   `dashboardRemainingLabel`/`dashboardOverspentLabel` (ADR-046) are
+   left in the ARB/generated files the same way, now unused.
+
+2. **New eyebrow label, hero-only.** `AppLocalizations
+   .dashboardTotalBalanceLabel` ("TOTAL BALANCE" / "合計残高") is a new
+   key, deliberately distinct from the existing `totalAvailableBalance`
+   ("Total available balance") that `_SecondaryCurrencyCard` keeps
+   using unchanged -- the user's instruction repeatedly quoted the
+   shorter literal phrase "Total Balance," so this is a minted key
+   rather than a reuse, following the same additive-key precedent
+   `dashboardThisMonthLabel` itself set under ADR-046.
+
+3. **Currency-code label and `_CurrencyBadge` removed from the hero
+   card ONLY.** The user's instruction referred to "the hero card" in
+   every constraint on this point; `_SecondaryCurrencyCard` was not
+   mentioned and is completely unchanged -- it still renders its own
+   currency code and "Living currency"/"Home currency" badge. Multi-
+   currency identity (a P0 pillar of this project) is therefore still
+   visible on Home, just no longer duplicated onto the primary/hero
+   card specifically. `_HeroCurrencyCard`'s `badge` constructor
+   parameter was removed (no longer read anywhere); `_CurrencyBadge`
+   itself is untouched and still used by the secondary card.
+
+4. **`_LivingCurrencyEquivalentLine` kept**, immediately under the new
+   headline -- the one "small secondary converted amount" the user's
+   instruction explicitly allowed ("may be used only if it improves
+   the design and doesn't clutter"). Unchanged behavior/key.
+
+5. **Monthly metrics section (`_MonthlyMetricsSection`) is unchanged
+   as a widget** -- still the one place Income/Expense/Daily-pace
+   render, still never duplicated inside the hero. Its instantiation
+   directly under the hero (`_CurrencySummarySection`) is now wrapped
+   in one quiet, bordered `AppCard` (`AppCard.bordered`, already
+   existing, previously unused at this call site) for the requested
+   "quiet white/light cards, subtle borders" polish pass -- deliberately
+   NOT applied inside the shared widget itself, so `_SecondaryCurrencyCard`
+   (which reuses the same widget inside its own already-bordered/
+   shadowed card) is not affected by a nested double-border.
+
+6. **AppBar "Home" title de-emphasized, not removed.** Restyled to a
+   small, muted, non-bold style (`elevation`/`scrolledUnderElevation:
+   0`) rather than deleted, so the existing `find.text('Home')`/
+   `find.text('ホーム')` localization assertions keep passing --
+   satisfies the "reduce the generic app-bar feeling" request without
+   touching navigation architecture or any test's text expectations.
+
+7. **Greeting typography**: bolded (`fontWeight.w700`) and given a
+   touch more vertical rhythm (wordmark→greeting 16→20, greeting→
+   supporting-line 2→4) for a "premium" feel -- text/keys unchanged,
+   `GreetingPeriod` domain logic (ADR from a prior checkpoint)
+   untouched.
+
+**Rejected / deferred:**
+
+- Per-tile bordered cards for Income/Spending/Daily-pace individually
+  (closer to the reference screenshot's own separate cards) -- deferred
+  in favor of one wrapping card, to avoid touching the shared
+  `_MonthlyMetricsSection`/`_MetricTile` widgets that `_SecondaryCurrencyCard`
+  also depends on. Can be revisited as a follow-up if the single
+  wrapping card doesn't read as intended once actually rendered.
+- Whether `_SecondaryCurrencyCard` should ALSO simplify its own
+  currency-code/badge row to match the hero's new minimalism -- the
+  user's instruction only ever discussed "the hero card"; left
+  unchanged pending an explicit follow-up ask.
+
+**Files changed:** `lib/features/dashboard/presentation/home_screen.dart`
+(`_HeroCurrencyCard` rewrite, `_CurrencySummarySection` call sites,
+AppBar, greeting spacing); `lib/l10n/app_en.arb`, `lib/l10n/app_ja.arb`,
+and the three generated `app_localizations*.dart` files
+(`dashboardTotalBalanceLabel`); `test/widget/home_screen_test.dart`
+(badge test, mascot-overlap test, CP6.3 Japanese test A). No changes to
+`dashboard_providers.dart`, `app_tokens.dart`, `app_theme.dart`,
+`app_card.dart` (`AppCard.bordered`/`.gradient` were already built and
+needed no changes), `greeting_period.dart`, or any provider/database
+code.
+
+
+## ADR-048 — Dashboard V1 Finalization: reference-image visual convergence (brand bar, 2x2 monthly grid, spending-by-category, warm empty state), additive over ADR-046/047
+
+**Context.** The user's "FINAL U3 DASHBOARD VISUAL IMPLEMENTATION" instruction
+supplied `docs/design/dashboard-referancenew.png` as the visual source of
+truth and asked for: a top brand bar, an exact 2x2 grid of four
+INDEPENDENT monthly-metric cards (replacing the single wrapping card ADR-046
+deferred to), a calm/warm (not alarming) empty state for "Upcoming
+commitments," a new "Spending this month" donut+legend section reusing the
+U1 category-identity palette, Savings Goals promoted to its own full
+section, and the full KakeiboPlus hex palette threaded through the existing
+theme/token architecture rather than hardcoded. §18 of that instruction
+required a 7-point report before implementation, explicit "implement
+autonomously" authorization once delivered, and an explicit "stop when this
+implementation and its tests are complete — do not begin Checkpoint V."
+
+**Decision — additive, not a reversal.** Every change below sits on top of
+ADR-046/047's still-current "Total Balance only, no fabricated trend, no Net
+Worth" hero. Nothing here reopens either of those decisions.
+
+1. **Top brand bar (`_KakeiboBrandBar`).** Replaces the wordmark-image row
+   with a full-bleed (negative-padding trick on just this one child, the
+   surrounding `ListView`'s own padding is untouched) colored bar: the
+   existing `AppSemanticColors.heroGradient` teal gradient when present
+   (Light/Dark), else a flat `colorScheme.primary` fallback (Pink/Ocean/
+   Forest, and this file's own test harness, which never wires `AppTheme`
+   at all) — the same nullable-token precedent `heroGradient` itself
+   established, never a new hardcoded color. Plain white bold
+   `Text(l10n.brandName)` stands in for the wordmark image (that asset's
+   ink color assumes a light background; this environment cannot verify
+   contrast on a dark bar, so plain white text is the safer, guaranteed-
+   legible choice) plus a profile-avatar tap target
+   (`brandBarProfileButton`) routing to the existing Profile screen —
+   no new screen.
+
+2. **2x2 monthly metrics grid (`_MonthlyMetricsGrid`), primary currency
+   only.** Four independent `AppCard`s (`monthlyIncomeTile`/
+   `monthlySpendingTile`/`remainingBudgetTile`/`dailySpendingPaceTile`),
+   collapsing to one column under 340px. Replaces the single wrapping
+   `AppCard(_MonthlyMetricsSection)` + `_BudgetGoalsQuickGlanceRow` pair
+   that ADR-046 deliberately deferred to; `_StatusMetricTile` and
+   `_BudgetGoalsQuickGlanceRow` are deleted (no other call site).
+   `_SecondaryCurrencyCard` is intentionally **not** touched — it keeps
+   the older, quieter `_MonthlyMetricsSection(emphasize: false)` layout,
+   per the instruction's own "quieter secondary-currency cards" point.
+   The Remaining-Budget tile needed a real days-left figure
+   `BudgetCalculator.evaluate` already computed internally but never
+   returned — `BudgetCalculation` gained one new field,
+   `remainingDaysInclusive` (nullable, same "future month" `null`
+   condition as `dailyRecommendedSpend`/`status`; no other call site
+   constructs `BudgetCalculation` directly, confirmed by grep), rather
+   than recomputing it a second time in the widget layer.
+
+3. **"Spending this month" (`SpendingByCategorySection`), new file.** A
+   dependency-free `CustomPainter` donut (no chart package exists in
+   `pubspec.yaml`, and no `flutter pub get` can run in this environment
+   to add one) plus a legend, fed by a new provider,
+   `homeCategorySpendingProvider`, itself built on a new
+   `FinanceEngine.categoryExpenseTotals` (bulk, expense-only sibling of
+   the existing single-category `categoryExpenseTotal` — never nets
+   income against expense the way `categoryTotals` does, never counts a
+   transfer). Every slice's color comes from the existing
+   `categoryColorFor`/U1 category-identity palette — never a new
+   Dashboard-only chart palette. "View details" routes to the existing
+   Activity screen (no category-detail screen exists yet; out of scope
+   here per docs/23 §36).
+
+4. **Warm "Upcoming commitments" empty state.** Three new nullable
+   `AppSemanticColors` fields — `warmCardSurface`/`warmCardBorder`/
+   `warmCardForeground` — added via the exact same Light/Dark-only,
+   `null`-on-Pink/Ocean/Forest pattern `heroGradient` already established
+   (never derived from `colorScheme.tertiary`, since the app-wide seed is
+   blue, not teal, so a seed-derived tertiary wouldn't reliably read as
+   warm/cream). Light/Dark values were deliberately chosen to match the
+   EXISTING `CategoryColorKey.amber` tone rather than inventing a new
+   brown, so this doesn't add a fourth ad-hoc "warning-adjacent" color to
+   the palette. Replaces the generic `AppEmptyState` previously used here
+   with a bespoke warm-styled `Container` — calmer, not alarming, per the
+   instruction's explicit "not urgent/red" requirement — while keeping
+   the exact same CTA key/route (`setRecurringRuleButton` →
+   `AppRoutes.recurring`).
+
+5. **KakeiboPlus hex palette.** Threaded through `AppTheme`'s existing
+   `_build()`/`light()`/`dark()` factories as literal constants (matching
+   how `_kakeiboHeroGradientLight/Dark` were already wired), forwarded
+   into `AppTokens.fromColorScheme(...)`, never hardcoded at a widget call
+   site. `pink()`/`ocean()`/`forest()` pass none of the new params, so
+   they fall back to the same `null` → sensible-`ColorScheme`-derived
+   defaults every other nullable token already uses there.
+
+6. **Section order.** `_CurrencySummarySection` → Upcoming commitments →
+   Spending this month → Savings Goals (own full section, not a
+   quick-glance tile) → Budget (full card retained — deep "Manage" link,
+   full progress detail, daily-recommended-spend text the compact grid
+   tile can't show) → Accounts. A deliberate, reasoned deviation from a
+   literal reading of the reference screenshot (which shows no separate
+   full Budget card at all) — recorded here rather than made silently, as
+   this project's own working-style rules require.
+
+**Explicitly not touched:** DB schema/migrations; any provider's financial
+semantics (`FinanceEngine.categoryExpenseTotals`/`homeCategorySpendingProvider`
+are additive reads, nothing existing was changed); Net Worth exposure (still
+nowhere on Home, per ADR/Checkpoint J, unchanged); the bottom nav's behavior
+(`AppShell` was already close to the reference and needed no route/behavior
+change); `docs/design/*` beyond the reference image already added before
+this checkpoint began.
+
+**Verification caveat.** No Flutter/Dart toolchain exists anywhere in this
+session — every claim above is static/textual (uniqueness-guarded string
+replacement, whole-file paren/brace/bracket balance checks, and manual
+reasoning about `Stack`/`Positioned`/`FractionallySizedBox`/`FittedBox`
+sizing for the mascot non-overlap guarantee) never "tests passed."
+
+**Files changed:** `lib/features/dashboard/presentation/home_screen.dart`
+(brand bar, hero mascot layout, 2x2 grid, section reorder, warm empty
+state); `lib/features/dashboard/presentation/spending_by_category_section.dart`
+(new); `lib/features/dashboard/presentation/dashboard_providers.dart`
+(`HomeCategorySpendingSlice`, `homeCategorySpendingProvider`);
+`lib/core/finance/finance_engine.dart` (`categoryExpenseTotals`);
+`lib/features/budgets/domain/budget_calculation.dart`
+(`remainingDaysInclusive`); `lib/shared/theme/app_tokens.dart`,
+`lib/shared/theme/app_theme.dart` (warm-card tokens); `lib/l10n/app_en.arb`,
+`lib/l10n/app_ja.arb` and the three generated `app_localizations*.dart`
+files (12 new keys); `test/widget/home_screen_test.dart` (brand-row,
+Upcoming-commitments, 2x2-grid, and new Spending-this-month test groups).
+No changes to routing, `AppShell`, Drift schema, or any repository's
+financial-calculation logic.
+
+## ADR-049 — Dashboard Checkpoint: Home's "Upcoming" compact multi-row list supersedes ADR-023 point 8's single-item display, not its single-currency-per-item discipline
+
+Decision: following the Dashboard Current-State Reconciliation's recommended
+Option B, Home's recurring summary becomes a compact, capped multi-row
+"Upcoming" list (overdue + due-today + next-7-days) instead of a single
+nearest item. This is a presentation-layer change built additively on top
+of ADR-023's existing, unchanged data layer — it supersedes ONLY ADR-023
+point 8's "Home shows exactly one item" decision. Every other part of
+ADR-023 (bounded pending-item computation, anchor-based recurrence,
+posting/skipping semantics, the never-sum-mixed-currencies discipline, and
+`recurringPendingItemsProvider`'s own deterministic ordering) remains fully
+in force and is reused verbatim, not reimplemented.
+
+1. **Selection is additive on top of `recurringPendingItemsProvider`,
+   never a second calculation engine.** The new pure function
+   `selectHomeUpcomingItems` (same non-Riverpod, directly-unit-testable
+   shape as `selectHomeRecurringItem`/`selectHomeGoalSummary`) takes
+   `recurringPendingItemsProvider`'s own already-sorted, already-
+   overdue/handled-filtered output and applies one additional filter
+   pass. It never re-sorts, never re-derives urgency, never re-implements
+   occurrence exclusion, and never touches currency — exactly the "do not
+   duplicate" requirement this checkpoint was given.
+
+2. **Overdue items always pass unconditionally.** An overdue financial
+   obligation must never disappear from Home to make room for anything
+   else — overdue awareness is the single highest-value thing a glanceable
+   dashboard can surface, and silently hiding it to keep the card tidy
+   would work against the product's own "calm, not alarming, but never
+   dishonest" principle.
+
+3. **Due-today items always pass unconditionally**, for the same reason —
+   today's obligations are exactly as time-sensitive as overdue ones from
+   the user's point of view, even though they are not yet overdue.
+
+4. **Upcoming items pass only when `scheduledDateUtc` falls within
+   `todayUtc` through `todayUtc + 7` calendar days, inclusive.** Both
+   boundaries reuse the SAME normalized `todayUtc` instant
+   `recurringPendingItemsProvider` itself computed `items` against (now
+   exposed as the new, extracted `recurringTodayUtcProvider` — a pure
+   refactor of code that was previously computed inline, so
+   `recurringPendingItemsProvider`'s own behavior is byte-for-byte
+   unchanged). No second, independent `DateTime.now()` call exists
+   anywhere in this feature, so the selector can never disagree with the
+   provider about what day it is.
+
+5. **The row cap (`kHomeUpcomingMaxRows = 3`) is applied LAST, after
+   steps 2–4, over the already-correctly-ordered list.** If three or more
+   overdue items exist, they may consume every visible Home row — this is
+   intentional. The row cap protects the card's density and a 3-second
+   glanceability budget; it must never silently drop an overdue item to
+   make room for a future one, which would hide exactly the information
+   point 2 exists to protect.
+
+6. **Deterministic ordering is inherited, never re-derived.**
+   `recurringPendingItemsProvider`'s existing overdue-soonest-missed →
+   due-today → upcoming-nearest-first ordering (with its existing
+   rule-name tie-break) is preserved verbatim through the filter pass —
+   the selector is a pure `.where(...)` over an already-ordered list, so
+   row order on Home always matches what the full Recurring screen would
+   show for the same items.
+
+7. **"View all" routes to the existing `AppRoutes.recurring` route —
+   no new screen.** The Recurring screen remains the single full-detail
+   source of truth for every pending/handled occurrence; Home's card is
+   explicitly a compact preview of it, never a competing or divergent
+   view.
+
+8. **Each row keeps its own item's own currency — no cross-currency
+   summation, exactly as ADR-023 point 8 already required.** This
+   checkpoint changes how many items Home shows and how they're laid out;
+   it does not and cannot change the currency discipline, since
+   `RecurringPendingItem` still carries no aggregate `Money` field for
+   multiple rows to be summed into.
+
+9. **Already-handled (posted/skipped) occurrences are excluded**, because
+   `selectHomeUpcomingItems` filters `recurringPendingItemsProvider`'s
+   output, and that provider already excludes them (ADR-023 point 4/6) —
+   nothing in this checkpoint re-opens that exclusion.
+
+10. **The empty state is the existing warm "You're all caught up"
+    treatment (ADR-048 item 4), shown under the same condition it already
+    was** (no overdue, no due-today, no item scheduled in the window) —
+    this checkpoint does not introduce a second empty-state style.
+
+**Why a compact multi-row list instead of ADR-023's single item:** a
+single nearest item hides every other obligation due at the same time,
+including overdue ones — the exact gap the Current-State Reconciliation
+flagged. A capped multi-row card keeps Home glanceable (point 5's row cap)
+while giving the user a materially more honest picture of what's actually
+due soon, without duplicating the Recurring screen's full detail (point 7).
+
+**Explicitly not touched:** `recurringPendingItemsProvider`'s calculation,
+sorting, or currency logic; `RecurringHomeSelection`/
+`selectHomeRecurringItem`/`homeRecurringSelectionProvider` (left completely
+unchanged — no remaining production consumer after this checkpoint, but
+retained because `test/features/recurring/presentation/
+recurring_providers_test.dart` has real, passing dedicated coverage for it
+and this project's own rules forbid removing passing tests or unrelated
+code just because a consumer moved on); `recurring_screen.dart`'s own
+behavior; the 2x2 metric cards, hero, mascot, Spending This Month, Savings
+Goals, bottom-nav selected state, Add button color, or typography/font
+family (ADR-048's reference-image convergence); the DB schema (no
+migration — `RecurringPendingItem`'s existing `categoryId`/
+`serviceIdentityKey` fields already carry everything the new row's
+icon/badge needs); `docs/design/*`.
+
+**Verification caveat.** No Flutter/Dart toolchain exists anywhere in this
+session — every claim above is static/textual (uniqueness-guarded string
+replacement, whole-file paren/brace balance checks, and manual reasoning
+about filter/ordering correctness) never "tests passed." The user is asked
+to run the focused tests listed under "Files changed" locally.
+
+**Files changed:** `lib/features/recurring/presentation/recurring_providers.dart`
+(extracted `recurringTodayUtcProvider`; added `kHomeUpcomingWindowDays`,
+`kHomeUpcomingMaxRows`, `selectHomeUpcomingItems`, `homeUpcomingItemsProvider`);
+`lib/features/dashboard/presentation/home_screen.dart` (`_UpcomingCommitmentsCard`
+rewritten onto `homeUpcomingItemsProvider`; new row widgets; deletion of the
+now-dead `_RecurringItemSummary`); `lib/features/transactions/presentation/
+transaction_icon_badge.dart` (additive optional size-override passthrough,
+reused for the Upcoming row's slightly larger icon tile — see that widget's
+own updated doc comment); `lib/l10n/app_en.arb`, `lib/l10n/app_ja.arb` and the
+three generated `app_localizations*.dart` files (`homeUpcomingCommitmentsTitle`
+value updated to "Upcoming"; new `homeUpcomingInDaysLabel` key);
+`test/features/recurring/presentation/recurring_providers_test.dart`
+(`selectHomeUpcomingItems` unit tests); `test/widget/home_screen_test.dart`
+(new Upcoming-card widget test group). No changes to routing, `AppShell`,
+Drift schema, or any repository's financial-calculation logic.
+
+Status: Approved 2026-10-03 (Dashboard Checkpoint — Upcoming redesign).
+
+## ADR-050 — Recurring UX Checkpoint: Dashboard Upcoming row polish (R1) and the full Recurring screen redesign (R2) retire the Recurring/Subscriptions tab split, never the underlying recurring engine
+
+Decision: this checkpoint ran in two phases against the same reference
+screenshots the user supplied, both built strictly on top of the existing
+deterministic recurring engine (ADR-023/ADR-031/ADR-043/ADR-049) — neither
+phase touches `recurringPendingItemsProvider`'s calculation, sorting, or
+currency discipline, `computeSubscriptionEstimatedTotals`'s estimate math,
+or the Drift schema. Phase R1 is a presentation-only polish of the
+Dashboard's existing "Upcoming" card (ADR-049). Phase R2 replaces the
+Recurring screen's old Overdue/Due-today/Upcoming sectioned list and its
+Recurring/Subscriptions tab split (ADR-031) with one unified, filterable,
+searchable list — **superseding ONLY ADR-031's tab-based delivery
+mechanism**, never its estimate computation, which Phase R2 reuses
+verbatim.
+
+### Phase R1 — Dashboard Upcoming row polish
+
+1. **Part A4 — kind-label badge fallback.** Each Upcoming row's badge
+   now falls back in three tiers: a real resolved category always wins
+   (unchanged); otherwise an income or transfer rule shows its own kind
+   as the badge text (`"Income"`/`"Transfer"`) rather than no badge at
+   all; an uncategorized EXPENSE rule still shows no badge (expense is
+   the default, unmarked case — marking it would add noise to the single
+   most common row type for no informational gain). This fallback is
+   shared verbatim with Phase R2's own row widget (`_RecurringRuleRow`
+   in the redesigned `recurring_screen.dart`), so the two surfaces can
+   never disagree about what an uncategorized rule's badge shows.
+
+2. **Part A5 — exact scheduled date, status-prefixed, supersedes
+   ADR-049's relative "In N days" copy.** Every row now shows the rule's
+   own real, already-scheduled `item.scheduledDateUtc`, formatted with
+   the same bare `DateFormat.yMMMd()` call every other screen in this
+   app already uses for a date — never an invented or re-derived date.
+   An overdue or due-today item prefixes a status word onto that exact
+   date (`"Overdue · Sep 18, 2026"` / `"Due today · Oct 3, 2026"`); a
+   future item shows just the date. This supersedes ONLY ADR-049's
+   relative-days display choice (`homeUpcomingInDaysLabel` is no longer
+   called for) — ADR-049's selection logic (`selectHomeUpcomingItems`,
+   the 7-day window, the 3-row cap, the overdue-always-wins priority) is
+   completely unchanged and remains in force.
+
+3. **Why exact dates instead of relative ones:** the reference screenshot
+   this checkpoint was built from shows exact dates throughout, and an
+   exact date is less likely to go stale-looking than a relative one on a
+   dashboard a user may not reopen for several days (`"In 3 days"` read
+   two days later is confusing in a way `"Oct 3, 2026"` is not).
+
+### Phase R2 — Recurring screen redesign
+
+4. **One unified list, one row per rule, replaces the old sectioned
+   list.** The new `RecurringRuleSummary` (in `recurring_providers.dart`)
+   generalizes the exact "one row per rule, its single most urgent
+   pending date" precedent `subscription_providers.dart`'s
+   `selectSubscriptionPendingItems` already established for the
+   Subscriptions tab (ADR-031) — to every rule kind, not only expenses.
+   `selectRecurringRuleSummaries` builds one summary per rule from the
+   already-existing, already-sorted `activeRecurringRulesProvider` and
+   `recurringPendingItemsProvider` outputs; it derives nothing new about
+   urgency or scheduling that those providers didn't already compute.
+
+5. **The Recurring/Subscriptions tab split is retired — one screen, one
+   list.** The new All/Active/Upcoming/Expired filter bar
+   (`AppSegmentedControl<RecurringListFilter>`, the same shared primitive
+   the Subscriptions tab's own filter row already used) plus the
+   estimate card promoted to always-inline (point 7 below) together
+   supersede what the Subscriptions tab provided: every active expense
+   rule is simply one more row in this one list, filterable to "Active"
+   or searchable by name/category/service, rather than a second
+   destination reached by a tab tap. This was confirmed with the user
+   via `AskUserQuestion` before implementation (recommended option:
+   "Retire it — one unified screen").
+
+6. **Filter semantics are schedule-based, not a new persisted field.**
+   `RecurringListFilter.active`/`.expired` read
+   `RecurringRuleSummary.isActive`/`.isExpired` — whether the rule's
+   schedule has or hasn't ended as of today (`nextOccurrenceUtc == null`),
+   the exact "ended" definition `computeSubscriptionEstimatedTotals`
+   already used. `.upcoming` reuses Home's own "due today or within
+   `kHomeUpcomingWindowDays` (7) days" window (ADR-049) verbatim via the
+   new `isUpcomingEligible`, rather than inventing a second "upcoming"
+   definition. This domain has no separate paused/disabled state at all
+   — every non-deleted rule is either active or expired, nothing else.
+
+7. **The estimate card is promoted from "behind the Subscriptions tab"
+   to always inline, above the filter bar.** Sourced directly from
+   `subscription_providers.dart`'s `SubscriptionCurrencyTotal` (never
+   re-derived) — active, non-deleted, expense-kind rules only, grouped by
+   currency and never summed across currencies (ADR-031's own never-sum
+   rule, unchanged). It is simply omitted (`if (totals.isNotEmpty)`) when
+   no active expense rule exists, rather than showing a now-redundant
+   "no active subscriptions" empty state — the unified list's own empty
+   state already covers that case for the rule data itself.
+
+8. **A case-insensitive local search box, applied after the filter, not
+   instead of it.** `searchRecurringRuleSummaries` matches the rule's own
+   name, its resolved service identity's real (never localized) proper
+   name, and its resolved category's real name — never a fabricated or
+   partial field. An empty/whitespace query matches everything (search
+   effectively off). The search field is shown/hidden by an AppBar toggle
+   rather than always visible, keeping the AppBar uncluttered when unused.
+
+9. **Edit/Delete move behind a left-swipe reveal panel, built from
+   scratch, additive alongside the unchanged Post/Skip buttons.**
+   `pubspec.yaml` has no slidable/swipe package, and Flutter's
+   `Dismissible` is the wrong shape for this (it swipes a row fully
+   off-screen to delete it; this is a persistent reveal the user can tap
+   into, not a dismiss-to-delete gesture). Exactly one row may have its
+   panel open at a time across the whole list — parent-controlled via a
+   single `_openRuleId` field, never each row's own independent state —
+   so opening a second row's panel always closes whichever one was open
+   first. This was confirmed with the user via `AskUserQuestion` before
+   implementation (recommended option: "Keep Post/Skip as visible
+   buttons, add swipe for Edit/Delete only").
+
+10. **The swipe panel is deliberately NOT mirrored under RTL, and is
+    never the only way to reach Edit/Delete.** The checkpoint's reference
+    specifies a left-swipe gesture literally, so the reveal uses
+    `Alignment.centerRight` rather than `AlignmentDirectional.centerEnd`.
+    Because a swipe gesture is not reliably discoverable or operable for
+    every user, the exact same two actions are always additionally
+    reachable through an ordinary, fully semantic overflow (kebab) menu —
+    never swipe-only. Both paths call the exact same `_openEditDialog`/
+    `_confirmDelete` methods, so there is only one implementation of
+    either action to keep correct.
+
+11. **Post/Skip remain exactly as they were — always-visible buttons,
+    unchanged keys, unchanged repository calls.** This was confirmed with
+    the user via `AskUserQuestion` before implementation: the swipe panel
+    is additive for Edit/Delete only, never a replacement that would make
+    posting or skipping a due occurrence harder to discover.
+
+**Why these changes:** the reference screenshots this checkpoint was
+built from show a single filterable list with an inline summary and
+swipe actions, not a sectioned list behind a second tab — Phase R2
+brings the screen to that shape while deliberately keeping every
+underlying financial calculation (what's due, what's overdue, what the
+estimated totals are, what posting/skipping do) completely unchanged.
+
+**Explicitly not touched:** `recurringPendingItemsProvider`,
+`activeRecurringRulesProvider`, `handledOccurrencesProvider`,
+`recurringScheduleOf`, `RecurringSchedule`'s recurrence math,
+`computeSubscriptionEstimatedTotals`/`subscriptionEstimatedTotalsProvider`,
+`RecurringOccurrenceRepository.postOccurrence`/`.skipOccurrence`,
+`RecurringRuleRepository.createRule`/`.updateRule`/`.softDelete` (and
+every one of their existing validation/exception paths), the `_RuleDialog`
+create/edit form (every field, key, and validation rule is unchanged),
+`homeRecurringSelectionProvider`/`homeUpcomingItemsProvider`/
+`selectHomeUpcomingItems` (ADR-049's own selection logic, untouched by
+either phase), the Drift schema (no migration — every field either
+phase's UI reads already existed), and `docs/design/*`.
+
+**Verification caveat.** No Flutter/Dart toolchain exists anywhere in
+this session — every claim above is static/textual (uniqueness-guarded
+string replacement, whole-file brace/paren/bracket balance checks, byte-
+exact transfer verification, and manual reasoning about selector/filter
+correctness), never "tests passed." In particular, the new swipe-gesture
+widget tests (`tester.drag(...)` simulating the left-swipe reveal, and the
+one-row-open-at-a-time regression) are the highest-risk tests in this
+checkpoint precisely because they cannot be executed here — the user
+should give these specific tests a second look when running the suite
+locally. The user is asked to run `flutter analyze` and the focused tests
+listed under "Files changed" on their own machine and report back the
+actual results before this checkpoint is considered verified, per this
+project's Release Gate rule.
+
+**Files changed:**
+`lib/features/dashboard/presentation/home_screen.dart` (Part A4 badge
+fallback; Part A5 exact-date, status-prefixed display, superseding only
+ADR-049's relative-days copy);
+`lib/features/recurring/presentation/recurring_providers.dart` (new
+`RecurringRuleSummary`, `RecurringListFilter`, `selectRecurringRuleSummaries`,
+`isUpcomingEligible`, `selectRecurringRuleSummariesForFilter`,
+`searchRecurringRuleSummaries`, `recurringRuleSummariesProvider`; made
+`recurringScheduleOf` reuse explicit in doc comments — no behavior change
+to anything pre-existing in this file);
+`lib/features/recurring/presentation/recurring_screen.dart` (full rewrite:
+new `RecurringScreen`/`_RecurringScreenState` AppBar with search toggle;
+new `_RecurringRuleListBody` owning filter + swipe-open state; new
+`_EstimateSummaryCard`/`_EstimateCurrencyBlock`; new `_RecurringRuleRow`;
+new `_SwipeRevealRow`/`_RevealActionButton`; `_RuleDialog`/`_RuleDialogState`
+carried over unchanged; old `_RecurringTab`, `_RecurringListView`,
+`_SubscriptionsView`, and `_PendingItemTile` deleted);
+`lib/l10n/app_en.arb`, `lib/l10n/app_ja.arb` and the three generated
+`app_localizations*.dart` files (14 new keys: `recurringSearchLabel`,
+`recurringSearchHint`, `searchTooltip`, `closeSearchTooltip`,
+`addRecurringRuleTooltip`, `recurringFilterAll`, `recurringFilterActive`,
+`recurringFilterExpired`, `recurringEndedLabel`,
+`noActiveRecurringRulesMessage`, `noUpcomingRecurringRulesMessage`,
+`noExpiredRecurringRulesMessage`, `noMatchingRecurringRulesMessage`,
+`ruleActionsTooltip`; the existing `recurringStatusUpcoming` key is reused
+verbatim for the Upcoming filter tab, not duplicated);
+`test/widget/home_screen_test.dart` (fixed status-text assertions for
+Part A5's new format; added one new test for Part A4's income/transfer
+badge fallback);
+`test/features/recurring/presentation/recurring_rule_summary_test.dart`
+(new file: 22 unit tests across `selectRecurringRuleSummaries`,
+`isUpcomingEligible`, `selectRecurringRuleSummariesForFilter`,
+`searchRecurringRuleSummaries`);
+`test/widget/recurring_screen_test.dart` (full rewrite: 43 widget tests —
+every pre-existing dialog/account/notification/service-identity/double-
+submit-guard test carried over with only its Keys updated for the new
+screen structure, the old tab-split and sectioned-list tests replaced with
+equivalent coverage of the new filter bar/estimate card/search/swipe-
+reveal/overflow-menu behavior, and nothing removed without a direct
+replacement).
+
+Status: Approved 2026-10-03 (Recurring UX checkpoint — Dashboard Upcoming
+polish + full Recurring screen redesign). Pending the user's local
+`flutter analyze`/`flutter test` run and an emulator screenshot review
+before this checkpoint is closed out.
